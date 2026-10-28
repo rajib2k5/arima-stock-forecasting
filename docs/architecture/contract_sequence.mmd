@@ -1,0 +1,43 @@
+---
+title: "One artifact from export to screen"
+---
+sequenceDiagram
+    autonumber
+    participant exporter as export_app_data.py
+    participant pycontract as contract.py
+    participant disk as app/public/data
+    participant loader as loadArtifact
+    participant tsparser as contract.ts
+    participant view as React view
+    exporter->>pycontract: make_envelope(artifact, payload)
+    Note right of pycontract: commit + time from provenance.py
+    pycontract-->>exporter: envelope dict
+    exporter->>pycontract: validate_envelope + dumps
+    alt invalid envelope, or NaN, Infinity or an unsafe integer in payload
+        pycontract-->>exporter: problems list, or dumps raises
+        exporter->>exporter: exit 1
+        Note right of exporter: nothing is written
+    else envelope valid, every float finite, every integer safe
+        pycontract-->>exporter: JSON text (sorted keys, indent 2)
+        exporter->>disk: write artifact.json
+    end
+    loader->>disk: fetch data/artifact.json
+    disk-->>loader: response body
+    loader->>loader: res.json() parses the body
+    Note right of loader: a bare NaN token throws here
+    alt network or HTTP error, or not valid JSON
+        loader->>view: load error panel
+    else parsed
+        loader->>tsparser: parseEnvelope(raw)
+        alt major ≠ 1, or a key missing, unknown or invalid
+            tsparser-->>loader: ok#58; false, errors[]
+            loader->>view: error panel listing every problem
+        else envelope valid
+            tsparser-->>loader: typed envelope
+            Note right of loader: loadArtifact also rejects an artifact name mismatch
+            loader->>tsparser: parse payload
+            Note right of tsparser: unknown keys in data are ignored
+            tsparser-->>loader: typed data
+            loader->>view: render
+        end
+    end

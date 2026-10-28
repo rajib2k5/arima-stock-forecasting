@@ -1,0 +1,68 @@
+---
+title: "ARIMA stock forecasting architecture"
+---
+flowchart LR
+    subgraph source["Source"]
+        yahoo{{"Yahoo Finance<br/><small>chart API</small>"}}
+        yfin(["yfinance 1.7.0<br/><small>download(), auto_adjust=True</small>"])
+    end
+    subgraph rawcache["Raw cache (outside git)"]
+        rawfile[("Raw price snapshot<br/><small>$VOL_DATA_DIR/.../raw</small>")]
+        manifest[("Snapshot manifest<br/><small>sha256, rows, version</small>")]
+    end
+    subgraph core["Python core"]
+        config["config.py<br/><small>windows and data paths</small>"]
+        pipeline[["arima_forecasting<br/><small>EDA, tests, grid, fit, forecasts</small>"]]
+        contract["contract.py<br/><small>envelope, allow_nan=False</small>"]
+        provenance["provenance.py<br/><small>commit + SOURCE_DATE_EPOCH</small>"]
+    end
+    subgraph delivery["Delivery (in git)"]
+        exporter["export_app_data.py<br/><small>one file per artifact</small>"]
+        jsonfiles[/"app/public/data<br/><small>versioned JSON envelopes</small>"/]
+        notebooks[/"Notebooks<br/><small>built by build_notebooks.py</small>"/]
+        reports[/"Reports<br/><small>result tables (from M4)</small>"/]
+        pytests["pytest<br/><small>contract, sync, numbers</small>"]
+    end
+    subgraph webapp["App"]
+        loader["loadArtifact<br/><small>refuses major ≠ 1</small>"]
+        views("React 19 views<br/><small>explorer, lab, 3D AIC, fan</small>")
+        vitest["vitest<br/><small>parses the real JSON files</small>"]
+    end
+    yahoo -->|"HTTPS"| yfin
+    yfin -->|"snapshot once"| rawfile
+    rawfile -.->|"described by"| manifest
+    rawfile -->|"read"| pipeline
+    config ==>|"windows"| pipeline
+    pipeline -->|"payloads"| exporter
+    contract -->|"wrap + dumps"| exporter
+    provenance -->|"commit + time"| exporter
+    exporter -->|"write"| jsonfiles
+    pipeline -->|"imported by"| notebooks
+    pipeline -->|"figures + tables"| reports
+    pipeline -.->|"checked by"| pytests
+    jsonfiles -->|"fetch"| loader
+    loader -->|"typed data"| views
+    jsonfiles -.->|"parsed by"| vitest
+    classDef source fill:#E0F2FE,stroke:#0284C7,color:#0F172A
+    class yfin source
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#0F172A
+    class rawfile,manifest store
+    classDef process fill:#E0E7FF,stroke:#4F46E5,color:#0F172A
+    class config,contract,provenance,exporter,pytests,loader,vitest process
+    classDef model fill:#EDE9FE,stroke:#7C3AED,color:#0F172A
+    class pipeline model
+    classDef output fill:#D1FAE5,stroke:#059669,color:#0F172A
+    class jsonfiles,notebooks,reports output
+    classDef external fill:#F1F5F9,stroke:#475569,color:#0F172A
+    class yahoo external
+    classDef ui fill:#FCE7F3,stroke:#DB2777,color:#0F172A
+    class views ui
+    style source fill:#F1F5F9,stroke:#E2E8F0,color:#64748B
+    style rawcache fill:#EFF6FF,stroke:#DBEAFE,color:#64748B
+    style core fill:#F5F3FF,stroke:#E9E5FD,color:#64748B
+    style delivery fill:#ECFDF5,stroke:#D1FAE5,color:#64748B
+    style webapp fill:#FFF7ED,stroke:#FFEDD5,color:#64748B
+    linkStyle 2 stroke:#94A3B8
+    linkStyle 4 stroke:#6366F1
+    linkStyle 11 stroke:#94A3B8
+    linkStyle 14 stroke:#94A3B8

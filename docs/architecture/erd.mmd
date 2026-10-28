@@ -1,0 +1,171 @@
+---
+title: "Stored tables and JSON contract"
+---
+erDiagram
+    yf_download["yf.download frame, MultiIndex (Price, Ticker)"] {
+        datetime64_s Date PK
+        float64 Close
+        float64 High
+        float64 Low
+        float64 Open
+        int64 Volume
+    }
+    raw_manifest["raw snapshot manifest"] {
+        char(64) sha256 PK
+        text file_name
+        text ticker
+        date start
+        date end_exclusive
+        bool auto_adjust
+        text yfinance_version
+        timestamp_utc downloaded_at
+        int rows
+    }
+    envelope {
+        text artifact PK
+        semver schema_version
+        timestamp_utc generated_at
+        text source_commit
+    }
+    meta {
+        text artifact PK, FK
+        text project
+        text title
+        text ticker
+    }
+    meta_window {
+        text name PK
+        text artifact FK
+        date start
+        date end_exclusive
+    }
+    meta_milestone {
+        int id PK
+        text artifact FK
+        text slug
+        text title
+        text status
+    }
+    meta_artifact {
+        text name PK, FK
+        text artifact FK
+    }
+    prices {
+        text artifact PK, FK
+        char(64) source_raw_sha256 FK
+        text price_basis
+        float64 splits_train_fraction
+    }
+    price_row {
+        date date PK
+        text artifact FK
+        float64 close_usd
+        float64 log_close
+        text segment
+    }
+    decomposition_row {
+        date date PK, FK
+        text artifact FK
+        float64 observed_log
+        float64 trend_log "nullable"
+        float64 seasonal_log
+        float64 resid_log "nullable"
+    }
+    unit_root_test {
+        text id PK
+        text artifact FK
+        int d
+        float64 adf_p_value
+        float64 kpss_p_value
+        text kpss_p_value_bound "nullable"
+        text verdict
+    }
+    stationarity_row {
+        text transform PK, FK
+        date date PK, FK
+        float64 value
+        float64 roll12_mean "nullable"
+        float64 roll252_mean "nullable"
+    }
+    acf_pacf_row {
+        text transform PK, FK
+        int lag PK
+        float64 acf
+        float64 pacf
+        float64 acf_band
+        float64 pacf_band
+    }
+    aic_cell {
+        int d PK
+        int p PK
+        int q PK
+        text trend PK
+        text artifact FK
+        text status
+        float64 aic "nullable"
+        float64 delta_aic "nullable"
+        bool converged "nullable"
+        text error "nullable"
+    }
+    fit_param {
+        text model_id PK
+        text name PK
+        text artifact FK
+        text library_name
+        float64 value
+        float64 std_err "nullable"
+    }
+    residual_row {
+        date date PK, FK
+        text artifact FK
+        float64 resid
+        float64 resid_std
+    }
+    forecast_method {
+        text id PK
+        text artifact FK
+        text kind
+        text model_id "nullable"
+    }
+    forecast_row {
+        text method PK, FK
+        text segment PK
+        date date PK, FK
+        int step
+        float64 mean_log
+        float64 lower_log "nullable"
+        float64 upper_log "nullable"
+        float64 mean_usd
+        float64 actual_usd
+    }
+    metric_row {
+        text method PK, FK
+        text segment PK
+        int n
+        float64 rmse_usd
+        float64 mae_usd
+        float64 mape_pct
+        float64 rmse_ratio_to_random_walk "nullable"
+    }
+    envelope ||--|| meta : "wraps"
+    envelope ||--o| prices : "wraps"
+    raw_manifest ||--o{ prices : "derived from"
+    prices ||--|{ price_row : "rows"
+    meta ||--|{ meta_window : "windows"
+    meta ||--|{ meta_milestone : "milestones"
+    meta ||--|{ meta_artifact : "artifacts"
+    envelope ||--|| meta_artifact : "names"
+    unit_root_test ||--|{ stationarity_row : "series"
+    unit_root_test ||--|{ acf_pacf_row : "lags"
+    forecast_method ||--|{ forecast_row : "forecasts"
+    forecast_method ||--|{ metric_row : "scored"
+    price_row ||--o{ forecast_row : "actual"
+    price_row ||--o{ decomposition_row : ""
+    envelope ||--o{ decomposition_row : ""
+    envelope ||--o{ unit_root_test : ""
+    price_row ||--o{ stationarity_row : ""
+    envelope ||--o{ aic_cell : ""
+    envelope ||--o{ fit_param : ""
+    price_row ||--o{ residual_row : ""
+    envelope ||--o{ residual_row : ""
+    envelope ||--o{ forecast_method : ""
