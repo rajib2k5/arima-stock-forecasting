@@ -1,0 +1,33 @@
+# Raw market data lives outside the repo ($VOL_DATA_DIR); never commit it here either.
+# Anchored with a leading slash: a bare `data/` would also ignore app/src/data/ (the loader)
+# and app/public/data/ (the exported JSON the app reads).
+/data/
+*.csv.gz
+*.parquet
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Node / app
+node_modules/
+app/dist/
+app/coverage/
+*.tsbuildinfo
+
+# Tools
+graphify-out/
+.DS_Store
+*.swp

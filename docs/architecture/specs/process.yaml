@@ -1,0 +1,38 @@
+kind: flow
+title: Milestone delivery loop
+subtitle: Nothing is pushed until a reviewer has tried to break it and a verifier has re-measured it
+direction: TB
+lanes:
+  - {id: learner,      label: Learner}
+  - {id: orchestrator, label: Orchestrator session}
+  - {id: implementer,  label: Implementer subagent}
+  - {id: reviewer,     label: Adversarial reviewer}
+  - {id: verifier,     label: Verifier subagent}
+  - {id: github,       label: GitHub}
+nodes:
+  - {id: kickoff,     label: Start milestone,          sublabel: learner says go,                     type: ui,       lane: learner}
+  - {id: plan,        label: Plan the milestone,       sublabel: tasks + acceptance checks,           type: process,  lane: orchestrator}
+  - {id: build,       label: Build,                    sublabel: "code, tests, notebooks, export",    type: process,  lane: implementer}
+  - {id: walkthrough, label: Walkthrough,              sublabel: + predict-first questions,           type: output,   lane: orchestrator}
+  - {id: review,      label: Adversarial review,       sublabel: evidence-gated; default is broken,   type: model,    lane: reviewer}
+  - {id: remeasure,   label: Re-measure numbers,       sublabel: every quoted figure,                 type: process,  lane: verifier}
+  - {id: push,        label: Push,                     sublabel: commit + push to main,               type: external, lane: github}
+  - {id: pause,       label: Pause,                    sublabel: hand over to the learner,            type: process,  lane: orchestrator}
+  - {id: answer,      label: Answer questions,         sublabel: "predict-first, explain-it-back",    type: ui,       lane: learner}
+  - {id: grade,       label: Grade answers,            sublabel: gaps become follow-ups,              type: process,  lane: orchestrator}
+  - {id: advance,     label: Next milestone,           sublabel: meta.json status moves on,           type: output,   lane: orchestrator}
+edges:
+  - {from: kickoff, to: plan}
+  - {from: plan, to: build, label: task list}
+  - {from: build, to: walkthrough, label: report}
+  - {from: walkthrough, to: review, label: numbered claims}
+  - {from: review, to: build, label: refuted, style: control}
+  - {from: review, to: remeasure, label: survives}
+  - {from: remeasure, to: build, label: disagree, style: control}
+  - {from: remeasure, to: push, label: agree}
+  - {from: push, to: pause}
+  - {from: pause, to: answer}
+  - {from: answer, to: grade}
+  - {from: grade, to: answer, label: retry gaps, style: control}
+  - {from: grade, to: advance, label: pass}
+  - {from: advance, to: plan, label: next loop, style: dashed}

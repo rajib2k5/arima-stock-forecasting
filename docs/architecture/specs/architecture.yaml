@@ -1,0 +1,43 @@
+kind: flow
+title: ARIMA stock forecasting architecture
+subtitle: Python computes every number; the static React app only draws versioned JSON
+direction: LR
+lanes:
+  - {id: source,   label: Source}
+  - {id: rawcache, label: Raw cache (outside git)}
+  - {id: core,     label: Python core}
+  - {id: delivery, label: Delivery (in git)}
+  - {id: webapp,   label: App}
+nodes:
+  - {id: yahoo,      label: Yahoo Finance,       sublabel: chart API,                       type: external, lane: source}
+  - {id: yfin,       label: yfinance 1.7.0,      sublabel: "download(), auto_adjust=True",  type: source,   lane: source}
+  - {id: rawfile,    label: Raw price snapshot,  sublabel: $VOL_DATA_DIR/.../raw,           type: store,    lane: rawcache}
+  - {id: manifest,   label: Snapshot manifest,   sublabel: "sha256, rows, version",         type: store,    lane: rawcache}
+  - {id: config,     label: config.py,           sublabel: windows and data paths,          type: process,  lane: core}
+  - {id: pipeline,   label: arima_forecasting,   sublabel: "EDA, tests, grid, fit, forecasts", type: model, lane: core}
+  - {id: contract,   label: contract.py,         sublabel: "envelope, allow_nan=False",     type: process,  lane: core}
+  - {id: provenance, label: provenance.py,       sublabel: commit + SOURCE_DATE_EPOCH,      type: process,  lane: core}
+  - {id: exporter,   label: export_app_data.py,  sublabel: one file per artifact,           type: process,  lane: delivery}
+  - {id: jsonfiles,  label: app/public/data,     sublabel: versioned JSON envelopes,        type: output,   lane: delivery}
+  - {id: notebooks,  label: Notebooks,           sublabel: built by build_notebooks.py,     type: output,   lane: delivery}
+  - {id: reports,    label: Reports,             sublabel: result tables (from M4),         type: output,   lane: delivery}
+  - {id: pytests,    label: pytest,              sublabel: "contract, sync, numbers",       type: process,  lane: delivery}
+  - {id: loader,     label: loadArtifact,        sublabel: refuses major ≠ 1,               type: process,  lane: webapp}
+  - {id: views,      label: React 19 views,      sublabel: "explorer, lab, 3D AIC, fan",    type: ui,       lane: webapp}
+  - {id: vitest,     label: vitest,              sublabel: parses the real JSON files,      type: process,  lane: webapp}
+edges:
+  - {from: yahoo, to: yfin, label: HTTPS}
+  - {from: yfin, to: rawfile, label: snapshot once}
+  - {from: rawfile, to: manifest, label: described by, style: dashed}
+  - {from: rawfile, to: pipeline, label: read}
+  - {from: config, to: pipeline, label: windows, style: control}
+  - {from: pipeline, to: exporter, label: payloads}
+  - {from: contract, to: exporter, label: wrap + dumps}
+  - {from: provenance, to: exporter, label: commit + time}
+  - {from: exporter, to: jsonfiles, label: write}
+  - {from: pipeline, to: notebooks, label: imported by}
+  - {from: pipeline, to: reports, label: figures + tables}
+  - {from: pipeline, to: pytests, label: checked by, style: dashed}
+  - {from: jsonfiles, to: loader, label: fetch}
+  - {from: loader, to: views, label: typed data}
+  - {from: jsonfiles, to: vitest, label: parsed by, style: dashed}

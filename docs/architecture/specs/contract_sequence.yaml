@@ -1,0 +1,44 @@
+kind: sequence
+title: One artifact from export to screen
+autonumber: true
+participants:
+  - {id: exporter, label: export_app_data.py, type: process}
+  - {id: pycontract, label: contract.py, type: process}
+  - {id: disk, label: app/public/data, type: store}
+  - {id: loader, label: loadArtifact, type: process}
+  - {id: tsparser, label: contract.ts, type: process}
+  - {id: view, label: React view, type: ui}
+messages:
+  - {from: exporter, to: pycontract, label: "make_envelope(artifact, payload)", note: commit + time from provenance.py}
+  - {from: pycontract, to: exporter, label: envelope dict, kind: return}
+  - {from: exporter, to: pycontract, label: validate_envelope + dumps}
+  - alt:
+      - when: invalid envelope, or NaN, Infinity or an unsafe integer in payload
+        messages:
+          - {from: pycontract, to: exporter, label: "problems list, or dumps raises", kind: return}
+          - {from: exporter, to: exporter, label: exit 1, note: nothing is written}
+      - when: envelope valid, every float finite, every integer safe
+        messages:
+          - {from: pycontract, to: exporter, label: "JSON text (sorted keys, indent 2)", kind: return}
+          - {from: exporter, to: disk, label: write artifact.json}
+  - {from: loader, to: disk, label: fetch data/artifact.json}
+  - {from: disk, to: loader, label: response body, kind: return}
+  - {from: loader, to: loader, label: res.json() parses the body, note: a bare NaN token throws here}
+  - alt:
+      - when: network or HTTP error, or not valid JSON
+        messages:
+          - {from: loader, to: view, label: load error panel}
+      - when: parsed
+        messages:
+          - {from: loader, to: tsparser, label: parseEnvelope(raw)}
+          - alt:
+              - when: major ≠ 1, or a key missing, unknown or invalid
+                messages:
+                  - {from: tsparser, to: loader, label: "ok: false, errors[]", kind: return}
+                  - {from: loader, to: view, label: error panel listing every problem}
+              - when: envelope valid
+                messages:
+                  - {from: tsparser, to: loader, label: typed envelope, kind: return, note: loadArtifact also rejects an artifact name mismatch}
+                  - {from: loader, to: tsparser, label: parse payload, note: unknown keys in data are ignored}
+                  - {from: tsparser, to: loader, label: typed data, kind: return}
+                  - {from: loader, to: view, label: render}

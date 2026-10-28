@@ -1,0 +1,174 @@
+kind: erd
+title: Stored tables and JSON contract
+subtitle: Raw yfinance snapshot (outside git) and every artifact inside the versioned envelope
+entities:
+  # ---- raw side: lives in $VOL_DATA_DIR/arima-stock-forecasting/raw, never committed ----
+  - id: yf_download
+    label: yf.download frame, MultiIndex (Price, Ticker)
+    columns:
+      - {name: Date, type: datetime64_s, pk: true}
+      - {name: Close, type: float64}
+      - {name: High, type: float64}
+      - {name: Low, type: float64}
+      - {name: Open, type: float64}
+      - {name: Volume, type: int64}
+  - id: raw_manifest
+    label: raw snapshot manifest
+    columns:
+      - {name: sha256, type: char(64), pk: true}
+      - {name: file_name, type: text}
+      - {name: ticker, type: text}
+      - {name: start, type: date}
+      - {name: end_exclusive, type: date}
+      - {name: auto_adjust, type: bool}
+      - {name: yfinance_version, type: text}
+      - {name: downloaded_at, type: timestamp_utc}
+      - {name: rows, type: int}
+  # ---- contract side: app/public/data/<artifact>.json (docs/architecture/contract.md) ----
+  # Columns that are not JSON fields: `artifact` (the envelope a payload or row sits in),
+  # `transform` on stationarity_row and acf_pacf_row and `model_id` on fit_param (the parent
+  # object a row is nested under), `name` on meta_window (a key of data.windows) and `name` on
+  # meta_artifact (one string of data.artifacts). Every other column is a JSON field, and the
+  # diagram shows a subset of each object's fields. A field inside a nested object is written
+  # with an underscore: `source_raw_sha256` is `source.raw_sha256`, `adf_p_value` is
+  # `adf.p_value`.
+  - id: envelope
+    columns:
+      - {name: artifact, type: text, pk: true}
+      - {name: schema_version, type: semver}
+      - {name: generated_at, type: timestamp_utc}
+      - {name: source_commit, type: text}
+  - id: meta
+    columns:
+      - {name: artifact, type: text, pk: true, fk: envelope.artifact}
+      - {name: project, type: text}
+      - {name: title, type: text}
+      - {name: ticker, type: text}
+  - id: meta_window
+    columns:
+      - {name: name, type: text, pk: true}
+      - {name: artifact, type: text, fk: meta.artifact}
+      - {name: start, type: date}
+      - {name: end_exclusive, type: date}
+  - id: meta_milestone
+    columns:
+      - {name: id, type: int, pk: true}
+      - {name: artifact, type: text, fk: meta.artifact}
+      - {name: slug, type: text}
+      - {name: title, type: text}
+      - {name: status, type: text}
+  - id: meta_artifact
+    columns:
+      - {name: name, type: text, pk: true, fk: envelope.artifact}
+      - {name: artifact, type: text, fk: meta.artifact}
+  - id: prices
+    columns:
+      - {name: artifact, type: text, pk: true, fk: envelope.artifact}
+      - {name: source_raw_sha256, type: char(64), fk: raw_manifest.sha256}
+      - {name: price_basis, type: text}
+      - {name: splits_train_fraction, type: float64}
+  - id: price_row
+    columns:
+      - {name: date, type: date, pk: true}
+      - {name: artifact, type: text, fk: prices.artifact}
+      - {name: close_usd, type: float64}
+      - {name: log_close, type: float64}
+      - {name: segment, type: text}
+  - id: decomposition_row
+    columns:
+      - {name: date, type: date, pk: true, fk: price_row.date}
+      - {name: artifact, type: text, fk: envelope.artifact}
+      - {name: observed_log, type: float64}
+      - {name: trend_log, type: float64, nullable: true}
+      - {name: seasonal_log, type: float64}
+      - {name: resid_log, type: float64, nullable: true}
+  - id: unit_root_test
+    columns:
+      - {name: id, type: text, pk: true}
+      - {name: artifact, type: text, fk: envelope.artifact}
+      - {name: d, type: int}
+      - {name: adf_p_value, type: float64}
+      - {name: kpss_p_value, type: float64}
+      - {name: kpss_p_value_bound, type: text, nullable: true}
+      - {name: verdict, type: text}
+  - id: stationarity_row
+    columns:
+      - {name: transform, type: text, pk: true, fk: unit_root_test.id}
+      - {name: date, type: date, pk: true, fk: price_row.date}
+      - {name: value, type: float64}
+      - {name: roll12_mean, type: float64, nullable: true}
+      - {name: roll252_mean, type: float64, nullable: true}
+  - id: acf_pacf_row
+    columns:
+      - {name: transform, type: text, pk: true, fk: unit_root_test.id}
+      - {name: lag, type: int, pk: true}
+      - {name: acf, type: float64}
+      - {name: pacf, type: float64}
+      - {name: acf_band, type: float64}
+      - {name: pacf_band, type: float64}
+  - id: aic_cell
+    columns:
+      - {name: d, type: int, pk: true}
+      - {name: p, type: int, pk: true}
+      - {name: q, type: int, pk: true}
+      - {name: trend, type: text, pk: true}
+      - {name: artifact, type: text, fk: envelope.artifact}
+      - {name: status, type: text}
+      - {name: aic, type: float64, nullable: true}
+      - {name: delta_aic, type: float64, nullable: true}
+      - {name: converged, type: bool, nullable: true}
+      - {name: error, type: text, nullable: true}
+  - id: fit_param
+    columns:
+      - {name: model_id, type: text, pk: true}
+      - {name: name, type: text, pk: true}
+      - {name: artifact, type: text, fk: envelope.artifact}
+      - {name: library_name, type: text}
+      - {name: value, type: float64}
+      - {name: std_err, type: float64, nullable: true}
+  - id: residual_row
+    columns:
+      - {name: date, type: date, pk: true, fk: price_row.date}
+      - {name: artifact, type: text, fk: envelope.artifact}
+      - {name: resid, type: float64}
+      - {name: resid_std, type: float64}
+  - id: forecast_method
+    columns:
+      - {name: id, type: text, pk: true}
+      - {name: artifact, type: text, fk: envelope.artifact}
+      - {name: kind, type: text}
+      - {name: model_id, type: text, nullable: true}
+  - id: forecast_row
+    columns:
+      - {name: method, type: text, pk: true, fk: forecast_method.id}
+      - {name: segment, type: text, pk: true}
+      - {name: date, type: date, pk: true, fk: price_row.date}
+      - {name: step, type: int}
+      - {name: mean_log, type: float64}
+      - {name: lower_log, type: float64, nullable: true}
+      - {name: upper_log, type: float64, nullable: true}
+      - {name: mean_usd, type: float64}
+      - {name: actual_usd, type: float64}
+  - id: metric_row
+    columns:
+      - {name: method, type: text, pk: true, fk: forecast_method.id}
+      - {name: segment, type: text, pk: true}
+      - {name: n, type: int}
+      - {name: rmse_usd, type: float64}
+      - {name: mae_usd, type: float64}
+      - {name: mape_pct, type: float64}
+      - {name: rmse_ratio_to_random_walk, type: float64, nullable: true}
+relations:
+  - {from: meta.artifact, to: envelope.artifact, cardinality: "1..1", label: wraps}
+  - {from: prices.artifact, to: envelope.artifact, cardinality: "0..1", label: wraps}
+  - {from: prices.source_raw_sha256, to: raw_manifest.sha256, cardinality: "0..*", label: derived from}
+  - {from: price_row.artifact, to: prices.artifact, cardinality: "1..*", label: rows}
+  - {from: meta_window.artifact, to: meta.artifact, cardinality: "1..*", label: windows}
+  - {from: meta_milestone.artifact, to: meta.artifact, cardinality: "1..*", label: milestones}
+  - {from: meta_artifact.artifact, to: meta.artifact, cardinality: "1..*", label: artifacts}
+  - {from: meta_artifact.name, to: envelope.artifact, cardinality: "1..1", label: names}
+  - {from: stationarity_row.transform, to: unit_root_test.id, cardinality: "1..*", label: series}
+  - {from: acf_pacf_row.transform, to: unit_root_test.id, cardinality: "1..*", label: lags}
+  - {from: forecast_row.method, to: forecast_method.id, cardinality: "1..*", label: forecasts}
+  - {from: metric_row.method, to: forecast_method.id, cardinality: "1..*", label: scored}
+  - {from: forecast_row.date, to: price_row.date, cardinality: "0..*", label: actual}

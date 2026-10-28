@@ -1,0 +1,61 @@
+---
+title: "Milestone delivery loop"
+---
+flowchart TB
+    subgraph learner["Learner"]
+        kickoff("Start milestone<br/><small>learner says go</small>")
+        answer("Answer questions<br/><small>predict-first, explain-it-back</small>")
+    end
+    subgraph orchestrator["Orchestrator session"]
+        plan["Plan the milestone<br/><small>tasks + acceptance checks</small>"]
+        walkthrough[/"Walkthrough<br/><small>+ predict-first questions</small>"/]
+        pause["Pause<br/><small>hand over to the learner</small>"]
+        grade["Grade answers<br/><small>gaps become follow-ups</small>"]
+        advance[/"Next milestone<br/><small>meta.json status moves on</small>"/]
+    end
+    subgraph implementer["Implementer subagent"]
+        build["Build<br/><small>code, tests, notebooks, export</small>"]
+    end
+    subgraph reviewer["Adversarial reviewer"]
+        review[["Adversarial review<br/><small>evidence-gated; default is broken</small>"]]
+    end
+    subgraph verifier["Verifier subagent"]
+        remeasure["Re-measure numbers<br/><small>every quoted figure</small>"]
+    end
+    subgraph github["GitHub"]
+        push{{"Push<br/><small>commit + push to main</small>"}}
+    end
+    kickoff --> plan
+    plan -->|"task list"| build
+    build -->|"report"| walkthrough
+    walkthrough -->|"numbered claims"| review
+    review ==>|"refuted"| build
+    review -->|"survives"| remeasure
+    remeasure ==>|"disagree"| build
+    remeasure -->|"agree"| push
+    push --> pause
+    pause --> answer
+    answer --> grade
+    grade ==>|"retry gaps"| answer
+    grade -->|"pass"| advance
+    advance -.->|"next loop"| plan
+    classDef process fill:#E0E7FF,stroke:#4F46E5,color:#0F172A
+    class plan,build,remeasure,pause,grade process
+    classDef model fill:#EDE9FE,stroke:#7C3AED,color:#0F172A
+    class review model
+    classDef output fill:#D1FAE5,stroke:#059669,color:#0F172A
+    class walkthrough,advance output
+    classDef external fill:#F1F5F9,stroke:#475569,color:#0F172A
+    class push external
+    classDef ui fill:#FCE7F3,stroke:#DB2777,color:#0F172A
+    class kickoff,answer ui
+    style learner fill:#F1F5F9,stroke:#E2E8F0,color:#64748B
+    style orchestrator fill:#EFF6FF,stroke:#DBEAFE,color:#64748B
+    style implementer fill:#F5F3FF,stroke:#E9E5FD,color:#64748B
+    style reviewer fill:#ECFDF5,stroke:#D1FAE5,color:#64748B
+    style verifier fill:#FFF7ED,stroke:#FFEDD5,color:#64748B
+    style github fill:#FDF2F8,stroke:#FCE7F3,color:#64748B
+    linkStyle 4 stroke:#6366F1
+    linkStyle 6 stroke:#6366F1
+    linkStyle 11 stroke:#6366F1
+    linkStyle 13 stroke:#94A3B8

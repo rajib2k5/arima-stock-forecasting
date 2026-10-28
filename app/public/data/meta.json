@@ -1,0 +1,62 @@
+{
+  "artifact": "meta",
+  "data": {
+    "artifacts": [
+      "meta"
+    ],
+    "milestones": [
+      {
+        "id": 0,
+        "slug": "scaffold",
+        "status": "current",
+        "title": "Scaffold, contract and design"
+      },
+      {
+        "id": 1,
+        "slug": "data-eda",
+        "status": "planned",
+        "title": "Data and EDA"
+      },
+      {
+        "id": 2,
+        "slug": "stationarity",
+        "status": "planned",
+        "title": "Stationarity and identification"
+      },
+      {
+        "id": 3,
+        "slug": "fit-diagnostics",
+        "status": "planned",
+        "title": "Fit and diagnostics"
+      },
+      {
+        "id": 4,
+        "slug": "forecast-eval",
+        "status": "planned",
+        "title": "Forecast and evaluation"
+      },
+      {
+        "id": 5,
+        "slug": "where-it-goes-wrong",
+        "status": "planned",
+        "title": "Where the sample goes wrong, and polish"
+      }
+    ],
+    "project": "arima-stock-forecasting",
+    "ticker": "AAPL",
+    "title": "ARIMA stock forecasting, done carefully",
+    "windows": {
+      "course": {
+        "end_exclusive": "2024-01-01",
+        "start": "2015-01-01"
+      },
+      "oos": {
+        "end_exclusive": "2026-10-01",
+        "start": "2024-01-01"
+      }
+    }
+  },
+  "generated_at": "2026-10-28T12:24:14Z",
+  "schema_version": "1.0.0",
+  "source_commit": "uncommitted"
+}
