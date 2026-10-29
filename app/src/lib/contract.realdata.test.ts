@@ -4,14 +4,16 @@
  * fixture on purpose; this one reads whatever Python last exported, so a field renamed in Python
  * and re-exported fails here, not in a reader's browser.
  *
- * The owner gate (ADR-0001): `meta.data.held_artifacts` names files the export writes but the
- * repository does not commit (prices and eda), so a fresh clone lacks them. Each such file gets a
- * SKIPPED test whose name says why and how to build it. A listed file that is missing and not held
- * fails, so the gate can never hide a broken export.
+ * Held artifacts (ADR-0001): `meta.data.held_artifacts` names files the export writes but the
+ * repository does not commit, so a copy may lack them. Each such file gets a SKIPPED test whose name
+ * says why and how to build it. A listed file that is missing and not held fails, so the mechanism
+ * can never hide a broken export. Since the owner's decision of 2026-10-29 nothing is held: every
+ * exported file, prices.json and eda.json included, is committed and checked here.
  */
 import { describe, expect, it } from 'vitest'
 import { parseEnvelope, parseMeta } from './contract'
 import { parseEda, parsePrices } from './contract.payloads'
+import { parseAcfPacf, parseAicGrid, parseStationarity } from './contract.order'
 
 // Every committed file, as raw text exactly as the browser receives it; JSON.parse below plays
 // the part of `res.json()`, so a bare NaN token in a file fails here too.
@@ -24,6 +26,9 @@ const PAYLOAD_PARSERS: Record<string, (data: unknown) => PayloadResult> = {
   meta: parseMeta,
   prices: parsePrices,
   eda: parseEda,
+  stationarity: parseStationarity,
+  acf_pacf: parseAcfPacf,
+  aic_grid: parseAicGrid,
 }
 
 const stemOf = (path: string) => path.replace(/^.*\//, '').replace(/\.json$/, '')
@@ -68,6 +73,6 @@ describe('the committed files in public/data', () => {
 
   // A skipped test per held file that this copy lacks, so the report says what was not checked.
   for (const name of HELD_AND_ABSENT) {
-    it.skip(`${name}.json is not built in this copy: it is git-ignored until the owner decides whether Yahoo-derived prices may be published (ADR-0001); build it with uv run python tools/fetch_prices.py, then uv run python tools/export_app_data.py`, () => {})
+    it.skip(`${name}.json is not built in this copy: meta.json lists it as held, written by the export but not committed (ADR-0001); build it with uv run python tools/fetch_prices.py, then uv run python tools/export_app_data.py`, () => {})
   }
 })

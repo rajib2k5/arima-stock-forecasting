@@ -22,9 +22,13 @@ export interface ThemeColors {
   muted: string
   accent: string
   line: string
+  /** An eligible fit in the AIC landscape. */
+  teal: string
+  /** A flagged fit (near a unit root) in the AIC landscape. */
+  down: string
 }
 
-const FALLBACK: ThemeColors = { ink: '#e6e9ef', muted: '#929db0', accent: '#e0a458', line: '#2c3547' }
+const FALLBACK: ThemeColors = { ink: '#e6e9ef', muted: '#929db0', accent: '#e0a458', line: '#2c3547', teal: '#4fb8a8', down: '#c25450' }
 
 function readThemeColors(): ThemeColors {
   const css = getComputedStyle(document.documentElement)
@@ -34,6 +38,8 @@ function readThemeColors(): ThemeColors {
     muted: token('--muted', FALLBACK.muted),
     accent: token('--accent', FALLBACK.accent),
     line: token('--line', FALLBACK.line),
+    teal: token('--teal', FALLBACK.teal),
+    down: token('--down', FALLBACK.down),
   }
 }
 

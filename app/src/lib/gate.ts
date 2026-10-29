@@ -8,6 +8,12 @@ import type { Meta } from './contract'
 /** The artifacts the price explorer reads. */
 export const EXPLORER_ARTIFACTS = ['prices', 'eda'] as const
 
+/** The artifacts the stationarity page reads (milestone 2). */
+export const STATIONARITY_ARTIFACTS = ['stationarity', 'acf_pacf'] as const
+
+/** The artifact the AIC landscape reads (milestone 2). */
+export const LANDSCAPE_ARTIFACTS = ['aic_grid'] as const
+
 export function hasArtifacts(meta: Meta, needed: readonly string[]): boolean {
   return needed.every((name) => meta.artifacts.includes(name))
 }

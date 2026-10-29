@@ -59,3 +59,15 @@ def write_synthetic_snapshot(root: Path, frame: pd.DataFrame | None = None) -> P
     downloaded = study_frame() if frame is None else frame
     data.acquire(folder, download=lambda **_: downloaded, now=lambda: FIXED_NOW, yfinance_version="1.7.0")
     return folder
+
+
+# The milestone-2 AIC grid fits 144 models (about a minute on the real data). Tests of the export
+# tool's wiring do not need them: NOT_RUN stands in for pmdarima's check, and SMALL_GRID is a
+# `python -c` prefix that shrinks the grid to one order per axis (4 cells) and then runs the tool
+# file as __main__. Use it as: [sys.executable, "-c", SMALL_GRID, <tool path>, <tool args>...].
+NOT_RUN = {"status": "unavailable", "reason": "not run in the tool tests (tests/synthetic.py)", "version": None, "runs": []}
+SMALL_GRID = (
+    "from arima_forecasting import selection; selection.GRID_ORDERS = (0,); "
+    f"selection.pmdarima_check = lambda y, cells, chosen: {NOT_RUN!r}; "
+    "import runpy, sys; sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name='__main__')"
+)

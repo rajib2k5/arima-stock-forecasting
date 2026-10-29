@@ -23,7 +23,10 @@ from arima_forecasting.config import (
     StudyWindow,
 )
 from arima_forecasting.data import PROVIDER, Snapshot
+from arima_forecasting.identification import acf_pacf_payload
 from arima_forecasting.prep import clean_close, price_table, segment_bounds
+from arima_forecasting.selection import aic_grid_payload
+from arima_forecasting.stationarity import stationarity_payload
 
 TITLE = "ARIMA stock forecasting, done carefully"
 
@@ -31,8 +34,8 @@ TITLE = "ARIMA stock forecasting, done carefully"
 # ships, move "current" down one row; the app shows this list as the project's progress bar.
 _MILESTONES = (
     (0, "scaffold", "Scaffold, contract and design", "done"),
-    (1, "data-eda", "Data and EDA", "current"),
-    (2, "stationarity", "Stationarity and identification", "planned"),
+    (1, "data-eda", "Data and EDA", "done"),
+    (2, "stationarity", "Stationarity and identification", "current"),
     (3, "fit-diagnostics", "Fit and diagnostics", "planned"),
     (4, "forecast-eval", "Forecast and evaluation", "planned"),
     (5, "where-it-goes-wrong", "Where the sample goes wrong, and polish", "planned"),
@@ -40,14 +43,14 @@ _MILESTONES = (
 
 # Every artifact one export writes, in the order the tool writes them. meta lists exactly these, so
 # the app knows which views it can switch on.
-ARTIFACTS = ("meta", "prices", "eda")
+ARTIFACTS = ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid")
 
-# The owner gate (ADR-0001): artifacts the export writes but the repository does not commit, until
-# the owner decides whether Yahoo-derived prices may be published. The root .gitignore ignores
-# exactly these files (tests/test_gitignore.py checks it). eda is held as well as prices, because
-# its decomposition rows carry observed_log, the training log closes themselves. A fresh clone
-# lacks these files; meta lists them as held, so the app and the tests can say why.
-HELD_ARTIFACTS = ("prices", "eda")
+# Artifacts the export writes but the repository does not commit (meta.data.held_artifacts). Empty
+# since the owner's decision of 2026-10-29: every exported file is committed, prices.json and
+# eda.json included (DATA.md, ADR-0001). The mechanism stays: the root .gitignore would have to
+# ignore exactly these files (tests/test_gitignore.py checks it), and a copy that lacks a held file
+# says how to build it instead of failing. Removing the meta field would be a major schema bump.
+HELD_ARTIFACTS: tuple[str, ...] = ()
 
 
 def _window(window: StudyWindow) -> dict[str, str]:
@@ -147,8 +150,24 @@ def eda_payload(table: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def build_payloads(snapshot: Snapshot) -> dict[str, dict[str, Any]]:
-    """Every payload one export writes, keyed by artifact name, from one raw snapshot."""
+def order_selection_payloads(table: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    """The three milestone-2 payloads, from the training rows of the price table only.
+
+    The unit-root tests choose d first; the AIC grid then ranks (p, q, trend) within that d only
+    (ADR-0002, sections 2 and 3).
+    """
+    train = table.loc[table["segment"] == "train", "log_close"].to_numpy()
+    stationarity = stationarity_payload(train)
+    return {
+        "stationarity": stationarity,
+        "acf_pacf": acf_pacf_payload(train),
+        "aic_grid": aic_grid_payload(train, stationarity["decision"]["d_selected"]),
+    }
+
+
+def price_payloads(snapshot: Snapshot) -> tuple[dict[str, dict[str, Any]], pd.DataFrame]:
+    """The milestone-0 and milestone-1 payloads (meta, prices, eda) from one raw snapshot, and the
+    price table they come from. No model is fitted, so this takes seconds (notebook 01 uses it)."""
     cleaned = clean_close(snapshot.frame)
     table = price_table(cleaned.close)
     payloads = {
@@ -156,6 +175,13 @@ def build_payloads(snapshot: Snapshot) -> dict[str, dict[str, Any]]:
         "prices": prices_payload(table, cleaned.filled_dates, source_from_manifest(snapshot.manifest)),
         "eda": eda_payload(table),
     }
+    return payloads, table
+
+
+def build_payloads(snapshot: Snapshot) -> dict[str, dict[str, Any]]:
+    """Every payload one export writes, keyed by artifact name, from one raw snapshot."""
+    first, table = price_payloads(snapshot)
+    payloads = {**first, **order_selection_payloads(table)}
     if tuple(payloads) != ARTIFACTS:  # pragma: no cover - a guard for whoever edits this list
         raise RuntimeError(f"payloads {tuple(payloads)} do not match ARTIFACTS {ARTIFACTS}")
     return payloads

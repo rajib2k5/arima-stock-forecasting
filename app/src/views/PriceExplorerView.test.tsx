@@ -34,25 +34,13 @@ describe('PriceExplorer', () => {
     expect(within(alert).getByText('uv run python tools/export_app_data.py')).toBeInTheDocument()
   })
 
-  it('says the data is not built here, and how to build it, when a held file is absent (404)', () => {
-    const state: ExplorerState = { status: 'error', artifact: 'prices', error: { kind: 'http', url: './data/prices.json', status: 404, statusText: 'Not Found' } }
-    render(<PriceExplorer state={state} held={['prices', 'eda']} />)
-    const panel = screen.getByRole('status', { name: 'Data not built here' })
-    expect(panel).toHaveTextContent('The price data is not built in this copy.')
-    expect(panel).toHaveTextContent('ADR-0001')
-    expect(within(panel).getByText('uv run python tools/fetch_prices.py')).toBeInTheDocument()
-    expect(within(panel).getByText('uv run python tools/export_app_data.py')).toBeInTheDocument()
-    expect(screen.queryByRole('alert')).toBeNull()
-  })
-
-  it('shows a real error, not "not built", when the missing file is not held or the failure is not an absence', () => {
+  it('shows a missing file (404) or a server error as a real error that names the file', () => {
     const missingPrices: ExplorerState = { status: 'error', artifact: 'prices', error: { kind: 'http', url: 'x', status: 404, statusText: '' } }
-    const { unmount } = render(<PriceExplorer state={missingPrices} held={[]} />)
+    const { unmount } = render(<PriceExplorer state={missingPrices} />)
     expect(screen.getByRole('alert')).toHaveTextContent('Could not load prices.json.')
     unmount()
-    render(<PriceExplorer state={{ status: 'error', artifact: 'eda', error: { kind: 'http', url: 'x', status: 500, statusText: '' } }} held={['eda']} />)
+    render(<PriceExplorer state={{ status: 'error', artifact: 'eda', error: { kind: 'http', url: 'x', status: 500, statusText: '' } }} />)
     expect(screen.getByRole('alert')).toHaveTextContent('Could not load eda.json.')
-    expect(screen.queryByRole('status', { name: 'Data not built here' })).toBeNull()
   })
 
   it('draws the price chart with the three segments shaded and labelled', () => {

@@ -84,7 +84,7 @@ describe('ArchitectureView', () => {
   it('has the 3D section with its caption and, without WebGL, the static fallback', () => {
     render(<ArchitectureView />)
     expect(screen.getByRole('heading', { name: '3D wiring check' })).toBeInTheDocument()
-    expect(screen.getByText('AIC landscape arrives in milestone 2 — no data is drawn yet')).toBeInTheDocument()
+    expect(screen.getByText('Empty axes: the AIC landscape page draws the fitted grid on them')).toBeInTheDocument()
     expect(screen.getByText('3D preview unavailable.')).toBeInTheDocument()
   })
 })

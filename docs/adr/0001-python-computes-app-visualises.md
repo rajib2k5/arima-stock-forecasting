@@ -1,6 +1,6 @@
 # ADR-0001: Python computes, the app only visualises, and a versioned JSON contract sits between them
 
-**Status:** Accepted (milestone 0). The open question below is still the owner's; `prices.json` and `eda.json` are on hold since 2026-10-29.
+**Status:** Accepted (milestone 0). The data question at the end was decided by the owner on 2026-10-29: the exported data files, `prices.json` and `eda.json` included, are committed; bulk raw files stay out (see `DATA.md`).
 **Date:** 2026-10-28
 **Deciders:** the learner (owner of this repo), with the milestone-0 architect session
 
@@ -76,7 +76,8 @@ In detail:
 
 4. **Raw data stays outside the repo.** The downloaded price file lives in
    `$VOL_DATA_DIR/arima-stock-forecasting/raw/` (default `~/data/vol-projects`), never in git.
-   Only *derived* artifacts are committed (see the open question at the end about `prices.json`).
+   Only *derived* artifacts are committed: the exported JSON, `prices.json` and `eda.json`
+   included (the owner's decision at the end), never the raw snapshot.
 
 ### Why each envelope field exists
 
@@ -150,7 +151,7 @@ Drift has three forms. Each has its own check.
 
 | Drift | Example | Check |
 |---|---|---|
-| **Shape drift**: Python changes a field, the app still expects the old one | `aic` renamed to `aic_value` | Python validates each envelope (`contract.validate_envelope`) before writing. The app's production parsers (`app/src/lib/contract.ts`) run over **every real committed JSON file** in `app/public/data/` (`app/src/lib/contract.realdata.test.ts`): each must pass `parseEnvelope`, name itself correctly and pass its artifact's payload parser, and the files present must equal `meta.data.artifacts`, less the held ones a copy lacks (`meta.data.held_artifacts`, the owner gate below; each gets a skipped test that says why). Hand-built fixtures and the shared payload corpus cover the edge cases separately. Rename a field in Python, re-export, and the app's tests fail. |
+| **Shape drift**: Python changes a field, the app still expects the old one | `aic` renamed to `aic_value` | Python validates each envelope (`contract.validate_envelope`) before writing. The app's production parsers (`app/src/lib/contract.ts`) run over **every real committed JSON file** in `app/public/data/` (`app/src/lib/contract.realdata.test.ts`): each must pass `parseEnvelope`, name itself correctly and pass its artifact's payload parser, and the files present must equal `meta.data.artifacts`, less any held ones a copy lacks (`meta.data.held_artifacts`, empty since the owner's decision below; each would get a skipped test that says why). Hand-built fixtures and the shared payload corpus cover the edge cases separately. Rename a field in Python, re-export, and the app's tests fail. |
 | **Staleness**: code changed but nobody re-exported | a bug fix in the grid search, old `aic_grid.json` still committed | An export check mode regenerates every artifact into a temporary folder and compares the `data` part with the committed files (the same idea as the notebook sync test; the shared diagram kit that generates `docs/architecture/out/*.mmd` has a similar check, but that kit is not public yet and is planned to be vendored into `tools/diagrams/`). It compares `schema_version`, `artifact` and `data`, **not** `generated_at` or `source_commit`, because those two legitimately differ between the export run and the check run. |
 | **Version drift**: a breaking change without a major bump | a field changes from dollars to log-dollars but keeps its name | Code review against the versioning policy in `contract.md`. Unit names are part of field names (`close_usd`, `log_close`) so a unit change *is* a rename, and a rename is a major bump. |
 
@@ -263,9 +264,8 @@ a contract update. That friction is deliberate. It is the moment where a reviewe
 
 **Easier:**
 - Every number traces to one function, one commit and one data snapshot.
-- The app can be developed and tested without Python installed (the JSON is committed). Since
-  2026-10-29 that holds for `meta.json` only: the price files are on hold (see the open question),
-  so the price explorer needs one local export, and its tests skip without it.
+- The app can be developed and tested without Python installed (the JSON is committed, the price
+  files included since the owner's decision of 2026-10-29; see the end of this record).
 - Hosting is free and nothing runs server-side.
 - The verifier re-measures numbers by re-running one export command.
 
@@ -284,9 +284,9 @@ a contract update. That friction is deliberate. It is the moment where a reviewe
 - If a future milestone needs user-chosen inputs that cannot be enumerated, revisit Option B.
 - If artifacts grow past their size budgets, consider a columnar layout (see `contract.md`).
 
-## Open question for the learner (a decision, not a default)
+## The owner's decision on the price files (decided 2026-10-29)
 
-**Should `prices.json` be committed?** It is derived, but it is essentially the adjusted close
+The question was: **should `prices.json` be committed?** It is derived, but it is essentially the adjusted close
 series, the same information as the raw file this ADR keeps out of git. The options:
 
 1. **Commit it** (proposed default): the app works on GitHub Pages straight from the repo. Risk:
@@ -296,24 +296,33 @@ series, the same information as the raw file this ADR keeps out of git. The opti
 3. **Commit only aggregates**, for example weekly closes or the log series rounded to 4 decimals:
    a weaker price explorer, a smaller footprint.
 
-This is a risk the repo owner carries, so it is the owner's call.
+This is a risk the repo owner carries, so it was the owner's call. Milestone 1 put the two price
+files on hold (git-ignored) until the owner decided.
 
-**On hold since 2026-10-29: neither `prices.json` nor `eda.json` is committed** until the owner
-decides. `eda.json` is held too: its decomposition rows carry `observed_log`, the training log
-closes themselves, and `trend_log + seasonal_log + resid_log` adds back up to them, so it carries
-the same prices in another form. What this means in practice:
+**Decided by the owner on 2026-10-29: option 1.** The project is a portfolio, so the real data the
+app and the docs need goes into the repository, and a fresh clone runs the whole app. Bulk raw files
+stay out. [`DATA.md`](../../DATA.md) at the repository root names the source and its terms and says
+that the data is not covered by the repository's MIT licence. The public history stays as it is.
+What this means in practice:
 
-- The root `.gitignore` ignores `/app/public/data/prices.json` and `/app/public/data/eda.json`.
-  `tools/export_app_data.py` still writes both, so everything works locally once the snapshot is
-  downloaded (`uv run python tools/fetch_prices.py`, then `uv run python tools/export_app_data.py`).
-- The committed `meta.json` still lists all three artifacts, because it describes what the export
-  writes, and it names the two held ones in `held_artifacts` (`HELD_ARTIFACTS` in
-  `src/arima_forecasting/export.py`). On a fresh clone the app offers the price explorer and says
-  that its data is not built in this copy and how to build it. The tests that need a held file
-  skip with a message that names it; a missing file that is not held still fails.
-- The raw snapshot and its manifest are never committed, whatever the owner decides.
-- To lift the hold with option 1: remove the two lines from `.gitignore`, empty `HELD_ARTIFACTS`,
-  re-export, and commit the files. Options 2 and 3 are described above.
+- **Committed:** every exported file in `app/public/data/`: `meta.json`, `prices.json` (the
+  adjusted daily closes of the two study windows), `eda.json` (its decomposition rows carry the
+  training log closes) and, from milestone 2, `stationarity.json`, `acf_pacf.json` and
+  `aic_grid.json`.
+- **Not committed:** the raw snapshot CSV and its manifest, and yfinance's caches, all under
+  `$VOL_DATA_DIR/arima-stock-forecasting/` (the repo's own `/data/`, `/raw/` and `/cache/` stay
+  ignored). `tools/fetch_prices.py` rebuilds them.
+- **The guard:** `tests/test_repo_data.py` fails if git tracks, or would stage, a raw vendor file
+  (anything under `data/`, a `raw/` or `cache/` folder, a snapshot CSV or manifest, a `*.db`), or a
+  data file over 10 MB. It replaces the real-data scanner as the gate before a push; the scanner
+  (`tools/licensing/scan_real_rows.py`) stays as an optional tool.
+- **Docs may quote real AAPL values.** The values milestone 1 replaced stay replaced; tests keep
+  their made-up values.
+- **`held_artifacts` stays, empty.** `HELD_ARTIFACTS` in `src/arima_forecasting/export.py` is `()`,
+  and `meta.json` writes `"held_artifacts": []`. Keeping the field with no entries changes the
+  content of meta, not its shape, so it needs no schema bump. Removing it would be a major bump
+  (2.0.0) under the contract's versioning policy and would change both readers, the shared corpus
+  and the contract for no gain. The mechanism still works if a file is ever held again.
 
 ## Action items
 
@@ -328,6 +337,8 @@ the same prices in another form. What this means in practice:
        parser there, or the test fails).
 4. [x] Raw snapshot manifest written next to the raw file; its SHA-256 recorded in `prices` (M1:
        `src/arima_forecasting/data.py`, `prices.source.raw_sha256`).
-5. [ ] Learner decides the `prices.json` question above. Until then `prices.json` and
-       `eda.json` are on hold (git-ignored, listed in `meta.data.held_artifacts`), since
-       2026-10-29.
+5. [x] The owner decided the `prices.json` question on 2026-10-29: the exported files, `prices.json`
+       and `eda.json` included, are committed, `HELD_ARTIFACTS` is empty, and `DATA.md` states the
+       source, its terms and what is committed.
+6. [x] A test guards the rule (milestone 2): `tests/test_repo_data.py` fails on a tracked raw vendor
+       file or a data file over 10 MB.

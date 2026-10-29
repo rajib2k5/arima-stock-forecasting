@@ -27,7 +27,7 @@ entities:
       - {name: downloaded_at, type: timestamp_utc}
   # ---- contract side: app/public/data/<artifact>.json (docs/architecture/contract.md) ----
   # Columns that are not JSON fields: `artifact` (the envelope a payload or row sits in),
-  # `transform` on stationarity_row and acf_pacf_row and `model_id` on fit_param (the parent
+  # `transform` on acf_pacf_row and `model_id` on fit_param (the parent
   # object a row is nested under), `name` on meta_window (a key of data.windows) and `name` on
   # meta_artifact (one string of data.artifacts). Every other column is a JSON field, and the
   # diagram shows a subset of each object's fields. A field inside a nested object is written
@@ -88,17 +88,13 @@ entities:
       - {name: id, type: text, pk: true}
       - {name: artifact, type: text, fk: envelope.artifact}
       - {name: d, type: int}
+      - {name: n, type: int}
+      - {name: adf_statistic, type: float64}
       - {name: adf_p_value, type: float64}
+      - {name: kpss_statistic, type: float64}
       - {name: kpss_p_value, type: float64}
       - {name: kpss_p_value_bound, type: text, nullable: true}
       - {name: verdict, type: text}
-  - id: stationarity_row
-    columns:
-      - {name: transform, type: text, pk: true, fk: unit_root_test.id}
-      - {name: date, type: date, pk: true, fk: price_row.date}
-      - {name: value, type: float64}
-      - {name: roll12_mean, type: float64, nullable: true}
-      - {name: roll252_mean, type: float64, nullable: true}
   - id: acf_pacf_row
     columns:
       - {name: transform, type: text, pk: true, fk: unit_root_test.id}
@@ -115,6 +111,7 @@ entities:
       - {name: trend, type: text, pk: true}
       - {name: artifact, type: text, fk: envelope.artifact}
       - {name: status, type: text}
+      - {name: reason, type: text, nullable: true}
       - {name: aic, type: float64, nullable: true}
       - {name: delta_aic, type: float64, nullable: true}
       - {name: converged, type: bool, nullable: true}
@@ -168,7 +165,6 @@ relations:
   - {from: meta_milestone.artifact, to: meta.artifact, cardinality: "1..*", label: milestones}
   - {from: meta_artifact.artifact, to: meta.artifact, cardinality: "1..*", label: artifacts}
   - {from: meta_artifact.name, to: envelope.artifact, cardinality: "1..1", label: names}
-  - {from: stationarity_row.transform, to: unit_root_test.id, cardinality: "1..*", label: series}
   - {from: acf_pacf_row.transform, to: unit_root_test.id, cardinality: "1..*", label: lags}
   - {from: forecast_row.method, to: forecast_method.id, cardinality: "1..*", label: forecasts}
   - {from: metric_row.method, to: forecast_method.id, cardinality: "1..*", label: scored}

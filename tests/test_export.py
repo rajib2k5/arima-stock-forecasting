@@ -3,7 +3,12 @@ that writes them, and its --check mode). Expected values are literals typed from
 contract, never recomputed by the code under test.
 
 The tool reads a raw snapshot. Every tool test here gets a synthetic one (tests/synthetic.py),
-pointed to through VOL_DATA_DIR, so no test downloads anything."""
+pointed to through VOL_DATA_DIR, so no test downloads anything.
+
+The milestone-2 AIC grid fits 144 models (about a minute on the real data). These tests check
+the tool's wiring, not the grid, so they shrink it: in this process with monkeypatch, and in a
+subprocess with tests/synthetic.py's SMALL_GRID, which sets the same module attributes before the
+tool file runs as __main__. tests/test_selection.py tests the grid itself, and the full grid runs in `--check`."""
 
 from __future__ import annotations
 
@@ -17,16 +22,26 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from synthetic import FIXED_NOW, write_synthetic_snapshot
+from synthetic import FIXED_NOW, NOT_RUN, SMALL_GRID, write_synthetic_snapshot
 
-from arima_forecasting import config
+from arima_forecasting import config, selection
 from arima_forecasting.contract import SCHEMA_VERSION, dumps, validate_envelope
 from arima_forecasting.data import read_snapshot
-from arima_forecasting.export import ARTIFACTS, build_payloads, meta_payload
+from arima_forecasting.export import ARTIFACTS, build_payloads, meta_payload, order_selection_payloads
+from arima_forecasting.payloads import PAYLOAD_VALIDATORS
+from arima_forecasting.prep import price_table
 
 REPO = Path(__file__).resolve().parent.parent
 TOOL = REPO / "tools" / "export_app_data.py"
 UTC = timezone.utc
+FILES = sorted(f"{name}.json" for name in ARTIFACTS)
+
+REAL_PMDARIMA_CHECK = selection.pmdarima_check
+@pytest.fixture(autouse=True)
+def small_grid(monkeypatch):
+    """The same small grid for every in-process call of the tool or of build_payloads."""
+    monkeypatch.setattr(selection, "GRID_ORDERS", (0,))
+    monkeypatch.setattr(selection, "pmdarima_check", lambda y, cells, chosen: dict(NOT_RUN))
 
 
 def load_tool():
@@ -47,8 +62,8 @@ EXPECTED_META = {
     },
     "milestones": [
         {"id": 0, "slug": "scaffold", "title": "Scaffold, contract and design", "status": "done"},
-        {"id": 1, "slug": "data-eda", "title": "Data and EDA", "status": "current"},
-        {"id": 2, "slug": "stationarity", "title": "Stationarity and identification", "status": "planned"},
+        {"id": 1, "slug": "data-eda", "title": "Data and EDA", "status": "done"},
+        {"id": 2, "slug": "stationarity", "title": "Stationarity and identification", "status": "current"},
         {"id": 3, "slug": "fit-diagnostics", "title": "Fit and diagnostics", "status": "planned"},
         {"id": 4, "slug": "forecast-eval", "title": "Forecast and evaluation", "status": "planned"},
         {
@@ -58,8 +73,8 @@ EXPECTED_META = {
             "status": "planned",
         },
     ],
-    "artifacts": ["meta", "prices", "eda"],
-    "held_artifacts": ["prices", "eda"],
+    "artifacts": ["meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid"],
+    "held_artifacts": [],  # none since the owner's decision of 2026-10-29: every export is committed
 }
 
 
@@ -121,12 +136,77 @@ def snapshot_root(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def payloads(snapshot_root):
-    return build_payloads(read_snapshot(config.raw_dir({"VOL_DATA_DIR": str(snapshot_root)})))
+    # A 2 x 2 grid with the real pmdarima cross-check: small enough to run once per module.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(selection, "GRID_ORDERS", (0, 1))
+        patch.setattr(selection, "pmdarima_check", REAL_PMDARIMA_CHECK)  # whatever ran first
+        return build_payloads(read_snapshot(config.raw_dir({"VOL_DATA_DIR": str(snapshot_root)})))
 
 
 def test_build_payloads_returns_every_artifact_in_order(payloads):
-    assert tuple(payloads) == ARTIFACTS == ("meta", "prices", "eda")
+    assert tuple(payloads) == ARTIFACTS == ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid")
     assert payloads["meta"]["artifacts"] == list(ARTIFACTS)
+
+
+def test_every_payload_passes_its_validator(payloads):
+    for name, payload in payloads.items():
+        assert PAYLOAD_VALIDATORS[name](payload) == [], name
+
+
+def test_the_aic_grid_takes_d_from_the_unit_root_tests(payloads):
+    # The synthetic close is a random walk with drift, so the tests choose d = 1, and the grid's
+    # selection must use the same d (contract.md section 4, cross-artifact consistency).
+    d = payloads["stationarity"]["decision"]["d_selected"]
+    assert d == 1 == payloads["aic_grid"]["selection"]["d_selected"] == payloads["aic_grid"]["selection"]["order"][1]
+    assert payloads["aic_grid"]["pmdarima_check"]["status"] == "ok"
+
+
+def test_the_order_selection_payloads_use_the_training_rows_only(payloads):
+    train = payloads["prices"]["splits"]["train"]
+    for name in ("stationarity", "aic_grid"):
+        assert payloads[name]["n_train"] == train["n"], name
+    assert payloads["acf_pacf"]["series"][0]["n"] == train["n"]
+    # Change every test and out-of-sample close: nothing in the three payloads may move.
+    rows = payloads["prices"]["rows"]
+    close = pd.Series(
+        [r["close_usd"] * (1.0 if r["segment"] == "train" else 3.0) for r in rows],
+        index=pd.DatetimeIndex([r["date"] for r in rows]),
+    )
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(selection, "GRID_ORDERS", (0, 1))
+        patch.setattr(selection, "pmdarima_check", REAL_PMDARIMA_CHECK)  # as in the payloads fixture
+        again = order_selection_payloads(price_table(close))
+    for name in ("stationarity", "acf_pacf", "aic_grid"):
+        assert again[name] == payloads[name], name
+
+
+def test_the_grid_ranks_within_whatever_d_the_tests_chose(payloads, monkeypatch):
+    # Not a hard-coded 1: if the unit-root tests said d = 2, the grid would choose among d = 2 cells.
+    from arima_forecasting import export
+
+    real = export.stationarity_payload
+
+    def says_two(train):
+        out = real(train)
+        out["decision"]["d_selected"] = 2
+        return out
+
+    monkeypatch.setattr(export, "stationarity_payload", says_two)
+    rows = payloads["prices"]["rows"]
+    close = pd.Series([r["close_usd"] for r in rows], index=pd.DatetimeIndex([r["date"] for r in rows]))
+    grid = order_selection_payloads(price_table(close))["aic_grid"]
+    assert grid["selection"]["d_selected"] == 2 and grid["selection"]["order"][1] == 2
+
+
+def test_the_order_selection_payloads_hold_no_date_and_no_log_price(payloads):
+    # The owner gate: these three are committed, so nothing in them may be, or add up to, a price.
+    logs = {repr(r["log_close"]) for r in payloads["prices"]["rows"]}
+    closes = {repr(r["close_usd"]) for r in payloads["prices"]["rows"]}
+    for name in ("stationarity", "acf_pacf", "aic_grid"):
+        text = json.dumps(payloads[name])
+        numbers = set(text.replace("[", " ").replace("]", " ").replace(",", " ").replace(":", " ").replace("}", " ").split())
+        assert not numbers & (logs | closes), name
+        assert '"date"' not in text and "2015-" not in text, name
 
 
 def test_prices_payload_has_exactly_the_contract_fields(payloads):
@@ -186,7 +266,7 @@ def run_tool(out: Path, *args: str, data_root: Path | None, **extra_env: str) ->
     if data_root is not None:
         env["VOL_DATA_DIR"] = str(data_root)
     return subprocess.run(
-        [sys.executable, str(TOOL), "--out", str(out), *args],
+        [sys.executable, "-c", SMALL_GRID, str(TOOL), "--out", str(out), *args],
         capture_output=True,
         text=True,
         env=env,
@@ -194,11 +274,11 @@ def run_tool(out: Path, *args: str, data_root: Path | None, **extra_env: str) ->
     )
 
 
-def test_tool_writes_three_valid_envelopes(tmp_path, snapshot_root):
+def test_tool_writes_every_artifact_as_a_valid_envelope(tmp_path, snapshot_root):
     out = tmp_path / "does" / "not" / "exist" / "yet"  # the tool must create missing folders
     done = run_tool(out, data_root=snapshot_root, SOURCE_DATE_EPOCH="0")
     assert done.returncode == 0, done.stderr
-    assert sorted(p.name for p in out.iterdir()) == ["eda.json", "meta.json", "prices.json"]
+    assert sorted(p.name for p in out.iterdir()) == FILES
     for name in ARTIFACTS:
         path = out / f"{name}.json"
         assert str(path) in done.stdout
@@ -206,7 +286,7 @@ def test_tool_writes_three_valid_envelopes(tmp_path, snapshot_root):
         envelope = json.loads(text)
         assert validate_envelope(envelope) == []
         assert envelope["artifact"] == name
-        assert envelope["schema_version"] == "1.1.0" == SCHEMA_VERSION
+        assert envelope["schema_version"] == "1.3.0" == SCHEMA_VERSION
         # SOURCE_DATE_EPOCH=0 must reach every file as the Unix epoch.
         assert envelope["generated_at"] == "1970-01-01T00:00:00Z"
         # The file is in the canonical text form: sorted keys, indent 2, one trailing newline.
@@ -278,7 +358,7 @@ def test_check_passes_on_a_fresh_export_and_writes_nothing(exported, snapshot_ro
     before = {p.name: p.read_bytes() for p in exported.iterdir()}
     done = run_tool(exported, "--check", data_root=snapshot_root)
     assert done.returncode == 0, done.stdout + done.stderr
-    assert "app data is current: meta, prices, eda" in done.stdout
+    assert "app data is current: meta, prices, eda, stationarity, acf_pacf, aic_grid (" in done.stdout
     assert {p.name: p.read_bytes() for p in exported.iterdir()} == before
 
 
@@ -308,7 +388,7 @@ def test_check_fails_on_a_changed_schema_version(exported, snapshot_root):
     (exported / "eda.json").write_text(json.dumps(eda))
     done = run_tool(exported, "--check", data_root=snapshot_root)
     assert done.returncode == 1
-    assert 'stale: eda: schema_version: "1.0.0" != "1.1.0"' in done.stdout
+    assert 'stale: eda: schema_version: "1.0.0" != "1.3.0"' in done.stdout
 
 
 def test_check_says_when_the_snapshot_itself_changed(exported, tmp_path):
@@ -325,7 +405,7 @@ def test_check_says_when_the_snapshot_itself_changed(exported, tmp_path):
     "damage, expected",
     [
         (lambda out: (out / "eda.json").unlink(), "stale: eda: "),
-        (lambda out: (out / "aic_grid.json").write_text("{}"), "stale: aic_grid: "),
+        (lambda out: (out / "fit.json").write_text("{}"), "stale: fit: "),
         (lambda out: (out / "meta.json").write_text("{not json"), "stale: meta: "),
         (lambda out: (out / "meta.json").write_text("[]"), "stale: meta: "),
     ],
@@ -445,3 +525,45 @@ def test_tool_refuses_a_payload_that_fails_its_validator(tmp_path, monkeypatch, 
 
     assert "prices: data.rows: broken on purpose" in capsys.readouterr().err
     assert not (tmp_path / "out").exists()
+
+
+def test_tool_exits_1_with_a_message_when_no_cell_of_the_chosen_d_can_be_chosen(tmp_path, monkeypatch, capsys, snapshot_env):
+    # With one AR order only and a threshold of 0, every d = 1 cell has a "near unit root".
+    monkeypatch.setattr(selection, "GRID_ORDERS", (1,))
+    monkeypatch.setattr(selection, "NEAR_UNIT_ROOT", 0.0)
+    tool = load_tool()
+    assert tool.main(["--out", str(tmp_path / "out")]) == 1
+    assert "error: no cell with d = 1 has status ok" in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()
+
+
+def test_the_subprocess_tool_tests_really_run_the_small_grid(tmp_path, snapshot_root):
+    # Proof that SMALL_GRID reaches the tool: 4 cells, and pmdarima marked as not run.
+    out = tmp_path / "out"
+    assert run_tool(out, data_root=snapshot_root, SOURCE_DATE_EPOCH="0").returncode == 0
+    grid = json.loads((out / "aic_grid.json").read_text())["data"]
+    assert len(grid["cells"]) == 4 and grid["pmdarima_check"] == NOT_RUN
+
+
+def openblas_threads(code: str) -> set[int]:
+    """The thread counts of every OpenBLAS loaded (numpy and scipy each bundle one) in a fresh
+    interpreter that runs `code`, started with OPENBLAS_NUM_THREADS unset."""
+    env = {k: v for k, v in os.environ.items() if k != "OPENBLAS_NUM_THREADS"}
+    probe = f"{code}\nfrom threadpoolctl import threadpool_info\nprint([i['num_threads'] for i in threadpool_info() if i['internal_api'] == 'openblas'])"
+    done = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, env=env, check=True)
+    return set(json.loads(done.stdout.strip().splitlines()[-1]))
+
+
+def test_the_tool_limits_openblas_to_one_thread_before_numpy_loads():
+    # The grid is four times faster with one BLAS thread on a many-core machine, with the same
+    # results. Loading the tool (not running it) must leave numpy's OpenBLAS at one thread.
+    pytest.importorskip("threadpoolctl")  # installed with scikit-learn, which pmdarima needs
+    assert openblas_threads(f"import runpy; runpy.run_path({str(TOOL)!r}, run_name='probe')") == {1}
+    if (os.cpu_count() or 1) > 1:  # the control: without the tool, OpenBLAS starts more threads
+        assert max(openblas_threads("import numpy")) > 1
+
+
+def test_a_caller_can_still_choose_the_thread_count():
+    pytest.importorskip("threadpoolctl")
+    code = f"import os; os.environ['OPENBLAS_NUM_THREADS'] = '2'; import runpy; runpy.run_path({str(TOOL)!r}, run_name='probe')"
+    assert openblas_threads(code) == {2}

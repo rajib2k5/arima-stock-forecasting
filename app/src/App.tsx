@@ -1,19 +1,31 @@
 import { lazy, Suspense } from 'react'
 import { AppShell } from './lib/shell'
 import { useMeta } from './data/useMeta'
-import { EXPLORER_ARTIFACTS, hasArtifacts } from './lib/gate'
+import { EXPLORER_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './lib/gate'
 import { AboutView } from './views/AboutView'
 import { ArchitectureView } from './views/ArchitectureView'
 
 const APP_SLUG = 'arima-stock-forecasting'
 
-// A dynamic import: the explorer's code lands in its own chunk, fetched only when the page opens.
+// Dynamic imports: each data page's code lands in its own chunk, fetched only when the page opens.
 const PriceExplorerView = lazy(() => import('./views/PriceExplorerView'))
+const StationarityView = lazy(() => import('./views/StationarityView'))
+const AicLandscapeView = lazy(() => import('./views/AicLandscapeView'))
+
+function loading(what: string) {
+  return (
+    <p className="sub" role="status">
+      Loading the {what}…
+    </p>
+  )
+}
 
 export default function App() {
   const meta = useMeta()
   // meta.json is the gate: the explorer is offered only once meta lists both files it draws.
   const explorer = meta.status === 'ready' && hasArtifacts(meta.meta, EXPLORER_ARTIFACTS)
+  const stationarity = meta.status === 'ready' && hasArtifacts(meta.meta, STATIONARITY_ARTIFACTS)
+  const landscape = meta.status === 'ready' && hasArtifacts(meta.meta, LANDSCAPE_ARTIFACTS)
   return (
     <AppShell
       slug={APP_SLUG}
@@ -27,14 +39,34 @@ export default function App() {
                 id: 'explorer',
                 label: 'Price explorer',
                 render: () => (
-                  <Suspense
-                    fallback={
-                      <p className="sub" role="status">
-                        Loading the price explorer…
-                      </p>
-                    }
-                  >
-                    <PriceExplorerView held={meta.meta.held_artifacts} />
+                  <Suspense fallback={loading('price explorer')}>
+                    <PriceExplorerView />
+                  </Suspense>
+                ),
+              },
+            ]
+          : []),
+        ...(stationarity
+          ? [
+              {
+                id: 'stationarity',
+                label: 'Stationarity',
+                render: () => (
+                  <Suspense fallback={loading('stationarity page')}>
+                    <StationarityView />
+                  </Suspense>
+                ),
+              },
+            ]
+          : []),
+        ...(landscape
+          ? [
+              {
+                id: 'landscape',
+                label: 'AIC landscape',
+                render: () => (
+                  <Suspense fallback={loading('AIC landscape')}>
+                    <AicLandscapeView />
                   </Suspense>
                 ),
               },

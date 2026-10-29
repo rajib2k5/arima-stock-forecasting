@@ -31,14 +31,17 @@ def good_envelope() -> dict:
 # --- 1. make_envelope: happy path --------------------------------------------------------
 
 def test_schema_version_constant():
-    # 1.1.0: milestone 1 added the prices and eda artifacts, a minor (additive) change.
-    assert contract.SCHEMA_VERSION == "1.1.0"
+    # 1.1.0: milestone 1 added the prices and eda artifacts, a minor (additive) change. 1.2.0:
+    # milestone 2 added stationarity, acf_pacf and aic_grid, another minor change. 1.3.0: the
+    # milestone-2 fix round added fields inside data only (each cell's start and starts_tried, the
+    # multi-start fit settings, the outside flags and counts of the correlograms), minor again.
+    assert contract.SCHEMA_VERSION == "1.3.0"
 
 
 def test_make_envelope_happy_path():
     envelope = make_envelope("meta", {"ticker": "AAPL"}, generated_at=NOON_UTC, source_commit=SHA)
     assert envelope == {
-        "schema_version": "1.1.0",
+        "schema_version": "1.3.0",
         "artifact": "meta",
         "generated_at": "2026-10-28T12:00:00Z",
         "source_commit": SHA,

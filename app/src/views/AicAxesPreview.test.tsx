@@ -5,7 +5,7 @@ import { AicAxesPreview, PREVIEW_CAPTION } from './AicAxesPreview'
 import { useThemeColors } from './hooks'
 import type { SceneProps } from './AicAxesScene'
 
-const CAPTION = 'AIC landscape arrives in milestone 2 — no data is drawn yet'
+const CAPTION = 'Empty axes: the AIC landscape page draws the fitted grid on them'
 
 function FakeScene({ motion }: SceneProps) {
   return <div data-testid="scene" data-autorotate={String(motion.autoRotate)} data-frameloop={motion.frameloop} />

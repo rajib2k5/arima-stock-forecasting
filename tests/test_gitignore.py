@@ -57,13 +57,15 @@ def test_raw_data_at_the_repo_root_is_ignored_by_the_anchored_rule():
     assert rule.startswith(".gitignore:") and rule.endswith(":/data/"), rule
 
 
-# --- Milestone 1: the owner gate and the second layer for raw data -------------------------
+# --- Milestone 1: held artifacts, and the second layer for raw data ------------------------
 
 def test_every_held_artifact_is_ignored_and_every_other_artifact_is_not():
-    # ADR-0001's owner gate: export.HELD_ARTIFACTS are written locally but never committed.
+    # export.HELD_ARTIFACTS are written locally but not committed. Since the owner's decision of
+    # 2026-10-29 none is held: prices.json and eda.json are committed like the other exports.
     from arima_forecasting.export import ARTIFACTS, HELD_ARTIFACTS
 
-    assert set(HELD_ARTIFACTS) == {"prices", "eda"}
+    assert set(HELD_ARTIFACTS) == set()
+    assert ignoring_rule("app/public/data/prices.json") is None and ignoring_rule("app/public/data/eda.json") is None
     for name in ARTIFACTS:
         rule = ignoring_rule(f"app/public/data/{name}.json")
         if name in HELD_ARTIFACTS:

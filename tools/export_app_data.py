@@ -18,20 +18,29 @@ missing file or extra file, and writes nothing.
 
 from __future__ import annotations
 
-import argparse
-import json
-import sys
-from collections.abc import Sequence
-from pathlib import Path
-from typing import Any
+import os
 
-from arima_forecasting.artifacts import compare_exports
-from arima_forecasting.config import raw_dir
-from arima_forecasting.contract import dumps, make_envelope, validate_envelope
-from arima_forecasting.data import SnapshotError, read_snapshot
-from arima_forecasting.export import build_payloads
-from arima_forecasting.payloads import PAYLOAD_VALIDATORS
-from arima_forecasting.provenance import build_time, source_commit
+# Before numpy loads: the milestone-2 grid fits 144 small models, and OpenBLAS's default thread pool
+# makes them over four times slower on a many-core machine (352 s against 84 s, measured). The
+# results are bit-identical either way. setdefault, so a caller can still choose a value.
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
+import argparse  # noqa: E402
+import json  # noqa: E402
+import sys  # noqa: E402
+from collections.abc import Sequence  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
+
+from arima_forecasting.artifacts import compare_exports  # noqa: E402
+from arima_forecasting.config import raw_dir  # noqa: E402
+from arima_forecasting.contract import dumps, make_envelope, validate_envelope  # noqa: E402
+from arima_forecasting.data import SnapshotError, read_snapshot  # noqa: E402
+from arima_forecasting.export import build_payloads  # noqa: E402
+from arima_forecasting.payloads import PAYLOAD_VALIDATORS  # noqa: E402
+from arima_forecasting.prep import DataQualityError  # noqa: E402
+from arima_forecasting.provenance import build_time, source_commit  # noqa: E402
+from arima_forecasting.selection import ModelSearchError  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT = REPO_ROOT / "app" / "public" / "data"
@@ -64,9 +73,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     # The commit and the time are read once, here, and handed to the pure code.
     generated_at = build_time()
     commit = source_commit(REPO_ROOT)
+    try:
+        payloads = build_payloads(snapshot)
+    except (DataQualityError, ModelSearchError) as error:  # the data cannot give a valid export
+        print(f"error: {error}", file=sys.stderr)
+        return EXIT_INVALID
     envelopes: dict[str, dict[str, Any]] = {
         name: make_envelope(name, payload, generated_at=generated_at, source_commit=commit)
-        for name, payload in build_payloads(snapshot).items()
+        for name, payload in payloads.items()
     }
 
     # Check every envelope against the Python copy of the contract before anything is written,

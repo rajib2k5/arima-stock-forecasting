@@ -54,7 +54,7 @@ Notebooks are generated from the same source code, and a test fails if they drif
 No. It is an educational study of one statistical method on one stock. Nothing in it is a recommendation to buy or sell anything.
 
 **Do I need a paid data subscription?**
-No. Prices come from Yahoo Finance through the open-source `yfinance` library and are cached on your machine. Yahoo's terms govern that data; this repository does not redistribute it. The raw download is never committed, and the two derived files that carry prices (`prices.json` and `eda.json`) are on hold until the owner decides open question 2 below: you build them on your machine with two commands.
+No. Prices come from Yahoo Finance through the open-source `yfinance` library and are cached on your machine. Yahoo's terms of service govern that data. The raw download stays on your machine. The two derived files that carry prices, `prices.json` and `eda.json`, are committed, by the owner's decision of 2026-10-29 (open question 2 below), so a fresh clone runs the whole app; [`DATA.md`](../DATA.md) says what is committed and that the data is not covered by the repository's MIT licence.
 
 **Why Apple, and why these dates?**
 The course outline uses AAPL from 2015 to 2023, and following it lets you compare our steps with the original. The 2024–2026 window is added because a model judged only on data its builders could see has not really been tested.
@@ -104,7 +104,7 @@ Yes, as far as it has been checked (on 2026-10-28). `pmdarima==2.1.1` installs f
 - No trading signals, no backtest and no claim of an edge.
 - No machine-learning models. LSTM forecasting belongs to project 1 (implied-volatility forecasting).
 - No live data feed: results are fixed to the stated windows, and the out-of-sample window ends on 30 September 2026 so that the numbers stay reproducible.
-- No redistribution of downloaded data. The raw download is never committed, and `prices.json` and `eda.json` are on hold until the owner decides open question 2.
+- No bulk raw data. The raw download is never committed. The exported data the app and the docs need, `prices.json` and `eda.json` included, is committed: decided by the owner on 2026-10-29 (open question 2, now answered; see `DATA.md`).
 - No copying of the course's text or code. Only its module structure is followed, and it is credited.
 
 ---
@@ -112,7 +112,7 @@ Yes, as far as it has been checked (on 2026-10-28). `pmdarima==2.1.1` installs f
 ## Open questions for the owner (to settle at the milestone-0 checkpoint)
 
 1. Write the leader quote (the "Project owner" quote above) in your own words.
-2. Should the app's price series (`prices.json`, and the actual prices drawn under the forecasts) be committed? Committing them lets the app run straight from GitHub, but it redistributes Yahoo-derived prices. The alternatives are listed at the end of `docs/adr/0001-python-computes-app-visualises.md`. **On hold since 2026-10-29: neither `prices.json` nor `eda.json` is committed** until you decide. `eda.json` is held too, because its decomposition rows carry `observed_log`, the training log closes themselves (trend + seasonal + residual adds back up to them). Both files are git-ignored and built locally by `tools/fetch_prices.py` and `tools/export_app_data.py`; the committed `meta.json` names them in `held_artifacts`, so a fresh clone says how to build them. Until you decide, the "does not redistribute" answer above holds.
+2. **Answered.** Should the app's price series (`prices.json`, and the actual prices drawn under the forecasts) be committed? Committing them lets the app run straight from GitHub, but it redistributes Yahoo-derived prices. The alternatives are listed at the end of `docs/adr/0001-python-computes-app-visualises.md`. **Decided by the owner on 2026-10-29: committed.** The project is a portfolio, so the real data the app and the docs need goes into the repository, and a fresh clone runs the whole app. Bulk raw files (the snapshot CSV, its manifest, yfinance's caches) stay out, and `tests/test_repo_data.py` fails if git tracks one. Milestone 1 had held `prices.json` and `eda.json` (git-ignored, named in `meta.held_artifacts`); `held_artifacts` is now empty. `DATA.md` names the source and its terms. The public history stays as it is.
 3. Who is the main reader: interviewers looking at your GitHub, or other learners? This sets the tone of the README.
 4. Should milestone 4 add a Diebold–Mariano test of "ARIMA vs random walk", or should that stay in project 1?
 5. Should the 14-day package-age rule apply to Python too? The app holds every npm package to at least 14 days old, but `uv.lock` pins 17 Python packages that were younger than that when it was written on 2026-10-28 (among them the direct dependencies `pandas==3.1.0`, 6 days old, and `pytest==9.2.0`, under a day). Applying the rule would change the pinned statistics stack whose behaviour the docs cite at `file:line`, so every such citation would need re-checking. **Default taken on 2026-10-29: keep the current Python pins, and require every new or upgraded Python pin to be at least 14 days old on the day it is locked.** Milestone 1 added no Python dependency. You can override this.

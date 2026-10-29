@@ -7,7 +7,8 @@
  * chunk (the meta loader), and a module imported by the main chunk is bundled into it whole. These
  * parsers are used only by the lazily loaded price explorer, so here they travel in its chunk.
  */
-import { BLANK, isIsoDate, isRecord, isUtcTimestamp, typeName } from './contract'
+import { isUtcTimestamp, isRecord, typeName } from './contract'
+import { MISSING, Reader } from './contract.reader'
 
 export const SEGMENTS = ['train', 'test', 'oos'] as const
 export type Segment = (typeof SEGMENTS)[number]
@@ -88,78 +89,6 @@ const SHA256 = /^[0-9a-f]{64}$/
 /** The KDEs the price explorer draws. `variable` is an open enum, so others are allowed too. */
 export const REQUIRED_KDE_VARIABLES = ['log_close', 'log_return'] as const
 
-/** Small typed readers that record a path-qualified error and return undefined on failure. */
-class Reader {
-  readonly errors: string[] = []
-
-  obj(v: unknown, at: string): Record<string, unknown> | undefined {
-    if (isRecord(v)) return v
-    this.errors.push(`${at}: ${v === undefined ? 'missing' : `expected an object, got ${typeName(v)}`}`)
-    return undefined
-  }
-
-  field(o: Record<string, unknown>, key: string, at: string): unknown {
-    if (Object.hasOwn(o, key)) return o[key]
-    this.errors.push(`${at}.${key}: missing`)
-    return MISSING
-  }
-
-  str(v: unknown, at: string): string | undefined {
-    if (v === MISSING) return undefined
-    if (typeof v === 'string' && !BLANK.test(v)) return v
-    this.errors.push(`${at}: expected a non-empty string, got ${JSON.stringify(v) ?? typeName(v)}`)
-    return undefined
-  }
-
-  date(v: unknown, at: string): string | undefined {
-    const s = this.str(v, at)
-    if (s === undefined) return undefined
-    if (isIsoDate(s)) return s
-    this.errors.push(`${at}: "${s}" is not a calendar date (YYYY-MM-DD)`)
-    return undefined
-  }
-
-  /** A safe integer >= min: JSON.parse rounds anything beyond +-(2**53 - 1), and Python refuses it too. */
-  int(v: unknown, at: string, min = 0): number | undefined {
-    if (v === MISSING) return undefined
-    if (typeof v === 'number' && Number.isSafeInteger(v) && v >= min) return v
-    this.errors.push(`${at}: expected an integer >= ${min}, got ${JSON.stringify(v) ?? typeName(v)}`)
-    return undefined
-  }
-
-  /** A finite number. JSON.parse turns "1e999" into Infinity, so finiteness is checked here. */
-  num(v: unknown, at: string): number | undefined {
-    if (v === MISSING) return undefined
-    if (typeof v === 'number' && Number.isFinite(v)) return v
-    this.errors.push(`${at}: expected a finite number, got ${JSON.stringify(v) ?? typeName(v)}`)
-    return undefined
-  }
-
-  /** A finite number or null; `undefined` means "invalid", so the caller can tell the cases apart. */
-  numOrNull(v: unknown, at: string): number | null | undefined {
-    if (v === null) return null
-    if (v === MISSING) return undefined
-    if (typeof v === 'number' && Number.isFinite(v)) return v
-    this.errors.push(`${at}: expected a finite number or null, got ${JSON.stringify(v) ?? typeName(v)}`)
-    return undefined
-  }
-
-  literal<T extends string | boolean>(v: unknown, expected: T, at: string): T | undefined {
-    if (v === MISSING) return undefined
-    if (v === expected) return expected
-    this.errors.push(`${at}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(v) ?? typeName(v)}`)
-    return undefined
-  }
-
-  arr(v: unknown, at: string): unknown[] | undefined {
-    if (v === MISSING) return undefined
-    if (Array.isArray(v)) return v
-    this.errors.push(`${at}: expected an array, got ${typeName(v)}`)
-    return undefined
-  }
-}
-
-const MISSING = Symbol('missing')
 
 function parseSpan(r: Reader, v: unknown, at: string): SegmentSpan | undefined {
   const o = r.obj(v, at)

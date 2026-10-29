@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useExplorerData, type ExplorerState } from '../data/useExplorerData'
 import { SEGMENTS, type Eda, type Prices } from '../lib/contract.payloads'
-import { describeLoadError, looksAbsent } from '../lib/loadError'
+import { describeLoadError } from '../lib/loadError'
 import {
   DECOMPOSITION_PARTS,
   SEGMENT_LABELS,
@@ -31,12 +31,12 @@ const MAX_ERRORS_SHOWN = 12
 // Panels sit two to a row, so their drawings are half the main chart's width (text stays readable).
 const PANEL_WIDTH = 420
 
-export default function PriceExplorerView({ held = [] }: { held?: readonly string[] }) {
-  return <PriceExplorer state={useExplorerData()} held={held} />
+export default function PriceExplorerView() {
+  return <PriceExplorer state={useExplorerData()} />
 }
 
 /** The page for a given load state; split from the default export so tests can pass any state. */
-export function PriceExplorer({ state, held = [] }: { state: ExplorerState; held?: readonly string[] }) {
+export function PriceExplorer({ state }: { state: ExplorerState }) {
   return (
     <section className="explorer">
       <h2>Price explorer</h2>
@@ -44,39 +44,17 @@ export function PriceExplorer({ state, held = [] }: { state: ExplorerState; held
         The adjusted daily close of the study, with the three segments shaded. Only the training segment is described below: looking
         closely at the test or out-of-sample data before choosing a model would let it shape the choice.
       </p>
-      <ExplorerBody state={state} held={held} />
+      <ExplorerBody state={state} />
     </section>
   )
 }
 
-function ExplorerBody({ state, held }: { state: ExplorerState; held: readonly string[] }) {
+function ExplorerBody({ state }: { state: ExplorerState }) {
   if (state.status === 'loading') {
     return (
       <p className="sub" role="status">
         Loading data/prices.json and data/eda.json…
       </p>
-    )
-  }
-  // A held artifact (meta.held_artifacts: written by the export, not committed) that is simply not
-  // there gets instructions, not an error. Any other failure is a real error and is shown as one.
-  if (state.status === 'error' && held.includes(state.artifact) && looksAbsent(state.error)) {
-    return (
-      <div className="card callout" role="status" aria-label="Data not built here">
-        <strong>The price data is not built in this copy.</strong>
-        <p>
-          <code>prices.json</code> and <code>eda.json</code> are not committed: whether Yahoo-derived prices may be published in this
-          repository is still the owner&apos;s decision (ADR-0001). Build them on your machine, from the repository root:
-        </p>
-        <ol>
-          <li>
-            <code>uv run python tools/fetch_prices.py</code>
-          </li>
-          <li>
-            <code>uv run python tools/export_app_data.py</code>
-          </li>
-        </ol>
-        <p className="sub note">Then reload this page. (What the app saw: {describeLoadError(state.error).join(' ')})</p>
-      </div>
     )
   }
   if (state.status === 'error') {

@@ -1501,8 +1501,9 @@ yfinance version). It cleans the series with `.ffill()`, takes logs, and exports
 
 - **Should `prices.json` be committed?** Committing it lets the app run from GitHub, but it
   redistributes Yahoo-derived prices. The options and the proposed default are in
-  [ADR-0001, "Open question for the learner"](../adr/0001-python-computes-app-visualises.md#open-question-for-the-learner-a-decision-not-a-default).
-  Milestone 1 should not ship `prices.json` until you decide.
+  [ADR-0001, "The owner's decision on the price files"](../adr/0001-python-computes-app-visualises.md#the-owners-decision-on-the-price-files-decided-2026-10-29).
+  Milestone 1 should not ship `prices.json` until you decide. (Decided by the owner on 2026-10-29:
+  committed, from milestone 2; see `DATA.md`.)
 - **Should the 14-day package-age rule apply to Python too?** The app's lock holds every npm
   package to at least 14 days old; `uv.lock` has 17 entries that were younger than that when it
   was written, among them `pandas==3.1.0` and `pytest==9.2.0`. Applying the rule would change the

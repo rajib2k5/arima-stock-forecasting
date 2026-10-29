@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from synthetic import write_synthetic_snapshot
+from synthetic import SMALL_GRID, write_synthetic_snapshot
 
 from arima_forecasting.contract import make_envelope, validate_envelope
 from arima_forecasting.provenance import build_time, source_commit
@@ -324,7 +324,7 @@ def test_two_exports_with_a_fixed_source_date_epoch_are_byte_identical(tmp_path)
 
     def export() -> dict[str, bytes]:
         done = subprocess.run(
-            [sys.executable, str(repo / "tools" / "export_app_data.py")],
+            [sys.executable, "-c", SMALL_GRID, str(repo / "tools" / "export_app_data.py")],  # 4 cells, not 144
             cwd=tmp_path,
             env=env,
             capture_output=True,
@@ -335,7 +335,7 @@ def test_two_exports_with_a_fixed_source_date_epoch_are_byte_identical(tmp_path)
         return {path.name: path.read_bytes() for path in sorted(folder.glob("*.json"))}
 
     first = export()
-    assert sorted(first) == ["eda.json", "meta.json", "prices.json"]
+    assert sorted(first) == ["acf_pacf.json", "aic_grid.json", "eda.json", "meta.json", "prices.json", "stationarity.json"]
     assert first["meta.json"] != b"{}\n"  # sanity-check: the first run really did rewrite the tracked file
     assert "meta.json" in git(repo, "status", "--porcelain")
     second = export()
@@ -396,7 +396,7 @@ def test_the_json_commit_reexports_byte_identically(tmp_path):
 
     def export() -> dict[str, bytes]:
         done = subprocess.run(
-            [sys.executable, str(repo / "tools" / "export_app_data.py")],
+            [sys.executable, "-c", SMALL_GRID, str(repo / "tools" / "export_app_data.py")],  # 4 cells, not 144
             cwd=tmp_path, env=env, capture_output=True, text=True, check=False,
         )
         assert done.returncode == 0, done.stderr

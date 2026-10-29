@@ -11,6 +11,7 @@ nodes:
   - {id: splitpos,  label: Split by position,      sublabel: 90% train / 10% test + OOS,      type: process}
   - {id: edastats,  label: EDA,                    sublabel: "summary, KDEs, decomposition",  type: process}
   - {id: unitroot,  label: ADF + KPSS,             sublabel: train only → d,                  type: model}
+  - {id: acfpacf,   label: ACF + PACF,             sublabel: "train only, 95% bands",         type: process}
   - {id: grid,      label: AIC grid,               sublabel: "p, q 0–5, trend, per d",        type: model}
   - {id: autoarima, label: auto_arima check,       sublabel: train only,                      type: model}
   - {id: fitmodel,  label: Fit ARIMA,              sublabel: "statsmodels, order + trend",    type: model}
@@ -29,6 +30,7 @@ edges:
   - {from: splitpos, to: unitroot, label: train}
   - {from: splitpos, to: edastats, label: train}
   - {from: unitroot, to: grid, label: d fixed}
+  - {from: splitpos, to: acfpacf, label: train}
   - {from: splitpos, to: autoarima, label: train}
   - {from: autoarima, to: grid, label: cross-check, style: dashed}
   - {from: grid, to: fitmodel, label: lowest AIC}
@@ -43,5 +45,6 @@ edges:
   - {from: backtx, to: artifacts, label: forecasts, style: dashed}
   - {from: grid, to: artifacts, label: aic_grid, style: dashed}
   - {from: unitroot, to: artifacts, label: stationarity, style: dashed}
+  - {from: acfpacf, to: artifacts, label: acf_pacf, style: dashed}
   - {from: splitpos, to: artifacts, label: prices, style: dashed}
   - {from: edastats, to: artifacts, label: eda, style: dashed}
