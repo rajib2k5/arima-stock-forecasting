@@ -128,6 +128,7 @@ flowchart TB
     splitpos["Split by position\n90#37; train / 10#37; test + OOS"]
     edastats["EDA\nsummary, KDEs, decomposition"]
     unitroot[["ADF + KPSS\ntrain only → d"]]
+    acfpacf["ACF + PACF\ntrain only, 95#37; bands"]
     grid[["AIC grid\np, q 0–5, trend, per d"]]
     autoarima[["auto_arima check\ntrain only"]]
     fitmodel[["Fit ARIMA\nstatsmodels, order + trend"]]
@@ -145,6 +146,7 @@ flowchart TB
     splitpos -->|"train"| unitroot
     splitpos -->|"train"| edastats
     unitroot -->|"d fixed"| grid
+    splitpos -->|"train"| acfpacf
     splitpos -->|"train"| autoarima
     autoarima -.->|"cross-check"| grid
     grid -->|"lowest AIC"| fitmodel
@@ -159,6 +161,7 @@ flowchart TB
     backtx -.->|"forecasts"| artifacts
     grid -.->|"aic_grid"| artifacts
     unitroot -.->|"stationarity"| artifacts
+    acfpacf -.->|"acf_pacf"| artifacts
     splitpos -.->|"prices"| artifacts
     edastats -.->|"eda"| artifacts
     classDef source fill:#E0F2FE,stroke:#0284C7,color:#0F172A
@@ -166,17 +169,18 @@ flowchart TB
     classDef store fill:#FEF3C7,stroke:#D97706,color:#0F172A
     class snapshot store
     classDef process fill:#E0E7FF,stroke:#4F46E5,color:#0F172A
-    class closepx,logpx,diffs,splitpos,edastats,backtx,scoring process
+    class closepx,logpx,diffs,splitpos,edastats,acfpacf,backtx,scoring process
     classDef model fill:#EDE9FE,stroke:#7C3AED,color:#0F172A
     class unitroot,grid,autoarima,fitmodel,static,walkfwd,randwalk model
     classDef output fill:#D1FAE5,stroke:#059669,color:#0F172A
     class artifacts output
-    linkStyle 9 stroke:#94A3B8
-    linkStyle 19 stroke:#94A3B8
+    linkStyle 10 stroke:#94A3B8
     linkStyle 20 stroke:#94A3B8
     linkStyle 21 stroke:#94A3B8
     linkStyle 22 stroke:#94A3B8
     linkStyle 23 stroke:#94A3B8
+    linkStyle 24 stroke:#94A3B8
+    linkStyle 25 stroke:#94A3B8
 ```
 
 **How to read it.** This is the life of one number, from a daily price bar to a forecast
@@ -347,17 +351,13 @@ erDiagram
         text id PK
         text artifact FK
         int d
+        int n
+        float64 adf_statistic
         float64 adf_p_value
+        float64 kpss_statistic
         float64 kpss_p_value
         text kpss_p_value_bound "nullable"
         text verdict
-    }
-    stationarity_row {
-        text transform PK, FK
-        date date PK, FK
-        float64 value
-        float64 roll12_mean "nullable"
-        float64 roll252_mean "nullable"
     }
     acf_pacf_row {
         text transform PK, FK
@@ -374,6 +374,7 @@ erDiagram
         text trend PK
         text artifact FK
         text status
+        text reason "nullable"
         float64 aic "nullable"
         float64 delta_aic "nullable"
         bool converged "nullable"
@@ -427,7 +428,6 @@ erDiagram
     meta ||--|{ meta_milestone : "milestones"
     meta ||--|{ meta_artifact : "artifacts"
     envelope ||--|| meta_artifact : "names"
-    unit_root_test ||--|{ stationarity_row : "series"
     unit_root_test ||--|{ acf_pacf_row : "lags"
     forecast_method ||--|{ forecast_row : "forecasts"
     forecast_method ||--|{ metric_row : "scored"
@@ -435,7 +435,6 @@ erDiagram
     price_row ||--o{ decomposition_row : ""
     envelope ||--o{ decomposition_row : ""
     envelope ||--o{ unit_root_test : ""
-    price_row ||--o{ stationarity_row : ""
     envelope ||--o{ aic_cell : ""
     envelope ||--o{ fit_param : ""
     price_row ||--o{ residual_row : ""
@@ -462,7 +461,7 @@ published number back to one exact download.
 relation is how the JSON nests (`envelope.data` holds the rows). Row tables are keyed the way
 the app looks them up: a forecast row by **method + segment + date**, an AIC cell by
 **d + p + q + trend**, an autocorrelation by **transform + lag**. `price_row.date` is the
-spine: decomposition rows, stationarity rows, residuals and forecast actuals all point at it.
+spine: decomposition rows, residuals and forecast actuals all point at it.
 A column with the comment `"nullable"` can be `null` (the kit's SVG in
 [`out/erd.svg`](out/erd.svg) draws the same columns as `type?`). Each one is null for a documented reason (the
 moving-average edges of a decomposition, a failed fit, the random walk's missing interval).
@@ -470,14 +469,16 @@ moving-average edges of a decomposition, a failed fit, the random walk's missing
 How the boxes map onto the JSON in [`contract.md`](contract.md):
 
 - **Columns that are not JSON fields.** `artifact` names the envelope a payload or row sits in.
-  `transform` on `stationarity_row` and `acf_pacf_row`, and `model_id` on `fit_param`, name the
+  `transform` on `acf_pacf_row`, and `model_id` on `fit_param`, name the
   parent object a row is nested under. `name` on `meta_window` is a key of `data.windows`
   (`course` or `oos`), and `name` on `meta_artifact` is one string of `data.artifacts`.
 - **Every other column is a JSON field.** Each box shows a subset of its object's fields, not
   all of them. A field inside a nested object is written with an underscore: `source_raw_sha256`
   is `source.raw_sha256`, `splits_train_fraction` is `splits.train_fraction` and `adf_p_value`
   is `adf.p_value`.
-- **`meta` is the only artifact implemented so far** (milestone 0). Its windows are nested
+- **`meta`, `prices`, `eda`, `stationarity`, `acf_pacf` and `aic_grid` are implemented** (milestones 0
+  to 2); the others are planned. `stationarity` ships no series rows (contract §3.4), so
+  `unit_root_test` has no row table under it. Meta's windows are nested
   objects, `data.windows.course` and `data.windows.oos`, each with `start` and
   `end_exclusive`, so they are drawn as `meta_window` rows keyed by window name.
 

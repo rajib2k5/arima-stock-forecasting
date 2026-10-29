@@ -35,8 +35,8 @@ builder = load_builder()
 NAMES = sorted(builder.NOTEBOOKS)
 
 
-def test_the_builder_knows_the_project_tour_and_the_milestone_1_notebook():
-    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb"]
+def test_the_builder_knows_the_project_tour_and_the_milestone_notebooks():
+    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb", "02_stationarity_and_identification.ipynb"]
 
 
 # --- (a) committed notebooks equal the in-memory build -----------------------------------
@@ -207,9 +207,9 @@ def test_the_test_kernel_ignores_the_users_ipython_startup_files(users_ipython_d
     assert run_probe(kernel_name).strip() == "decoy startup ran: False"
 
 
-# Notebooks that read the held artifacts (ADR-0001's owner gate: prices.json and eda.json are
-# git-ignored, so a fresh clone lacks them). Their execution tests SKIP, with this message, when the
-# files are absent; everywhere the files exist, they run.
+# Notebooks that read prices.json and eda.json. Both are committed since the owner's decision of
+# 2026-10-29, so these tests run in every copy. The skip stays for a copy that lacks them: its
+# execution tests SKIP, with this message, when the files are absent.
 NEEDS_HELD_DATA = {"01_data_and_eda.ipynb": ("prices", "eda")}
 
 
@@ -217,8 +217,8 @@ def skip_without_held_data(name: str) -> None:
     absent = [a for a in NEEDS_HELD_DATA.get(name, ()) if not (REPO / "app" / "public" / "data" / f"{a}.json").is_file()]
     if absent:
         pytest.skip(
-            f"{name} reads {', '.join(a + '.json' for a in absent)}, which this copy lacks: held by the "
-            "owner gate (ADR-0001). Build with: uv run python tools/fetch_prices.py, then "
+            f"{name} reads {', '.join(a + '.json' for a in absent)}, which this copy lacks. "
+            "Build with: uv run python tools/fetch_prices.py, then "
             "uv run python tools/export_app_data.py"
         )
 
@@ -304,3 +304,51 @@ def test_data_and_eda_notebook_prints_the_values_in_the_committed_files(kernel_n
     assert f"returns beyond 3 sd: {tails['observed']:.2%} observed, {tails['normal']:.2%} under a normal" in printed
     for key, value in eda_module.course_comparison(train).items():
         assert f"{key:>28}: {value:.6g}" in printed, key
+
+
+def test_stationarity_notebook_prints_the_values_in_the_committed_files(kernel_name):
+    # Notebook 02 reads only committed files, so it runs in every copy. The expected lines are built
+    # here from the same files, read independently with json.
+    notebook = execute(NOTEBOOK_DIR / "02_stationarity_and_identification.ipynb", kernel_name)
+    printed = "".join(
+        output.get("text", "")
+        for cell in notebook.cells
+        if cell.cell_type == "code"
+        for output in cell.outputs
+        if output.output_type == "stream" and output.name == "stdout"
+    )
+    app_data = REPO / "app" / "public" / "data"
+    st = json.loads((app_data / "stationarity.json").read_text())["data"]
+    ap = json.loads((app_data / "acf_pacf.json").read_text())["data"]
+    grid = json.loads((app_data / "aic_grid.json").read_text())["data"]
+    assert f"training rows: {st['n_train']} | alpha: {st['alpha']}" in printed
+    for t in st["transforms"]:
+        adf, kp = t["adf"], t["kpss"]
+        assert f"{t['id']:>5} (d = {t['d']}, n = {t['n']}): ADF tau {adf['statistic']:.3f}, p {adf['p_value']:.3g}, lag {adf['used_lag']} of {adf['maxlag']}" in printed
+        assert f"| KPSS eta {kp['statistic']:.4f}" in printed and f"{kp['nlags']} lags | {t['verdict']}" in printed
+        assert f"{t['id']:>5} with a trend: ADF p {t['with_trend']['adf']['p_value']:.3g}" in printed
+    d = st["decision"]
+    assert f"d = {d['d_selected']} | tests_conflict: {d['tests_conflict']}" in printed
+    assert f"re-applying the rule to the committed tests gives: ({d['d_selected']}, {d['tests_conflict']})" in printed
+    for s in ap["series"]:
+        assert f"{s['transform']:>5}: lag-1 ACF {s['rows'][1]['acf']:.4f}, PACF band {s['rows'][1]['pacf_band']:.4f}" in printed
+        assert f"ACF beyond its band at {s['acf_outside_count']} of {ap['nlags']} lags, PACF at {s['pacf_outside_count']}," in printed
+    # The Bartlett band rebuilt from the file's own ACF values matches to the last bits.
+    gaps = [float(line.rsplit("within ", 1)[1]) for line in printed.splitlines() if "Bartlett rebuilt to within" in line]
+    assert len(gaps) == 3 and max(gaps) < 1e-12
+    sel = grid["selection"]
+    assert f"selected: ARIMA{tuple(sel['order'])} trend {sel['trend']!r} AIC {sel['aic']:.3f}, {sel['k_params']} parameters" in printed
+    b = sel["bic_choice"]
+    assert f"BIC would choose: ({b['p']}, {sel['d_selected']}, {b['q']}) trend {b['trend']!r}" in printed
+    assert f"fits: {sum(c['starts_tried'] for c in grid['cells'])} | the start that won:" in printed
+    assert "cells below a model they nest: 0" in printed
+    for row in sel["status_counts"]:
+        assert f"d = {row['d']}: ok {row['ok']}, not_converged {row['not_converged']}, near_unit_root {row['near_unit_root']}, failed {row['failed']}" in printed
+    for run in grid["pmdarima_check"]["runs"]:
+        assert f"{run['label']:>8}: ARIMA{tuple(run['order'])} intercept {run['with_intercept']}, AIC {run['aic']:.3f}" in printed
+    if (app_data / "prices.json").is_file():
+        assert "stationarity.json matches a fresh computation: True" in printed
+        assert "acf_pacf.json matches a fresh computation: True" in printed
+        assert "the selected cell's log-likelihood, " in printed and ", matches: True" in printed
+    else:
+        assert "prices.json is not in this copy - skipped" in printed

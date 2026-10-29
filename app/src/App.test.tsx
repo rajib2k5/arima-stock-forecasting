@@ -4,7 +4,7 @@ import App from './App'
 import { resetMemoryFallback, safeStorage } from './lib/storage'
 import type { FetchLike } from './data/loadArtifact'
 import { validMetaEnvelope, withValue } from './test/fixtures/fixtures'
-import { edaEnvelope, pricesEnvelope } from './test/fixtures/payloads'
+import { edaEnvelope, orderEnvelope, pricesEnvelope } from './test/fixtures/payloads'
 
 const STORE = safeStorage()
 
@@ -64,7 +64,7 @@ describe('App (integration)', () => {
     expect(screen.getByRole('img', { name: 'Architecture diagram' })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Sequence diagram' })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Activity diagram' })).toBeInTheDocument()
-    expect(screen.getByText('AIC landscape arrives in milestone 2 — no data is drawn yet')).toBeInTheDocument()
+    expect(screen.getByText('Empty axes: the AIC landscape page draws the fitted grid on them')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: 'About' }))
     expect(screen.getByText('AAPL')).toBeInTheDocument()
   })
@@ -96,7 +96,9 @@ describe('App (integration)', () => {
     expect(fn.mock.calls.map(([url]) => url.replace(/^.*data\//, '')).sort()).toEqual(['eda.json', 'meta.json', 'prices.json'])
   })
 
-  it('in a fresh clone (held files absent) offers the explorer and says how to build its data', async () => {
+  it('shows a missing data file as a real error, even one an old meta.json lists as held', async () => {
+    // Every exported file is committed (DATA.md), so nothing is held any more; a 1.1.x meta.json
+    // could still list prices and eda as held, and their absence is then an error like any other.
     let env = withValue(['data', 'artifacts'], ['meta', 'prices', 'eda'])
     ;(env as { data: Record<string, unknown> }).data.held_artifacts = ['prices', 'eda']
     env = { ...(env as object) } as typeof env
@@ -111,8 +113,9 @@ describe('App (integration)', () => {
     render(<App />)
     await screen.findByText('AAPL')
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Price explorer' }))
-    const panel = await screen.findByRole('status', { name: 'Data not built here' })
-    expect(within(panel).getByText('uv run python tools/fetch_prices.py')).toBeInTheDocument()
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Could not load prices.json.')
+    expect(within(alert).getByText('uv run python tools/export_app_data.py')).toBeInTheDocument()
   })
 
   it('does not offer the price explorer when meta lists only one of its two files', async () => {
@@ -121,6 +124,34 @@ describe('App (integration)', () => {
     await screen.findByText('AAPL')
     const nav = screen.getByRole('navigation', { name: 'Primary' })
     expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'Architecture'])
+  })
+
+  it('offers the two order-selection pages once meta lists their files, and loads each file only when its page opens', async () => {
+    const meta = withValue(['data', 'artifacts'], ['meta', 'stationarity', 'acf_pacf', 'aic_grid'])
+    const fn = vi.fn<FetchLike>(async (url) => {
+      const name = url.replace(/^.*data\//, '').replace('.json', '')
+      return { ok: true, status: 200, statusText: 'OK', json: async () => (name === 'meta' ? meta : orderEnvelope(name as 'stationarity' | 'acf_pacf' | 'aic_grid')) }
+    })
+    vi.stubGlobal('fetch', fn)
+    render(<App />)
+    await screen.findByText('AAPL')
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'Stationarity', 'AIC landscape', 'Architecture'])
+    expect(fn).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(nav).getByRole('link', { name: 'Stationarity' }))
+    expect(await screen.findByLabelText('Decision on d')).toHaveTextContent('d = 1')
+    expect(fn.mock.calls.map(([url]) => url.replace(/^.*data\//, '')).sort()).toEqual(['acf_pacf.json', 'meta.json', 'stationarity.json'])
+    fireEvent.click(within(nav).getByRole('link', { name: 'AIC landscape' }))
+    expect(await screen.findByLabelText('Chosen model')).toHaveTextContent('ARIMA(0, 1, 1) with a drift')
+    expect(fn.mock.calls.map(([url]) => url.replace(/^.*data\//, '')).sort()).toEqual(['acf_pacf.json', 'aic_grid.json', 'meta.json', 'stationarity.json'])
+  })
+
+  it('does not offer the stationarity page when meta lists only one of its two files', async () => {
+    stubFetch(withValue(['data', 'artifacts'], ['meta', 'stationarity', 'aic_grid']))
+    render(<App />)
+    await screen.findByText('AAPL')
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'AIC landscape', 'Architecture'])
   })
 
   it('switches between dark and light themes', async () => {

@@ -1,6 +1,6 @@
 # ADR-0002: How the ARIMA order (p, d, q) and its trend term are chosen
 
-**Status:** Accepted (milestone 0; implemented in milestones 2 and 3)
+**Status:** Accepted (milestone 0); implemented in milestone 2 (selection) and milestone 3 (the fit). Milestone 2's measurements are in the section "Measured in milestone 2".
 **Date:** 2026-10-28
 **Deciders:** the learner, with the milestone-0 architect session
 
@@ -249,7 +249,9 @@ of 0.000804; statsmodels' `trend='t'` coefficient is 0.000823. The parameter is 
   `'statespace'` (`model.py:325-335`), which uses L-BFGS with `maxiter=50` by default
   (`statsmodels/tsa/statespace/mlemodel.py:532-541`). The grid uses one fixed `maxiter` for every
   cell, recorded in the artifact (proposed: 200; the exact value is a milestone-2 setting), so
-  all cells are treated the same. No cell gets a retry with different settings.
+  all cells are treated the same. No cell gets a retry with different settings. (Revised in the
+  milestone-2 fix round: every cell is fitted from several starts with those same settings; see
+  "Revised in the milestone-2 fix round" below.)
 - **Per cell we record:** AIC, AICc, BIC, llf, number of parameters, `nobs_effective`,
   `mle_retvals['converged']`, every warning raised during the fit (captured with
   `warnings.catch_warnings(record=True)`), the largest inverse AR and MA root moduli, and a
@@ -366,6 +368,93 @@ runs as a pure statsmodels grid and the app shows "cross-check unavailable".
 - **To revisit:** the `maxiter` value once real AAPL fits show how many cells fail to converge;
   whether d = 0 should also try `'ct'` (trend-stationary log price) if KPSS with
   `regression='ct'` ever suggests it.
+
+## Measured in milestone 2 (2026-10-29)
+
+The design held. These measurements settle the items left open above. The commands and dates are in
+the [milestone-2 walkthrough](../milestones/02-stationarity-and-identification.md#measured-results).
+
+- **d.** On the training log price ADF does not reject (τ = −0.407, p = 0.909) and KPSS rejects
+  (η = 6.8235, p ≤ 0.01): a unit root. On the first difference ADF rejects and KPSS does not: d = 1,
+  no conflict. pmdarima's `ndiffs` gives 1 with KPSS, ADF and PP.
+- **`'ct'` at d = 0** (the "to revisit" item). KPSS with a trend still rejects on the log price
+  (η = 0.7538 against a 1% critical value of 0.216), so a trend-stationary d = 0 model is not
+  suggested. Both regressions are reported in `stationarity.with_trend`.
+- **`maxiter`** (the "to revisit" item). 200 is kept. In the first export 47 of the 144 cells needed
+  50 or more iterations; after the fix round 72 kept runs did (the most 184). The cells that did not
+  converge stopped after 0 or 1 iterations with scipy's `warnflag` 2, a failed line search, not the
+  limit. So §5's description of `not_converged` ("stopped at `maxiter`") is too narrow: the status
+  means "the optimiser reported no convergence", for either reason, and the artifact records which.
+- **pmdarima's cross-check** (§7). With the course's arguments it chose (0, 1, 1) with an intercept,
+  0.0001 AIC from our cell. With its defaults it chose (2, 1, 2) without one, and that fit stopped at
+  its `maxiter=50` without converging; statsmodels reproduces its AIC bit for bit at 50 iterations and
+  converges 7.56 lower at 62. The ±1 tolerance of §7 holds only when both fits reach the same
+  optimum (corrected in the fix round; it first said "for converged fits only"): pmdarima's default
+  run also fitted (2, 1, 2) with an intercept, the same model as our (2, 1, 2) with a drift, and that
+  fit converged (41 iterations) at AIC −10402.059, 34.806 above ours. The artifact records
+  `converged` and `iterations` for each run.
+- **The choice** (§6), as corrected in two fix rounds. ARIMA(3, 1, 4) with a drift, AIC −10440.245:
+  the best the documented search found, not a proven optimum. The search found seven other cells
+  within 2, all with a drift, a lower bound: (2, 1, 4) +0.036, (4, 1, 3), (4, 1, 2), (2, 1, 5),
+  (3, 1, 5), (5, 1, 2) and (5, 1, 3); a gap of a few hundredths of AIC means nothing. (The first
+  export said ARIMA(3, 1, 5) with no other cell within 2, and the first fix round ARIMA(2, 1, 4); both
+  rested on local optima, below.) BIC prefers ARIMA(2, 1, 2) without a drift. The low cells share
+  near-cancelling complex AR and MA roots (a 2.3-day cycle), and about three quarters of the chosen
+  model's gain over ARIMA(0, 1, 1) with a drift, at the grid's recorded parameters, comes from 72
+  trading days, 2020-02-15 to 2020-05-31. With
+  near-cancelling roots AIC's penalty is unreliable and over-selection is expected, and a gain that
+  concentrated may not generalise; milestone 4's out-of-sample test is the arbiter. The rule is not
+  changed after seeing the result.
+- **Export time** (Consequences). The 144 single-start fits took 84 s with one BLAS thread and
+  352 s with OpenBLAS's default thread pool on this 20-core machine, with bit-identical results; the
+  exporter sets one thread. That export took 60.7 s. With several starts per cell, perturbed padded
+  starts and the polish stage (two fix rounds) the grid makes 3,890 runs on 16 worker processes, and
+  the whole export took 6 min 50.2 s on a machine shared with other jobs (load average about 21 on 20 cores): about seven times longer.
+- **Two refinements of the planned contract.** The PACF uses `method='ywm'`, `plot_pacf`'s default and
+  so the course's picture, not `pacf`'s `'ywadjusted'`. The stationarity artifact carries no series
+  rows: for three transforms they would add 1,680,767 bytes, past the 1 MB budget, and the d = 0
+  series is already in `prices.json`.
+
+## Revised in the milestone-2 fix round (2026-10-29)
+
+The review of milestone 2 found that one optimiser run per cell, from statsmodels' default start,
+had left many cells at local optima: 86 pairs of `ok` cells at d = 1 in which a model scored a lower
+log-likelihood than a smaller model it nests, by up to 21.8. That is impossible at the maxima, so the
+landscape, many `delta_aic` values and the near ties rested on where the optimiser happened to stop.
+§5's "no retry" is replaced by the following. Every run still uses the settings of §5.
+
+- **Starts.** Each cell is fitted from statsmodels' default start; from each fitted model of the grid
+  one step smaller (the next smaller p, the next smaller q, or no trend), its estimates padded with
+  zeros, which is exactly that model and so starts the optimiser at its likelihood; and, when p and q
+  are both at least 1, from 24 random starts (AR and MA coefficients drawn N(0, 1) in the
+  optimiser's unconstrained space, so every start is stationary and invertible, seeded by the cell).
+  Cells are fitted after the cells they nest, so the padded starts exist.
+- **Which run is kept.** The highest log-likelihood. A converged run is kept instead of a higher
+  unconverged one only when it is at most 1e-4 lower (about ten times L-BFGS's own stopping
+  resolution here, 1.1e-5). If the kept run did not converge it is restarted once from its own
+  estimates (", polished"). The cell records the winning start (`start`) and its number of runs
+  (`starts_tried`); `refit_cell` reproduces a committed cell from that start alone.
+- **The nesting rule.** No fitted cell may score more than 2e-3 of log-likelihood below a model it
+  nests (11 grid steps times 1e-4, rounded up; 0.004 of AIC). The fitting guarantees it, and both
+  readers refuse a file that breaks it (contract §3.6).
+- **Deterministic.** The random starts are seeded per cell, the runs go to a pool of worker processes,
+  and neither the pool size nor the finishing order changes a result: a serial fit of the whole grid
+  and a pooled one gave identical cells.
+- **Round 2: stalls and the polish stage.** A second review found that a zero-padded start can sit
+  exactly at the smaller model's optimum, where L-BFGS cannot move, and still be reported converged:
+  seven cells tied a nested model's likelihood, and the then choice, ARIMA(2, 1, 4), was 0.037 AIC
+  above an ARIMA(3, 1, 4) point the search had missed. Each padded start now also has two perturbed
+  copies (the new AR or MA coefficients set to small seeded values of both signs, in the optimiser's
+  unconstrained space), and a polish stage refits every `ok` cell within 4 AIC of the best of its d,
+  and every cell tied with a model it nests, from every such cell's estimates by Nelder-Mead and then
+  L-BFGS, followed by a repair of any nesting break. No cell now ties a model it nests. The kept run's
+  estimates are recorded per cell (`params`), and the readers pin the nesting tolerance at 2e-3
+  instead of reading it from the file.
+- **What it does not do.** It does not prove any cell is at its global maximum. With the round-1
+  L-BFGS starts alone the choice was the same with 2, 6, 12 and 24 random starts while the near ties
+  were not (3, 5, 4 and 6 others); Nelder-Mead from other cells' estimates then moved the choice
+  itself. So the choice is the best this search found, and the near-tie list is a lower bound. The
+  milestone-2 walkthrough has the measurements.
 
 ## Verified library behaviour (versions pinned in `pyproject.toml`)
 

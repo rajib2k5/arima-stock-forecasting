@@ -1,5 +1,5 @@
 {
- "about": "Shared payload corpus. Each case applies its edits to a base payload (meta.data.json, prices.data.json or eda.data.json in this folder) and states whether the result is valid. tests/test_payload_corpus.py runs every case through Python's validate_meta/validate_prices/validate_eda, and src/lib/contract.payloads.corpus.test.ts runs the same cases through parseMeta/parsePrices/parseEda, so the two readers cannot disagree on any of them. An edit is {path, value} or {path, delete: true}; value is written as JSON, so 4.0 stays a float for Python while JavaScript reads the number 4.",
+ "about": "Shared payload corpus. Each case applies its edits to a base payload (meta.data.json, prices.data.json, eda.data.json, stationarity.data.json, acf_pacf.data.json or aic_grid.data.json in this folder) and states whether the result is valid. tests/test_payload_corpus.py runs every case through Python's validate_meta, validate_prices, validate_eda, validate_stationarity, validate_acf_pacf and validate_aic_grid, and src/lib/contract.payloads.corpus.test.ts runs the same cases through parseMeta, parsePrices, parseEda, parseStationarity, parseAcfPacf and parseAicGrid, so the two readers cannot disagree on any of them. An edit is {path, value} or {path, delete: true}; value is written as JSON, so 4.0 stays a float for Python while JavaScript reads the number 4.",
  "cases": [
   {
    "name": "prices: the base fixture",
@@ -1239,6 +1239,4064 @@
     }
    ],
    "valid": false
+  },
+  {
+   "name": "stationarity: the base fixture",
+   "base": "stationarity",
+   "edits": [],
+   "valid": true
+  },
+  {
+   "name": "stationarity: an unknown key in data is ignored",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "extra"
+     ],
+     "value": {
+      "a": 1
+     }
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "stationarity: n_train written 300.0 still reads as an integer",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "n_train"
+     ],
+     "value": 300.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "stationarity: sample is not train",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "sample"
+     ],
+     "value": "course"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: alpha is 0",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "alpha"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: transforms is empty",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: an unknown transform id",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "id"
+     ],
+     "value": "levels"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: d does not match the transform id",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      1,
+      "d"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: transforms not sorted by d",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0
+     ],
+     "value": {
+      "id": "diff1",
+      "d": 1,
+      "n": 299,
+      "adf": {
+       "statistic": -12.5,
+       "p_value": 1e-20,
+       "used_lag": 2,
+       "maxlag": 16,
+       "nobs": 296,
+       "critical_values": {
+        "1%": -3.45,
+        "5%": -2.87,
+        "10%": -2.57
+       },
+       "regression": "c",
+       "autolag": "AIC",
+       "reject_unit_root": true
+      },
+      "kpss": {
+       "statistic": 0.12,
+       "p_value": 0.1,
+       "p_value_bound": "greater",
+       "nlags": 4,
+       "nlags_method": "auto",
+       "critical_values": {
+        "10%": 0.347,
+        "5%": 0.463,
+        "2.5%": 0.574,
+        "1%": 0.739
+       },
+       "regression": "c",
+       "reject_stationarity": false
+      },
+      "verdict": "stationary",
+      "with_trend": {
+       "adf": {
+        "statistic": -12.6,
+        "p_value": 1e-19,
+        "used_lag": 2,
+        "maxlag": 16,
+        "nobs": 296,
+        "critical_values": {
+         "1%": -3.99,
+         "5%": -3.43,
+         "10%": -3.14
+        },
+        "regression": "ct",
+        "autolag": "AIC",
+        "reject_unit_root": true
+       },
+       "kpss": {
+        "statistic": 0.13,
+        "p_value": 0.07,
+        "p_value_bound": null,
+        "nlags": 4,
+        "nlags_method": "auto",
+        "critical_values": {
+         "10%": 0.119,
+         "5%": 0.146,
+         "2.5%": 0.176,
+         "1%": 0.216
+        },
+        "regression": "ct",
+        "reject_stationarity": false
+       },
+       "verdict": "stationary"
+      }
+     }
+    },
+    {
+     "path": [
+      "transforms",
+      1
+     ],
+     "value": {
+      "id": "log",
+      "d": 0,
+      "n": 300,
+      "adf": {
+       "statistic": -1.2,
+       "p_value": 0.65,
+       "used_lag": 3,
+       "maxlag": 16,
+       "nobs": 296,
+       "critical_values": {
+        "1%": -3.45,
+        "5%": -2.87,
+        "10%": -2.57
+       },
+       "regression": "c",
+       "autolag": "AIC",
+       "reject_unit_root": false
+      },
+      "kpss": {
+       "statistic": 2.5,
+       "p_value": 0.01,
+       "p_value_bound": "smaller",
+       "nlags": 9,
+       "nlags_method": "auto",
+       "critical_values": {
+        "10%": 0.347,
+        "5%": 0.463,
+        "2.5%": 0.574,
+        "1%": 0.739
+       },
+       "regression": "c",
+       "reject_stationarity": true
+      },
+      "verdict": "unit_root",
+      "with_trend": {
+       "adf": {
+        "statistic": -2.1,
+        "p_value": 0.3,
+        "used_lag": 3,
+        "maxlag": 16,
+        "nobs": 296,
+        "critical_values": {
+         "1%": -3.99,
+         "5%": -3.43,
+         "10%": -3.14
+        },
+        "regression": "ct",
+        "autolag": "AIC",
+        "reject_unit_root": false
+       },
+       "kpss": {
+        "statistic": 0.4,
+        "p_value": 0.01,
+        "p_value_bound": "smaller",
+        "nlags": 9,
+        "nlags_method": "auto",
+        "critical_values": {
+         "10%": 0.119,
+         "5%": 0.146,
+         "2.5%": 0.176,
+         "1%": 0.216
+        },
+        "regression": "ct",
+        "reject_stationarity": true
+       },
+       "verdict": "unit_root"
+      }
+     }
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: n is not n_train minus d",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      1,
+      "n"
+     ],
+     "value": 300
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF p_value above 1",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "adf",
+      "p_value"
+     ],
+     "value": 1.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF used_lag above maxlag",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "adf",
+      "used_lag"
+     ],
+     "value": 17
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF reject_unit_root disagrees with its p-value",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "adf",
+      "reject_unit_root"
+     ],
+     "value": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF in the rule run uses regression ct",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "adf",
+      "regression"
+     ],
+     "value": "ct"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF in the trend run uses regression c",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "with_trend",
+      "adf",
+      "regression"
+     ],
+     "value": "c"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF autolag is not AIC",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "adf",
+      "autolag"
+     ],
+     "value": "BIC"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF critical value 5% missing",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "adf",
+      "critical_values",
+      "5%"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF statistic is text",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "adf",
+      "statistic"
+     ],
+     "value": "-1.2"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: ADF nobs is 0",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "adf",
+      "nobs"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS p_value above the table",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      1,
+      "kpss",
+      "p_value"
+     ],
+     "value": 0.2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS p_value below the table",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "kpss",
+      "p_value"
+     ],
+     "value": 0.005
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS clipped at 0.01 without its bound",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "kpss",
+      "p_value_bound"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS interpolated p with a bound",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      1,
+      "with_trend",
+      "kpss",
+      "p_value_bound"
+     ],
+     "value": "smaller"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS bound not in the enum",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "kpss",
+      "p_value_bound"
+     ],
+     "value": "less"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS statistic negative",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "kpss",
+      "statistic"
+     ],
+     "value": -0.1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS critical value 2.5% missing",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "kpss",
+      "critical_values",
+      "2.5%"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS reject_stationarity disagrees with its p-value",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      1,
+      "kpss",
+      "reject_stationarity"
+     ],
+     "value": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: KPSS nlags_method blank",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      1,
+      "kpss",
+      "nlags_method"
+     ],
+     "value": "\u001c"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: verdict disagrees with the 2x2 table",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "verdict"
+     ],
+     "value": "stationary"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: verdict not in the enum",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "verdict"
+     ],
+     "value": "maybe"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: trend-run verdict disagrees with its tests",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "with_trend",
+      "verdict"
+     ],
+     "value": "conflict"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: with_trend is missing",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      0,
+      "with_trend"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: a conflict at d = 2 does not change d",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      2,
+      "kpss",
+      "p_value"
+     ],
+     "value": 0.01
+    },
+    {
+     "path": [
+      "transforms",
+      2,
+      "kpss",
+      "p_value_bound"
+     ],
+     "value": "smaller"
+    },
+    {
+     "path": [
+      "transforms",
+      2,
+      "kpss",
+      "reject_stationarity"
+     ],
+     "value": true
+    },
+    {
+     "path": [
+      "transforms",
+      2,
+      "verdict"
+     ],
+     "value": "conflict"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "stationarity: ADF fails at d = 1, so d = 2",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      1,
+      "adf",
+      "p_value"
+     ],
+     "value": 0.2
+    },
+    {
+     "path": [
+      "transforms",
+      1,
+      "adf",
+      "reject_unit_root"
+     ],
+     "value": false
+    },
+    {
+     "path": [
+      "transforms",
+      1,
+      "verdict"
+     ],
+     "value": "inconclusive"
+    },
+    {
+     "path": [
+      "decision",
+      "d_selected"
+     ],
+     "value": 2
+    },
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "agrees"
+     ],
+     "value": false
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "stationarity: no d passes both tests, so KPSS decides and tests_conflict is true",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "transforms",
+      1,
+      "adf",
+      "p_value"
+     ],
+     "value": 0.2
+    },
+    {
+     "path": [
+      "transforms",
+      1,
+      "adf",
+      "reject_unit_root"
+     ],
+     "value": false
+    },
+    {
+     "path": [
+      "transforms",
+      1,
+      "verdict"
+     ],
+     "value": "inconclusive"
+    },
+    {
+     "path": [
+      "transforms",
+      2,
+      "kpss",
+      "p_value"
+     ],
+     "value": 0.01
+    },
+    {
+     "path": [
+      "transforms",
+      2,
+      "kpss",
+      "p_value_bound"
+     ],
+     "value": "smaller"
+    },
+    {
+     "path": [
+      "transforms",
+      2,
+      "kpss",
+      "reject_stationarity"
+     ],
+     "value": true
+    },
+    {
+     "path": [
+      "transforms",
+      2,
+      "verdict"
+     ],
+     "value": "conflict"
+    },
+    {
+     "path": [
+      "decision",
+      "tests_conflict"
+     ],
+     "value": true
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "stationarity: d_selected disagrees with the rule",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "d_selected"
+     ],
+     "value": 2
+    },
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "agrees"
+     ],
+     "value": false
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: tests_conflict true when d = 1 passes both",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "tests_conflict"
+     ],
+     "value": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: tests_conflict is not a boolean",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "tests_conflict"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: rule is blank",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "rule"
+     ],
+     "value": "   "
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: decision is missing",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: pmdarima unavailable with nulls",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs"
+     ],
+     "value": {
+      "status": "unavailable",
+      "reason": "ImportError: no module",
+      "version": null,
+      "alpha": 0.05,
+      "max_d": 2,
+      "kpss": null,
+      "adf": null,
+      "pp": null,
+      "agrees": null
+     }
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "stationarity: pmdarima unavailable but with a kpss value",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "status"
+     ],
+     "value": "unavailable"
+    },
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "reason"
+     ],
+     "value": "broken"
+    },
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "adf"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "pp"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "agrees"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: pmdarima ok but with a reason",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "reason"
+     ],
+     "value": "why"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: pmdarima status not in the enum",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "status"
+     ],
+     "value": "maybe"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: pmdarima agrees although adf says 2",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "adf"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: pmdarima kpss above max_d",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "kpss"
+     ],
+     "value": 3
+    },
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "agrees"
+     ],
+     "value": false
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "stationarity: pmdarima ok without a version",
+   "base": "stationarity",
+   "edits": [
+    {
+     "path": [
+      "decision",
+      "pmdarima_ndiffs",
+      "version"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: the base fixture",
+   "base": "acf_pacf",
+   "edits": [],
+   "valid": true
+  },
+  {
+   "name": "acf_pacf: an unknown key in a row is ignored",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "rows",
+      1,
+      "note"
+     ],
+     "value": "x"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "acf_pacf: nlags written 3.0 still reads as an integer",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "nlags"
+     ],
+     "value": 3.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "acf_pacf: nlags does not match the number of rows",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "nlags"
+     ],
+     "value": 4
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: a lag out of order",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      2,
+      "lag"
+     ],
+     "value": 3
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: acf at lag 0 is not 1",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "rows",
+      0,
+      "acf"
+     ],
+     "value": 0.99
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: pacf at lag 0 is not 1",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      0,
+      "pacf"
+     ],
+     "value": 0.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: a band at lag 0 is not 0",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "rows",
+      0,
+      "acf_band"
+     ],
+     "value": 0.1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: a band at lag 1 is 0",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      1,
+      "pacf_band"
+     ],
+     "value": 0.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: a negative band",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      2,
+      "acf_band"
+     ],
+     "value": -0.1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: acf above 1",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "rows",
+      1,
+      "acf"
+     ],
+     "value": 1.2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: pacf below -1",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      2,
+      "rows",
+      1,
+      "pacf"
+     ],
+     "value": -1.01
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: acf of exactly -1 is allowed",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      2,
+      "rows",
+      3,
+      "acf"
+     ],
+     "value": -1.0
+    },
+    {
+     "path": [
+      "series",
+      2,
+      "rows",
+      3,
+      "acf_outside"
+     ],
+     "value": true
+    },
+    {
+     "path": [
+      "series",
+      2,
+      "acf_outside_count"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "acf_pacf: series not sorted by d",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0
+     ],
+     "value": {
+      "transform": "diff1",
+      "d": 1,
+      "n": 299,
+      "rows": [
+       {
+        "lag": 0,
+        "acf": 1.0,
+        "pacf": 1.0,
+        "acf_band": 0.0,
+        "pacf_band": 0.0
+       },
+       {
+        "lag": 1,
+        "acf": -0.05,
+        "pacf": -0.05,
+        "acf_band": 0.113,
+        "pacf_band": 0.113
+       },
+       {
+        "lag": 2,
+        "acf": 0.02,
+        "pacf": 0.018,
+        "acf_band": 0.114,
+        "pacf_band": 0.113
+       },
+       {
+        "lag": 3,
+        "acf": -0.01,
+        "pacf": -0.008,
+        "acf_band": 0.114,
+        "pacf_band": 0.113
+       }
+      ]
+     }
+    },
+    {
+     "path": [
+      "series",
+      1
+     ],
+     "value": {
+      "transform": "log",
+      "d": 0,
+      "n": 300,
+      "rows": [
+       {
+        "lag": 0,
+        "acf": 1.0,
+        "pacf": 1.0,
+        "acf_band": 0.0,
+        "pacf_band": 0.0
+       },
+       {
+        "lag": 1,
+        "acf": 0.98,
+        "pacf": 0.98,
+        "acf_band": 0.11,
+        "pacf_band": 0.11
+       },
+       {
+        "lag": 2,
+        "acf": 0.96,
+        "pacf": 0.01,
+        "acf_band": 0.19,
+        "pacf_band": 0.11
+       },
+       {
+        "lag": 3,
+        "acf": 0.94,
+        "pacf": -0.02,
+        "acf_band": 0.24,
+        "pacf_band": 0.11
+       }
+      ]
+     }
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: an unknown transform",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      2,
+      "transform"
+     ],
+     "value": "diff3"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: d does not match the transform",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "d"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: n below 2",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "n"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: series is empty",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: z is 0",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "z"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: alpha is 1",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "alpha"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: acf_settings.fft is text",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "acf_settings",
+      "fft"
+     ],
+     "value": "no"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: pacf_method is blank",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "pacf_method"
+     ],
+     "value": ""
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: sample is not train",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "sample"
+     ],
+     "value": "oos"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: rows is not an array",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "rows"
+     ],
+     "value": {}
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: the base fixture",
+   "base": "aic_grid",
+   "edits": [],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: an unknown key in a cell is ignored",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "hqic"
+     ],
+     "value": -1.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: an unknown key in a best_per_d entry is ignored",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "best_per_d",
+      0,
+      "note"
+     ],
+     "value": "x"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: delta_aic 0 written as an integer",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      9,
+      "delta_aic"
+     ],
+     "value": 0
+    },
+    {
+     "path": [
+      "selection",
+      "within_2_aic",
+      0,
+      "delta_aic"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a run label outside course and defaults (open enum)",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs",
+      1,
+      "label"
+     ],
+     "value": "walk"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: sample is not train",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "sample"
+     ],
+     "value": "course"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: criterion is not aic",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "criterion"
+     ],
+     "value": "bic"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: grid.p not ascending",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "grid",
+      "p"
+     ],
+     "value": [
+      1,
+      0
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: grid.q empty",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "grid",
+      "q"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: spec trends not in alphabetical order",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "grid",
+      "specs",
+      1,
+      "trends"
+     ],
+     "value": [
+      "t",
+      "n"
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: spec trend not in the enum",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "grid",
+      "specs",
+      0,
+      "trends"
+     ],
+     "value": [
+      "ct"
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: specs not sorted by d",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "grid",
+      "specs",
+      0,
+      "d"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: near_unit_root_threshold 0",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "near_unit_root_threshold"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: maxiter 0",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "maxiter"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: simple_differencing is text",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "simple_differencing"
+     ],
+     "value": "false"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a cell missing",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      15
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: cells out of order",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0
+     ],
+     "value": {
+      "d": 0,
+      "p": 0,
+      "q": 1,
+      "trend": "c",
+      "status": "ok",
+      "k_params": 3,
+      "warnings": [],
+      "reason": null,
+      "aic": -1100.25,
+      "aicc": -1100.168918918919,
+      "bic": -1089.1386525760313,
+      "llf": 553.125,
+      "nobs_effective": 300,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": 0.8,
+      "error": null,
+      "delta_aic": 0.0
+     }
+    },
+    {
+     "path": [
+      "cells",
+      1
+     ],
+     "value": {
+      "d": 0,
+      "p": 0,
+      "q": 0,
+      "trend": "c",
+      "status": "ok",
+      "k_params": 2,
+      "warnings": [],
+      "reason": null,
+      "aic": -1000.5,
+      "aicc": -1000.459595959596,
+      "bic": -993.0924350506876,
+      "llf": 502.25,
+      "nobs_effective": 300,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": 99.75
+     }
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a status not in the enum",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "status"
+     ],
+     "value": "great"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: k_params does not count the parameters",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      9,
+      "k_params"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a failed cell with an aic",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      11,
+      "aic"
+     ],
+     "value": -1.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a failed cell without an error",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      11,
+      "error"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: an ok cell with an error",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      9,
+      "error"
+     ],
+     "value": "oops"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: an ok cell with a reason",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      9,
+      "reason"
+     ],
+     "value": "fine"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a not_converged cell without a reason",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      6,
+      "reason"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: an ok cell that did not converge",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      4,
+      "converged"
+     ],
+     "value": false
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: an ok cell with a root above the threshold",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      9,
+      "max_inv_root_ma"
+     ],
+     "value": 0.995
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a near_unit_root cell whose roots are inside",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      13,
+      "max_inv_root_ma"
+     ],
+     "value": 0.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: an AR root on a cell with p = 0",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      9,
+      "max_inv_root_ar"
+     ],
+     "value": 0.1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a missing MA root on a cell with q = 1",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      9,
+      "max_inv_root_ma"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: nobs_effective is not n_train minus d",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      9,
+      "nobs_effective"
+     ],
+     "value": 300
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: converged is 1 instead of true",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      4,
+      "converged"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: delta_aic off by 0.5",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      10,
+      "delta_aic"
+     ],
+     "value": 0.75
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: delta_aic measured from another d's best",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      12,
+      "delta_aic"
+     ],
+     "value": 297.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: delta_aic null on an ok cell",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      4,
+      "delta_aic"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: the selection is not the lowest eligible AIC",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "order"
+     ],
+     "value": [
+      1,
+      1,
+      0
+     ]
+    },
+    {
+     "path": [
+      "selection",
+      "aic"
+     ],
+     "value": -1796.75
+    },
+    {
+     "path": [
+      "selection",
+      "bic"
+     ],
+     "value": -1785.648669279828
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: the selection names the wrong trend",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "trend"
+     ],
+     "value": "n"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: the selection's aic differs from its cell",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "aic"
+     ],
+     "value": -1797.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: the selection's order has another d",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "order"
+     ],
+     "value": [
+      0,
+      2,
+      1
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: d_selected not in the grid",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "d_selected"
+     ],
+     "value": 3
+    },
+    {
+     "path": [
+      "selection",
+      "order"
+     ],
+     "value": [
+      0,
+      3,
+      1
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: within_2_aic misses a near tie",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "within_2_aic",
+      2
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: within_2_aic out of order",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "within_2_aic",
+      0
+     ],
+     "value": {
+      "p": 1,
+      "q": 0,
+      "trend": "t",
+      "aic": -1796.75,
+      "delta_aic": 0.25
+     }
+    },
+    {
+     "path": [
+      "selection",
+      "within_2_aic",
+      1
+     ],
+     "value": {
+      "p": 0,
+      "q": 1,
+      "trend": "t",
+      "aic": -1797.0,
+      "delta_aic": 0.0
+     }
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: within_2_aic p written as true",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "within_2_aic",
+      1,
+      "p"
+     ],
+     "value": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: bic_choice is not the lowest BIC",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "bic_choice",
+      "p"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: best_per_d d = 2 is null though it has ok cells",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "best_per_d",
+      2,
+      "cell"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: best_per_d missing a d",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "best_per_d",
+      2
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: status_counts wrong",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "selection",
+      "status_counts",
+      1,
+      "ok"
+     ],
+     "value": 7
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: pmdarima unavailable with no runs",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check"
+     ],
+     "value": {
+      "status": "unavailable",
+      "reason": "ImportError: no module",
+      "version": null,
+      "runs": []
+     }
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: pmdarima unavailable but with runs",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "status"
+     ],
+     "value": "unavailable"
+    },
+    {
+     "path": [
+      "pmdarima_check",
+      "reason"
+     ],
+     "value": "broken"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: pmdarima ok with a reason",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "reason"
+     ],
+     "value": "why"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: pmdarima ok with no runs",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a run's trend disagrees with its intercept",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs",
+      0,
+      "trend"
+     ],
+     "value": "n"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a run's first visited fit is not its choice",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs",
+      0,
+      "visited",
+      0,
+      "aic"
+     ],
+     "value": -1796.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a run with nothing visited",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs",
+      1,
+      "visited"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: agreement.order disagrees with the selection",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs",
+      1,
+      "agreement",
+      "order"
+     ],
+     "value": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: agreement gap is not pmdarima minus our AIC",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs",
+      0,
+      "agreement",
+      "aic_gap_same_order"
+     ],
+     "value": 0.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: agreement names the wrong cell status",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs",
+      1,
+      "agreement",
+      "same_order_status"
+     ],
+     "value": "ok"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a run's order is not three integers",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "pmdarima_check",
+      "runs",
+      0,
+      "order"
+     ],
+     "value": [
+      0,
+      1
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a tie on AIC and parameters is broken by the smaller p",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      10,
+      "aic"
+     ],
+     "value": -1797.0
+    },
+    {
+     "path": [
+      "cells",
+      10,
+      "bic"
+     ],
+     "value": -1785.898669279828
+    },
+    {
+     "path": [
+      "cells",
+      10,
+      "delta_aic"
+     ],
+     "value": 0.0
+    },
+    {
+     "path": [
+      "selection",
+      "within_2_aic"
+     ],
+     "value": [
+      {
+       "p": 0,
+       "q": 1,
+       "trend": "t",
+       "aic": -1797.0,
+       "delta_aic": 0.0
+      },
+      {
+       "p": 1,
+       "q": 0,
+       "trend": "t",
+       "aic": -1797.0,
+       "delta_aic": 0.0
+      },
+      {
+       "p": 0,
+       "q": 1,
+       "trend": "n",
+       "aic": -1795.5,
+       "delta_aic": 1.5
+      }
+     ]
+    },
+    {
+     "path": [
+      "pmdarima_check"
+     ],
+     "value": {
+      "status": "unavailable",
+      "reason": "not part of this case",
+      "version": null,
+      "runs": []
+     }
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a tie broken towards the larger p",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      10,
+      "aic"
+     ],
+     "value": -1797.0
+    },
+    {
+     "path": [
+      "cells",
+      10,
+      "bic"
+     ],
+     "value": -1785.898669279828
+    },
+    {
+     "path": [
+      "cells",
+      10,
+      "delta_aic"
+     ],
+     "value": 0.0
+    },
+    {
+     "path": [
+      "selection",
+      "within_2_aic"
+     ],
+     "value": [
+      {
+       "p": 0,
+       "q": 1,
+       "trend": "t",
+       "aic": -1797.0,
+       "delta_aic": 0.0
+      },
+      {
+       "p": 1,
+       "q": 0,
+       "trend": "t",
+       "aic": -1797.0,
+       "delta_aic": 0.0
+      },
+      {
+       "p": 0,
+       "q": 1,
+       "trend": "n",
+       "aic": -1795.5,
+       "delta_aic": 1.5
+      }
+     ]
+    },
+    {
+     "path": [
+      "pmdarima_check"
+     ],
+     "value": {
+      "status": "unavailable",
+      "reason": "not part of this case",
+      "version": null,
+      "runs": []
+     }
+    },
+    {
+     "path": [
+      "selection",
+      "order"
+     ],
+     "value": [
+      1,
+      1,
+      0
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a tie on AIC goes to fewer parameters before smaller p",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      6,
+      "status"
+     ],
+     "value": "ok"
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "reason"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "converged"
+     ],
+     "value": true
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "warnflag"
+     ],
+     "value": 0
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "warnings"
+     ],
+     "value": []
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "aic"
+     ],
+     "value": -1797.0
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "delta_aic"
+     ],
+     "value": 0.0
+    },
+    {
+     "path": [
+      "selection",
+      "status_counts",
+      1,
+      "ok"
+     ],
+     "value": 7
+    },
+    {
+     "path": [
+      "selection",
+      "status_counts",
+      1,
+      "not_converged"
+     ],
+     "value": 0
+    },
+    {
+     "path": [
+      "pmdarima_check"
+     ],
+     "value": {
+      "status": "unavailable",
+      "reason": "not part of this case",
+      "version": null,
+      "runs": []
+     }
+    },
+    {
+     "path": [
+      "selection",
+      "order"
+     ],
+     "value": [
+      1,
+      1,
+      0
+     ]
+    },
+    {
+     "path": [
+      "selection",
+      "trend"
+     ],
+     "value": "n"
+    },
+    {
+     "path": [
+      "selection",
+      "bic"
+     ],
+     "value": -1787.8491128532187
+    },
+    {
+     "path": [
+      "selection",
+      "k_params"
+     ],
+     "value": 2
+    },
+    {
+     "path": [
+      "selection",
+      "within_2_aic"
+     ],
+     "value": [
+      {
+       "p": 1,
+       "q": 0,
+       "trend": "n",
+       "aic": -1797.0,
+       "delta_aic": 0.0
+      },
+      {
+       "p": 0,
+       "q": 1,
+       "trend": "t",
+       "aic": -1797.0,
+       "delta_aic": 0.0
+      },
+      {
+       "p": 1,
+       "q": 0,
+       "trend": "t",
+       "aic": -1796.75,
+       "delta_aic": 0.25
+      },
+      {
+       "p": 0,
+       "q": 1,
+       "trend": "n",
+       "aic": -1795.5,
+       "delta_aic": 1.5
+      }
+     ]
+    },
+    {
+     "path": [
+      "selection",
+      "best_per_d",
+      1,
+      "cell"
+     ],
+     "value": {
+      "p": 1,
+      "q": 0,
+      "trend": "n",
+      "aic": -1797.0
+     }
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a tie on AIC given to the larger model because its p is smaller",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      6,
+      "status"
+     ],
+     "value": "ok"
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "reason"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "converged"
+     ],
+     "value": true
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "warnflag"
+     ],
+     "value": 0
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "warnings"
+     ],
+     "value": []
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "aic"
+     ],
+     "value": -1797.0
+    },
+    {
+     "path": [
+      "cells",
+      6,
+      "delta_aic"
+     ],
+     "value": 0.0
+    },
+    {
+     "path": [
+      "selection",
+      "status_counts",
+      1,
+      "ok"
+     ],
+     "value": 7
+    },
+    {
+     "path": [
+      "selection",
+      "status_counts",
+      1,
+      "not_converged"
+     ],
+     "value": 0
+    },
+    {
+     "path": [
+      "pmdarima_check"
+     ],
+     "value": {
+      "status": "unavailable",
+      "reason": "not part of this case",
+      "version": null,
+      "runs": []
+     }
+    },
+    {
+     "path": [
+      "selection",
+      "within_2_aic"
+     ],
+     "value": [
+      {
+       "p": 0,
+       "q": 1,
+       "trend": "t",
+       "aic": -1797.0,
+       "delta_aic": 0.0
+      },
+      {
+       "p": 1,
+       "q": 0,
+       "trend": "n",
+       "aic": -1797.0,
+       "delta_aic": 0.0
+      },
+      {
+       "p": 1,
+       "q": 0,
+       "trend": "t",
+       "aic": -1796.75,
+       "delta_aic": 0.25
+      },
+      {
+       "p": 0,
+       "q": 1,
+       "trend": "n",
+       "aic": -1795.5,
+       "delta_aic": 1.5
+      }
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a cell may score up to the nesting tolerance below a model it nests",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "llf"
+     ],
+     "value": 899.7485
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: an unconverged cell may tie a model it nests",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      6,
+      "llf"
+     ],
+     "value": 896.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a cell may score below models it does not nest",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      10,
+      "llf"
+     ],
+     "value": 899.7
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a cell below a model it nests (a local optimum)",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "llf"
+     ],
+     "value": 899.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a cell just over the nesting tolerance below a model it nests",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "llf"
+     ],
+     "value": 899.7475
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: an unconverged cell below a model it nests",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      6,
+      "llf"
+     ],
+     "value": 895.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a near-unit-root cell below a model it nests",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      15,
+      "llf"
+     ],
+     "value": 894.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a drift model below the same model without one",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      8,
+      "llf"
+     ],
+     "value": 895.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a d = 0 model with a constant below a model it nests",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      3,
+      "llf"
+     ],
+     "value": 553.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: nesting_tolerance 0",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "nesting_tolerance"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: nesting_tolerance missing",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "nesting_tolerance"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: keep_tolerance negative",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "keep_tolerance"
+     ],
+     "value": -1e-06
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: keep_tolerance 0 is allowed",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "keep_tolerance"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: random_starts 1.5",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "random_starts"
+     ],
+     "value": 1.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: random_starts missing",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "random_starts"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: start_seed negative",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "start_seed"
+     ],
+     "value": -1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: starts blank",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "starts"
+     ],
+     "value": " "
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: starts_tried written 2.0 still reads as an integer",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      1,
+      "starts_tried"
+     ],
+     "value": 2.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a nested start from the same model without its drift",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      10,
+      "start"
+     ],
+     "value": "nested (1, 1, 0) n"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a nested start from the next smaller q",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      3,
+      "start"
+     ],
+     "value": "nested (1, 0, 0) c"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a random start the settings did not draw",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      3,
+      "start"
+     ],
+     "value": "random 3"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a random start on a cell with q = 0",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      2,
+      "start"
+     ],
+     "value": "random 1"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a nested start two steps smaller",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "nested (0, 1, 0) n"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a nested start from another d",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      15,
+      "start"
+     ],
+     "value": "nested (0, 1, 1) n"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a nested start with a drift for a cell without one",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "nested (1, 1, 0) t"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a nested start from the cell itself",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "nested (1, 1, 1) n"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: start 'Default'",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "start"
+     ],
+     "value": "Default"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: start 'random 0'",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      3,
+      "start"
+     ],
+     "value": "random 0"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: start with a trailing space",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "nested (1, 1, 0) n "
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: start empty",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "start"
+     ],
+     "value": ""
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: start missing",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "start"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: start null on an ok cell",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "start"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a failed cell with a start",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      11,
+      "start"
+     ],
+     "value": "default"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: starts_tried 0",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "starts_tried"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: starts_tried missing",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "starts_tried"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: a value equal to its band is not past it",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      1,
+      "acf"
+     ],
+     "value": 0.113
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "acf_pacf: an outside count written 3.0 still reads as an integer",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "acf_outside_count"
+     ],
+     "value": 3.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "acf_pacf: a bar inside its band flagged outside",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      1,
+      "acf_outside"
+     ],
+     "value": true
+    },
+    {
+     "path": [
+      "series",
+      1,
+      "acf_outside_count"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: a bar past its band not flagged",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "rows",
+      1,
+      "acf_outside"
+     ],
+     "value": false
+    },
+    {
+     "path": [
+      "series",
+      0,
+      "acf_outside_count"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: a value one double past its band not flagged",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      1,
+      "acf"
+     ],
+     "value": 0.11300000000000002
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: lag 0 flagged outside",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      0,
+      "rows",
+      0,
+      "pacf_outside"
+     ],
+     "value": true
+    },
+    {
+     "path": [
+      "series",
+      0,
+      "pacf_outside_count"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: an outside count off by one",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      2,
+      "acf_outside_count"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: an outside count missing",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      2,
+      "pacf_outside_count"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: an outside count negative",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "acf_outside_count"
+     ],
+     "value": -1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: an outside flag missing",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      2,
+      "pacf_outside"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: an outside flag written 1",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "series",
+      1,
+      "rows",
+      2,
+      "pacf_outside"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: z rounded to 1.96",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "z"
+     ],
+     "value": 1.96
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: z one double off",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "z"
+     ],
+     "value": 1.9599639845400543
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: alpha 0.01 with the z of 0.05",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "alpha"
+     ],
+     "value": 0.01
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "acf_pacf: alpha 0.01 with its own z, which no reader lists",
+   "base": "acf_pacf",
+   "edits": [
+    {
+     "path": [
+      "alpha"
+     ],
+     "value": 0.01
+    },
+    {
+     "path": [
+      "z"
+     ],
+     "value": 2.5758293035489004
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a polished nested start",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      6,
+      "start"
+     ],
+     "value": "nested (0, 1, 0) n, polished"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a polished default start",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "start"
+     ],
+     "value": "default, polished"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: polished twice",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "start"
+     ],
+     "value": "default, polished, polished"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: polished without the space",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "start"
+     ],
+     "value": "default,polished"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a polished random start the settings did not draw",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      3,
+      "start"
+     ],
+     "value": "random 3, polished"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: nesting_tolerance 100, which the readers do not take from the file",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "nesting_tolerance"
+     ],
+     "value": 100
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: nesting_tolerance 100 hiding a 21.8 llf drop",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "nesting_tolerance"
+     ],
+     "value": 100
+    },
+    {
+     "path": [
+      "cells",
+      7,
+      "llf"
+     ],
+     "value": 877.95
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a perturbed nested start",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "nested (1, 1, 0) n, perturbed +"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a perturbed nested start, polished",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "nested (0, 1, 1) n, perturbed -, polished"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a perturbed start on the step that drops the trend",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      10,
+      "start"
+     ],
+     "value": "nested (1, 1, 0) n, perturbed +"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a perturbed start with no sign",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "nested (1, 1, 0) n, perturbed"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a start from the polish stage",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "polished from (1, 1, 0) t"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a start from the polish stage, the cell's own",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "polished from (1, 1, 1) n"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "aic_grid: a polish-stage start from another d",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "polished from (1, 0, 1) c"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a polish-stage start from outside the grid",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      7,
+      "start"
+     ],
+     "value": "polished from (2, 1, 1) n"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: params missing",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "params"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: params with one entry too few",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "params"
+     ],
+     "value": {
+      "const": 0.0005
+     }
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a params value that is not a number",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "params",
+      "sigma2"
+     ],
+     "value": "0.0003"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: a failed cell with params",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      11,
+      "params"
+     ],
+     "value": {
+      "x1": 0.1
+     }
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "aic_grid: params null on an ok cell",
+   "base": "aic_grid",
+   "edits": [
+    {
+     "path": [
+      "cells",
+      0,
+      "params"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  }
+ ],
+ "token_cases": [
+  {
+   "name": "aic_grid: NaN token in a cell aic",
+   "base": "aic_grid",
+   "path": [
+    "cells",
+    3,
+    "aic"
+   ],
+   "token": "NaN"
+  },
+  {
+   "name": "aic_grid: Infinity token in a cell llf",
+   "base": "aic_grid",
+   "path": [
+    "cells",
+    3,
+    "llf"
+   ],
+   "token": "Infinity"
+  },
+  {
+   "name": "aic_grid: NaN token under an unknown data key",
+   "base": "aic_grid",
+   "path": [
+    "extra_unknown"
+   ],
+   "token": "NaN"
+  },
+  {
+   "name": "aic_grid: -Infinity token under an unknown cell key",
+   "base": "aic_grid",
+   "path": [
+    "cells",
+    0,
+    "extra"
+   ],
+   "token": "-Infinity"
+  },
+  {
+   "name": "stationarity: NaN token in an ADF p-value",
+   "base": "stationarity",
+   "path": [
+    "transforms",
+    1,
+    "adf",
+    "p_value"
+   ],
+   "token": "NaN"
+  },
+  {
+   "name": "acf_pacf: Infinity token in an acf value",
+   "base": "acf_pacf",
+   "path": [
+    "series",
+    1,
+    "rows",
+    3,
+    "acf"
+   ],
+   "token": "Infinity"
   }
  ]
 }

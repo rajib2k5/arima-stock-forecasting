@@ -1,4 +1,4 @@
-"""Tests for payloads.py, the Python shape checks for `prices` and `eda`.
+"""Tests for payloads.py, the Python shape checks; here for `prices` and `eda` (the shared corpus covers all).
 
 A valid payload is built once from a synthetic snapshot. Each test then breaks one rule of
 contract.md sections 3.2-3.3 and checks that the validator names it.
@@ -9,8 +9,9 @@ from __future__ import annotations
 import copy
 
 import pytest
-from synthetic import write_synthetic_snapshot
+from synthetic import NOT_RUN, write_synthetic_snapshot
 
+from arima_forecasting import selection
 from arima_forecasting.data import read_snapshot
 from arima_forecasting.export import build_payloads
 from arima_forecasting.payloads import PAYLOAD_VALIDATORS, validate_eda, validate_prices
@@ -19,7 +20,10 @@ from arima_forecasting.payloads import PAYLOAD_VALIDATORS, validate_eda, validat
 @pytest.fixture(scope="module")
 def payloads(tmp_path_factory):
     folder = write_synthetic_snapshot(tmp_path_factory.mktemp("data"))
-    return build_payloads(read_snapshot(folder))
+    with pytest.MonkeyPatch.context() as patch:  # the milestone-2 grid is not what these tests are about
+        patch.setattr(selection, "GRID_ORDERS", (0,))
+        patch.setattr(selection, "pmdarima_check", lambda y, cells, chosen: dict(NOT_RUN))
+        return build_payloads(read_snapshot(folder))
 
 
 def broken(payload, edit):
@@ -31,7 +35,9 @@ def broken(payload, edit):
 def test_the_export_builds_payloads_that_pass_both_validators(payloads):
     assert validate_prices(payloads["prices"]) == []
     assert validate_eda(payloads["eda"]) == []
-    assert set(PAYLOAD_VALIDATORS) == {"meta", "prices", "eda"}
+    assert set(PAYLOAD_VALIDATORS) == {"meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid"}
+    for name in ("stationarity", "acf_pacf", "aic_grid"):
+        assert PAYLOAD_VALIDATORS[name](payloads[name]) == [], name
 
 
 @pytest.mark.parametrize("value", [None, [], "prices"])

@@ -1,0 +1,697 @@
+{
+  "sample": "train",
+  "n_train": 300,
+  "criterion": "aic",
+  "grid": {
+    "p": [
+      0,
+      1
+    ],
+    "q": [
+      0,
+      1
+    ],
+    "specs": [
+      {
+        "d": 0,
+        "trends": [
+          "c"
+        ]
+      },
+      {
+        "d": 1,
+        "trends": [
+          "n",
+          "t"
+        ]
+      },
+      {
+        "d": 2,
+        "trends": [
+          "n"
+        ]
+      }
+    ]
+  },
+  "fit_settings": {
+    "library": "statsmodels",
+    "version": "0.15.0",
+    "model": "ARIMA",
+    "method": "statespace",
+    "optimizer": "lbfgs",
+    "maxiter": 200,
+    "enforce_stationarity": true,
+    "enforce_invertibility": true,
+    "concentrate_scale": false,
+    "simple_differencing": false,
+    "near_unit_root_threshold": 0.99,
+    "starts": "default, every fitted nested model one step smaller padded with zeros, and seeded random starts (p, q >= 1); the highest log-likelihood is kept",
+    "keep_tolerance": 0.0001,
+    "random_starts": 2,
+    "start_seed": 20261029,
+    "nesting_tolerance": 0.002
+  },
+  "cells": [
+    {
+      "d": 0,
+      "p": 0,
+      "q": 0,
+      "trend": "c",
+      "status": "ok",
+      "k_params": 2,
+      "warnings": [],
+      "reason": null,
+      "aic": -1000.5,
+      "aicc": -1000.459595959596,
+      "bic": -993.0924350506876,
+      "llf": 502.25,
+      "nobs_effective": 300,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": 99.75,
+      "start": "default",
+      "starts_tried": 1,
+      "params": {
+        "const": 0.0005,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 0,
+      "p": 0,
+      "q": 1,
+      "trend": "c",
+      "status": "ok",
+      "k_params": 3,
+      "warnings": [],
+      "reason": null,
+      "aic": -1100.25,
+      "aicc": -1100.168918918919,
+      "bic": -1089.1386525760313,
+      "llf": 553.125,
+      "nobs_effective": 300,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": 0.8,
+      "error": null,
+      "delta_aic": 0.0,
+      "start": "default",
+      "starts_tried": 2,
+      "params": {
+        "const": 0.0005,
+        "ma.L1": 0.2,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 0,
+      "p": 1,
+      "q": 0,
+      "trend": "c",
+      "status": "near_unit_root",
+      "k_params": 3,
+      "warnings": [],
+      "reason": "largest inverse root modulus above 0.99: AR 0.999000",
+      "aic": -1800.0,
+      "aicc": -1799.918918918919,
+      "bic": -1788.8886525760313,
+      "llf": 903.0,
+      "nobs_effective": 300,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": 0.999,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": -699.75,
+      "start": "nested (0, 0, 0) c",
+      "starts_tried": 2,
+      "params": {
+        "const": 0.0005,
+        "ar.L1": 0.2,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 0,
+      "p": 1,
+      "q": 1,
+      "trend": "c",
+      "status": "near_unit_root",
+      "k_params": 4,
+      "warnings": [],
+      "reason": "largest inverse root modulus above 0.99: AR 0.998000",
+      "aic": -1799.5,
+      "aicc": -1799.364406779661,
+      "bic": -1784.6848701013753,
+      "llf": 903.75,
+      "nobs_effective": 300,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": 0.998,
+      "max_inv_root_ma": 0.2,
+      "error": null,
+      "delta_aic": -699.25,
+      "start": "random 1",
+      "starts_tried": 5,
+      "params": {
+        "const": 0.0005,
+        "ar.L1": 0.2,
+        "ma.L1": 0.30000000000000004,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 1,
+      "p": 0,
+      "q": 0,
+      "trend": "n",
+      "status": "ok",
+      "k_params": 1,
+      "warnings": [],
+      "reason": null,
+      "aic": -1790.0,
+      "aicc": -1789.986531986532,
+      "bic": -1786.2995564266093,
+      "llf": 896.0,
+      "nobs_effective": 299,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": 7.0,
+      "start": "default",
+      "starts_tried": 1,
+      "params": {
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 1,
+      "p": 0,
+      "q": 1,
+      "trend": "n",
+      "status": "ok",
+      "k_params": 2,
+      "warnings": [],
+      "reason": null,
+      "aic": -1795.5,
+      "aicc": -1795.4594594594594,
+      "bic": -1788.0991128532187,
+      "llf": 899.75,
+      "nobs_effective": 299,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": 0.1,
+      "error": null,
+      "delta_aic": 1.5,
+      "start": "default",
+      "starts_tried": 2,
+      "params": {
+        "ma.L1": 0.1,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 1,
+      "p": 1,
+      "q": 0,
+      "trend": "n",
+      "status": "not_converged",
+      "k_params": 2,
+      "warnings": [
+        {
+          "category": "ConvergenceWarning",
+          "message": "Maximum Likelihood optimization failed to converge. Check mle_retvals"
+        }
+      ],
+      "reason": "L-BFGS did not converge after 1 iterations (warnflag 2: stopped for another reason, usually a failed line search)",
+      "aic": -1795.25,
+      "aicc": -1795.2094594594594,
+      "bic": -1787.8491128532187,
+      "llf": 899.625,
+      "nobs_effective": 299,
+      "converged": false,
+      "iterations": 1,
+      "warnflag": 2,
+      "max_inv_root_ar": 0.1,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": 1.75,
+      "start": "nested (0, 1, 0) n",
+      "starts_tried": 2,
+      "params": {
+        "ar.L1": 0.1,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 1,
+      "p": 1,
+      "q": 1,
+      "trend": "n",
+      "status": "ok",
+      "k_params": 3,
+      "warnings": [],
+      "reason": null,
+      "aic": -1794.0,
+      "aicc": -1793.9186440677965,
+      "bic": -1782.898669279828,
+      "llf": 900.0,
+      "nobs_effective": 299,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": 0.3,
+      "max_inv_root_ma": 0.35,
+      "error": null,
+      "delta_aic": 3.0,
+      "start": "nested (1, 1, 0) n",
+      "starts_tried": 5,
+      "params": {
+        "ar.L1": 0.1,
+        "ma.L1": 0.2,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 1,
+      "p": 0,
+      "q": 0,
+      "trend": "t",
+      "status": "ok",
+      "k_params": 2,
+      "warnings": [],
+      "reason": null,
+      "aic": -1793.0,
+      "aicc": -1792.9594594594594,
+      "bic": -1785.5991128532187,
+      "llf": 898.5,
+      "nobs_effective": 299,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": 4.0,
+      "start": "nested (0, 1, 0) n",
+      "starts_tried": 2,
+      "params": {
+        "x1": 0.0005,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 1,
+      "p": 0,
+      "q": 1,
+      "trend": "t",
+      "status": "ok",
+      "k_params": 3,
+      "warnings": [],
+      "reason": null,
+      "aic": -1797.0,
+      "aicc": -1796.9186440677965,
+      "bic": -1785.898669279828,
+      "llf": 901.5,
+      "nobs_effective": 299,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": 0.12,
+      "error": null,
+      "delta_aic": 0.0,
+      "start": "default",
+      "starts_tried": 3,
+      "params": {
+        "x1": 0.0005,
+        "ma.L1": 0.2,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 1,
+      "p": 1,
+      "q": 0,
+      "trend": "t",
+      "status": "ok",
+      "k_params": 3,
+      "warnings": [],
+      "reason": null,
+      "aic": -1796.75,
+      "aicc": -1796.6686440677965,
+      "bic": -1785.648669279828,
+      "llf": 901.375,
+      "nobs_effective": 299,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": 0.11,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": 0.25,
+      "start": "default",
+      "starts_tried": 3,
+      "params": {
+        "x1": 0.0005,
+        "ar.L1": 0.2,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 1,
+      "p": 1,
+      "q": 1,
+      "trend": "t",
+      "status": "failed",
+      "k_params": 4,
+      "warnings": [],
+      "reason": "the fit raised an error",
+      "aic": null,
+      "aicc": null,
+      "bic": null,
+      "llf": null,
+      "nobs_effective": null,
+      "converged": null,
+      "iterations": null,
+      "warnflag": null,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": null,
+      "error": "LinAlgError: made-up failure for the corpus",
+      "delta_aic": null,
+      "start": null,
+      "starts_tried": 5,
+      "params": null
+    },
+    {
+      "d": 2,
+      "p": 0,
+      "q": 0,
+      "trend": "n",
+      "status": "ok",
+      "k_params": 1,
+      "warnings": [],
+      "reason": null,
+      "aic": -1500.0,
+      "aicc": -1499.9864864864865,
+      "bic": -1496.3029065134947,
+      "llf": 751.0,
+      "nobs_effective": 298,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": 150.5,
+      "start": "default",
+      "starts_tried": 1,
+      "params": {
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 2,
+      "p": 0,
+      "q": 1,
+      "trend": "n",
+      "status": "near_unit_root",
+      "k_params": 2,
+      "warnings": [],
+      "reason": "largest inverse root modulus above 0.99: MA 0.999900",
+      "aic": -1785.0,
+      "aicc": -1784.9593220338984,
+      "bic": -1777.6058130269892,
+      "llf": 894.5,
+      "nobs_effective": 298,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": null,
+      "max_inv_root_ma": 0.9999,
+      "error": null,
+      "delta_aic": -134.5,
+      "start": "default",
+      "starts_tried": 2,
+      "params": {
+        "ma.L1": 0.1,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 2,
+      "p": 1,
+      "q": 0,
+      "trend": "n",
+      "status": "ok",
+      "k_params": 2,
+      "warnings": [],
+      "reason": null,
+      "aic": -1650.5,
+      "aicc": -1650.4593220338984,
+      "bic": -1643.1058130269892,
+      "llf": 827.25,
+      "nobs_effective": 298,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": 0.5,
+      "max_inv_root_ma": null,
+      "error": null,
+      "delta_aic": 0.0,
+      "start": "nested (0, 2, 0) n",
+      "starts_tried": 2,
+      "params": {
+        "ar.L1": 0.1,
+        "sigma2": 0.0003
+      }
+    },
+    {
+      "d": 2,
+      "p": 1,
+      "q": 1,
+      "trend": "n",
+      "status": "near_unit_root",
+      "k_params": 3,
+      "warnings": [],
+      "reason": "largest inverse root modulus above 0.99: MA 0.999500",
+      "aic": -1784.0,
+      "aicc": -1783.9183673469388,
+      "bic": -1772.9087195404838,
+      "llf": 895.0,
+      "nobs_effective": 298,
+      "converged": true,
+      "iterations": 12,
+      "warnflag": 0,
+      "max_inv_root_ar": 0.2,
+      "max_inv_root_ma": 0.9995,
+      "error": null,
+      "delta_aic": -133.5,
+      "start": "random 2",
+      "starts_tried": 5,
+      "params": {
+        "ar.L1": 0.1,
+        "ma.L1": 0.2,
+        "sigma2": 0.0003
+      }
+    }
+  ],
+  "selection": {
+    "d_selected": 1,
+    "order": [
+      0,
+      1,
+      1
+    ],
+    "trend": "t",
+    "aic": -1797.0,
+    "bic": -1785.898669279828,
+    "k_params": 3,
+    "rule": "lowest AIC among ok cells with d = d_selected",
+    "within_2_aic": [
+      {
+        "p": 0,
+        "q": 1,
+        "trend": "t",
+        "aic": -1797.0,
+        "delta_aic": 0.0
+      },
+      {
+        "p": 1,
+        "q": 0,
+        "trend": "t",
+        "aic": -1796.75,
+        "delta_aic": 0.25
+      },
+      {
+        "p": 0,
+        "q": 1,
+        "trend": "n",
+        "aic": -1795.5,
+        "delta_aic": 1.5
+      }
+    ],
+    "bic_choice": {
+      "p": 0,
+      "q": 1,
+      "trend": "n",
+      "aic": -1795.5,
+      "bic": -1788.0991128532187
+    },
+    "best_per_d": [
+      {
+        "d": 0,
+        "cell": {
+          "p": 0,
+          "q": 1,
+          "trend": "c",
+          "aic": -1100.25
+        }
+      },
+      {
+        "d": 1,
+        "cell": {
+          "p": 0,
+          "q": 1,
+          "trend": "t",
+          "aic": -1797.0
+        }
+      },
+      {
+        "d": 2,
+        "cell": {
+          "p": 1,
+          "q": 0,
+          "trend": "n",
+          "aic": -1650.5
+        }
+      }
+    ],
+    "status_counts": [
+      {
+        "d": 0,
+        "ok": 2,
+        "not_converged": 0,
+        "near_unit_root": 2,
+        "failed": 0
+      },
+      {
+        "d": 1,
+        "ok": 6,
+        "not_converged": 1,
+        "near_unit_root": 0,
+        "failed": 1
+      },
+      {
+        "d": 2,
+        "ok": 2,
+        "not_converged": 0,
+        "near_unit_root": 2,
+        "failed": 0
+      }
+    ]
+  },
+  "pmdarima_check": {
+    "status": "ok",
+    "reason": null,
+    "version": "2.1.1",
+    "runs": [
+      {
+        "label": "course",
+        "settings": {
+          "test": "adf",
+          "start_p": 1,
+          "start_q": 1,
+          "return_valid_fits": true
+        },
+        "order": [
+          0,
+          1,
+          1
+        ],
+        "with_intercept": true,
+        "trend": "t",
+        "aic": -1796.9,
+        "converged": true,
+        "iterations": 5,
+        "visited": [
+          {
+            "order": [
+              0,
+              1,
+              1
+            ],
+            "with_intercept": true,
+            "aic": -1796.9
+          },
+          {
+            "order": [
+              1,
+              1,
+              0
+            ],
+            "with_intercept": true,
+            "aic": -1796.6
+          }
+        ],
+        "warnings": [],
+        "agreement": {
+          "d": true,
+          "order": true,
+          "trend": true,
+          "same_order_status": "ok",
+          "aic_gap_same_order": 0.09999999999990905
+        }
+      },
+      {
+        "label": "defaults",
+        "settings": {
+          "seasonal": false,
+          "return_valid_fits": true
+        },
+        "order": [
+          1,
+          1,
+          0
+        ],
+        "with_intercept": false,
+        "trend": "n",
+        "aic": -1795.0,
+        "converged": false,
+        "iterations": 50,
+        "visited": [
+          {
+            "order": [
+              1,
+              1,
+              0
+            ],
+            "with_intercept": false,
+            "aic": -1795.0
+          }
+        ],
+        "warnings": [],
+        "agreement": {
+          "d": true,
+          "order": false,
+          "trend": false,
+          "same_order_status": "not_converged",
+          "aic_gap_same_order": 0.25
+        }
+      }
+    ]
+  }
+}

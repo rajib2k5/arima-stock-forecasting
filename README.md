@@ -4,9 +4,11 @@
 
 It is a learning repo. Each milestone ships a code walkthrough with `file:line` references, concept notes with the maths, questions to answer before you look at the results, and interview questions to explain back. Start at [`LEARNING_LOG.md`](LEARNING_LOG.md).
 
-> **Status: milestone 1 (data and EDA) built; milestone 0 done.** The AAPL prices are downloaded once into a snapshot, cleaned, logged, split 90/10, and described on the training segment only. The app now has a price explorer. No model has been fitted yet, so there are no forecast results below. Every number that appears here later is re-measured by an independent `verifier` pass before it is committed.
+> **Status: milestone 2 (stationarity and identification) built; milestones 0 and 1 done.** On the training segment, ADF and KPSS choose d = 1, and an AIC grid of 144 ARIMA models, each fitted from several starts and polished, picks ARIMA(3, 1, 4) with a drift: the best the documented search found. The search found seven other models within 2 AIC of it, a lower bound, the nearest 0.036 away; gaps that small carry no meaning (BIC would pick ARIMA(2, 1, 2) without a drift). The app has three data pages: the price explorer, the stationarity page and a 3D AIC landscape. No model has been fitted for forecasting yet, so there are no forecast results below. Every number that appears here later is re-measured by an independent `verifier` pass before it is committed.
 
 > **Not financial advice.** This is an educational study of one statistical method on one stock.
+
+> **Data.** The prices come from Yahoo Finance via yfinance and are not covered by this repository's MIT licence. [`DATA.md`](DATA.md) says what is committed, what is not, and why.
 
 ## Results
 
@@ -14,7 +16,7 @@ It is a learning repo. Each milestone ships a code walkthrough with `file:line` 
 
 ## Screenshots
 
-These are milestone 0's screenshots. Milestone 1 adds the **Price explorer** page: the adjusted close on a dollar or log axis with the train, test and out-of-sample segments shaded, KDEs of the log price and the log return, and the four parts of the decomposition. It has no screenshot yet, because milestone 0's screenshots were taken by hand and there is no script to repeat them.
+These are milestone 0's screenshots. Milestone 1 adds the **Price explorer** page: the adjusted close on a dollar or log axis with the train, test and out-of-sample segments shaded, KDEs of the log price and the log return, and the four parts of the decomposition. Milestone 2 adds the **Stationarity** page (the ADF and KPSS table, the decision on d, and the ACF and PACF with their bands) and the **AIC landscape** (every (p, q) cell of one d at a time, in 3D and in a table, with failed and flagged fits marked). These pages have no screenshots yet, because milestone 0's screenshots were taken by hand and there is no script to repeat them.
 
 ![About page of the app: ticker AAPL, course window 2015-01-01 to 2023-12-31, out-of-sample window 2024-01-01 to 2026-09-30, and six milestones with milestone 0 marked current](docs/images/m0-about-light.png)
 
@@ -60,7 +62,7 @@ uv run python tools/export_app_data.py --check
 cd app && npm ci && npm run dev
 ```
 
-`fetch_prices.py` downloads the prices once (it is the only step that uses the network) and reuses the snapshot after that. `export_app_data.py` builds the JSON from the snapshot, and `--check` exits 1 if the JSON in `app/public/data/` is stale. Two of those files, `prices.json` and `eda.json`, are not committed while the owner decides whether Yahoo-derived prices may be published here ([ADR-0001](docs/adr/0001-python-computes-app-visualises.md#open-question-for-the-learner-a-decision-not-a-default)), so on a fresh clone run both commands before you open the Price explorer or notebook 01. The tests pass without them: the ones that need them skip and say why. `npm run verify` (inside `app/`) is the app's gate: lint, tests with coverage thresholds, and a production build.
+`fetch_prices.py` downloads the prices once (it is the only step that uses the network) and reuses the snapshot after that. `export_app_data.py` builds the JSON from the snapshot, and `--check` exits 1 if the JSON in `app/public/data/` is stale. Every file in `app/public/data/` is committed, `prices.json` and `eda.json` included ([ADR-0001](docs/adr/0001-python-computes-app-visualises.md#the-owners-decision-on-the-price-files-decided-2026-10-29), [`DATA.md`](DATA.md)), so a fresh clone runs the whole app and every test without downloading anything; the two commands rebuild the files from a new download. `npm run verify` (inside `app/`) is the app's gate: lint, tests with coverage thresholds, and a production build.
 
 The raw download is cached outside git, in `$VOL_DATA_DIR/arima-stock-forecasting/raw/` (default `~/data/vol-projects`), with a manifest that records its SHA-256. It is never committed.
 
@@ -76,7 +78,7 @@ Diagrams (architecture, data flow, process, ERD, contract sequence) are in [`doc
 ## Repo layout
 
 ```
-src/arima_forecasting/   all logic: config, data (snapshot), prep, eda, JSON contract and payloads, provenance; later models and evaluation
+src/arima_forecasting/   all logic: config, data (snapshot), prep, eda, stationarity, identification, selection, JSON contract and payloads, provenance; later models and evaluation
 tests/                   pytest, hand-worked expected values, mutation-checked (see each milestone's Results)
 notebooks/               generated by tools/build_notebooks.py
 tools/                   fetch_prices.py, export_app_data.py, build_notebooks.py, diagrams/, blender/
@@ -89,7 +91,7 @@ reports/                 results tables produced by the pipeline
 
 - The module structure follows the sample course outline *Stock Price Forecasting Using ARIMA Model in Python*. All code and text in this repo are our own; the outline itself is not included.
 - Built on [statsmodels](https://www.statsmodels.org/), [pmdarima](https://alkaline-ml.com/pmdarima/), [yfinance](https://github.com/ranaroussi/yfinance), [pandas](https://pandas.pydata.org/), React, Vite and [three.js](https://threejs.org/) via [@react-three/fiber](https://r3f.docs.pmnd.rs/).
-- Prices come from Yahoo Finance through yfinance; Yahoo's terms govern that data, and this repo does not redistribute it. The raw download is never committed, and `prices.json` and `eda.json` are on hold (git-ignored) until the owner decides ([ADR-0001](docs/adr/0001-python-computes-app-visualises.md#open-question-for-the-learner-a-decision-not-a-default)).
+- Prices come from Yahoo Finance through yfinance; Yahoo's terms of service govern their use. The data is not covered by this repository's MIT licence. The raw download is never committed; the exported `prices.json` and `eda.json` are, by the owner's decision of 2026-10-29. See [`DATA.md`](DATA.md).
 
 ## License
 

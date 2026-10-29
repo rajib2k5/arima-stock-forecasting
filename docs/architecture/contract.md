@@ -5,8 +5,9 @@ The *why* behind the overall design is in [ADR-0001](../adr/0001-python-computes
 the order-selection rules that the `stationarity` and `aic_grid` artifacts expose are in
 [ADR-0002](../adr/0002-order-selection.md).
 
-**Status by artifact:** `meta` (milestone 0), `prices` and `eda` (milestone 1, schema `1.1.0`)
-are implemented, and their sections describe the shipped fields. Every other section is the
+**Status by artifact:** `meta` (milestone 0), `prices` and `eda` (milestone 1, schema `1.1.0`),
+and `stationarity`, `acf_pacf` and `aic_grid` (milestone 2, schema `1.2.0`, extended in `1.3.0`) are implemented, and
+their sections describe the shipped fields. Every other section is the
 **planned** shape. It is fixed enough to build against, and each milestone may refine it under
 the versioning policy below.
 
@@ -18,7 +19,7 @@ Every file is `app/public/data/<artifact>.json` and has exactly these five keys:
 
 ```json
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.3.0",
   "artifact": "meta",
   "generated_at": "2026-10-28T12:00:00Z",
   "source_commit": "0123456789abcdef0123456789abcdef01234567",
@@ -51,10 +52,14 @@ without breaking an older app.
 of valid and invalid envelopes. The Python suite runs every case through `validate_envelope` and
 the app's suite runs every case through `parseEnvelope`, so a rule that changes on one side only
 fails a test. That fixture is the guard against the two readers drifting apart. Milestone 1 adds
-the same for payloads: `app/src/test/fixtures/payload_cases.json` (86 cases) edits the hand-written
-`meta.data.json`, `prices.data.json` and `eda.data.json` and states each verdict;
+the same for payloads: `app/src/test/fixtures/payload_cases.json` edits a hand-written base payload
+per artifact (`meta.data.json`, `prices.data.json`, `eda.data.json`, and from milestone 2
+`stationarity.data.json`, `acf_pacf.data.json` and `aic_grid.data.json`, all made-up values) and
+states each verdict: 218 cases, 132 of them for the milestone-2 artifacts.
 `tests/test_payload_corpus.py` and `app/src/lib/contract.payloads.corpus.test.ts` run it through both
-readers (`validate_meta`/`parseMeta`, `validate_prices`/`parsePrices`, `validate_eda`/`parseEda`).
+readers (`validate_meta`/`parseMeta`, `validate_prices`/`parsePrices`, `validate_eda`/`parseEda`,
+`validate_stationarity`/`parseStationarity`, `validate_acf_pacf`/`parseAcfPacf`,
+`validate_aic_grid`/`parseAicGrid`).
 
 **Byte-identical re-exports.** With `SOURCE_DATE_EPOCH` set, two exports of the same code (and,
 from milestone 1, the same raw snapshot) write byte-identical files. That holds because the
@@ -93,27 +98,35 @@ with new data or fixed code changes the numbers and `source_commit`, never the v
 | **Minor** (`1.1.0`) | Additions an old reader can safely ignore | a new artifact; a new field in `data`; a new value in an **open** enum; making a nullable field always non-null |
 | **Patch** (`1.0.1`) | No shape change | correcting this document; changing how a value is computed *without* changing what it means (a bug fix) |
 
-Planned path: milestone 1 adds `prices` and `eda` (1.1.0), M2 adds `stationarity`, `acf_pacf`
-and `aic_grid` (1.2.0), M3 adds `fit` and `residuals` (1.3.0), and M4 adds `forecasts` and
-`metrics` (1.4.0). `meta.data.artifacts` always lists exactly the artifacts written by that
+Path: milestone 1 added `prices` and `eda` (1.1.0), M2 added `stationarity`, `acf_pacf`
+and `aic_grid` (1.2.0), and the milestone-2 fix round added fields inside `data` only (1.3.0: each
+grid cell's `start` and `starts_tried`, the multi-start `fit_settings`, the correlograms' outside
+flags and counts). M3 adds `fit` and `residuals` (1.4.0), and M4 adds `forecasts` and `metrics`
+(1.5.0). The 1.3.0 readers require the new fields: a 1.2.0 `aic_grid` or `acf_pacf` is refused, and
+the app ships with its data, so no older file reaches it. `meta.data.artifacts` always lists exactly the artifacts written by that
 export, so the app knows which views can be switched on.
 
 ### Size budgets
 
 Aim for ≤ 1 MB (1,000,000 bytes) per file before compression (GitHub Pages serves gzip). If a
 file passes 2 MB, the fix is a columnar layout for that artifact, which is a major bump.
-`tests/test_committed_artifacts.py` fails if `prices.json` or `eda.json` passes 1,000,000 bytes
-(it skips where those held files are absent).
+`tests/test_committed_artifacts.py` fails if any exported file other than `meta.json` passes
+1,000,000 bytes, and `tests/test_repo_data.py` fails if any file in `app/public/data/` passes
+10,000,000 bytes (the hard limit of the owner's data rule; see `DATA.md`).
 
-Measured on 2026-10-29 on the local export of the 13:37 UTC snapshot (`wc -c`, and Python's
+Measured on 2026-10-29 on the milestone-2 export (after the review's fix round, schema 1.3.0) of the 13:37 UTC snapshot (`wc -c`, and Python's
 `gzip.compress(data, 6)`; GNU `gzip -6` gives slightly different sizes). The export's
-`source_commit` ended in `-dirty`; a clean stamp is 6 bytes shorter per file.
+`source_commit` ended in `-dirty`; a clean stamp is 6 bytes shorter per file. All six files are
+committed since the owner's decision of 2026-10-29 (ADR-0001, `DATA.md`).
 
 | File | Rows | Bytes | Share of 1 MB | gzip level 6 (Python) |
 |---|---|---|---|---|
-| `meta.json` | n/a | 1,509 | 0.2% | 547 |
-| `prices.json` (held, not committed) | 2,953 price rows | 456,025 | 45.6% | 67,175 |
-| `eda.json` (held, not committed) | 2,037 decomposition rows + 2 × 200 KDE points | 529,907 | 53.0% | 101,509 |
+| `meta.json` | n/a | 1,531 | 0.2% | 565 |
+| `prices.json` | 2,953 price rows | 456,025 | 45.6% | 67,170 |
+| `eda.json` | 2,037 decomposition rows + 2 × 200 KDE points | 529,907 | 53.0% | 101,501 |
+| `stationarity.json` | 3 transforms, 12 test results | 6,685 | 0.7% | 1,355 |
+| `acf_pacf.json` | 3 × 51 lags | 44,899 | 4.5% | 6,624 |
+| `aic_grid.json` | 144 cells with their parameters, 2 pmdarima runs | 153,790 | 15.3% | 27,717 |
 
 `forecasts` (about 2,700 rows) is still an estimate; it is measured when it ships.
 
@@ -138,7 +151,7 @@ progress bar), and the gate that switches on views whose artifact exists.
 | `windows.oos` | `{start: date, end_exclusive: date}` | `2024-01-01` → `2026-10-01` |
 | `milestones[]` | `{id: int, slug: string, title: string, status}` | `status` is a **closed** enum: `"done"`, `"current"`, `"planned"`. Exactly one is `"current"`. Sorted by `id`. |
 | `artifacts[]` | string[] | slugs written by this export, for example `["meta"]` |
-| `held_artifacts[]` | string[] | added in 1.1.0: the subset of `artifacts` that the export writes but the repository does not commit (git-ignored), under the owner gate in ADR-0001: `["prices", "eda"]` since 2026-10-29. A fresh clone lacks these files; the app then says how to build them, and the real-data tests skip them with that message. Each entry must be one of `artifacts`, named once, and never `meta` itself (the app learns what is held from meta). Both readers check this (`validate_meta`, `parseMeta`). The app reads a 1.0.x file, which has no such key, as `[]` |
+| `held_artifacts[]` | string[] | added in 1.1.0: the subset of `artifacts` that the export writes but the repository does not commit (git-ignored). `["prices", "eda"]` in milestone 1; **`[]` since the owner's decision of 2026-10-29** (ADR-0001, `DATA.md`): every exported file is committed. The field stays, because removing it would be a major bump. The real-data tests still skip a held file that is absent, with a message that says how to build it; the app no longer has a "not built in this copy" panel (removed in the milestone-2 fix round, as nothing is held), so a missing file is shown as an error like any other. Each entry must be one of `artifacts`, named once, and never `meta` itself (the app learns what is held from meta). Both readers check this (`validate_meta`, `parseMeta`). The app reads a 1.0.x file, which has no such key, as `[]` |
 
 Source of truth: `src/arima_forecasting/export.py` (`meta_payload`) and `config.py` (the windows).
 
@@ -174,9 +187,9 @@ explorer (dollar or log axis, segments shaded).
 | `log_close` | number | ln($) |
 | `segment` | closed enum `"train"`, `"test"`, `"oos"` | |
 
-**Not committed: on hold since 2026-10-29** until the owner decides whether Yahoo-derived prices may
-be published (ADR-0001, "Open question for the learner"). The exporter writes it locally; `.gitignore`
-ignores it; `meta.data.held_artifacts` names it. Readers: Python's `validate_prices` (`src/arima_forecasting/payloads.py`) and the app's
+**Committed** since the owner's decision of 2026-10-29 (ADR-0001, "The owner's decision on the
+price files"; `DATA.md`). In milestone 1 it was held: git-ignored and named in
+`meta.data.held_artifacts`. Readers: Python's `validate_prices` (`src/arima_forecasting/payloads.py`) and the app's
 `parsePrices` (`app/src/lib/contract.payloads.ts`).
 
 ---
@@ -214,108 +227,153 @@ show both versions with measured differences.
 
 ---
 
-### 3.4 `stationarity` [M2]
+### 3.4 `stationarity` [M2, implemented]
 
-The evidence for d. **View:** stationarity lab (toggle d = 0, 1, 2; see the series, its rolling
-mean and standard deviation, and the ADF/KPSS table).
+The evidence for d. **View:** the Stationarity page (the test table, the 2 × 2 reading and the
+decision). Committed, like every exported file (`DATA.md`); it holds test statistics, not series values.
 
 | Field | Type | Notes |
 |---|---|---|
 | `sample` | `"train"` | |
-| `alpha` | number | `0.05` |
-| `transforms[]` | see below | one per d, sorted by `d` |
-| `decision.d_selected` | int | by the rule in ADR-0002 §2 |
+| `n_train` | int | training rows (the length of the d = 0 series) |
+| `alpha` | number | `0.05`; a test rejects when its p-value is below it |
+| `transforms[]` | see below | one per d, sorted by `d` strictly ascending |
+| `decision.d_selected` | int | by the rule in ADR-0002 §2; both readers re-apply the rule to `transforms` and refuse any other value |
 | `decision.rule` | string | the rule in words, shown in the app |
-| `decision.tests_conflict` | bool | true when no d satisfied both tests |
-| `decision.pmdarima_ndiffs` | `{status, reason, kpss, adf, pp}` | `status` closed enum `"ok"`/`"unavailable"`; `reason` **nullable** string; `kpss`/`adf`/`pp` **nullable** ints (null when unavailable) |
+| `decision.tests_conflict` | bool | true when no d is "stationary", so the KPSS fallback chose d |
+| `decision.pmdarima_ndiffs` | `{status, reason, version, alpha, max_d, kpss, adf, pp, agrees}` | `status` closed enum `"ok"`/`"unavailable"`. When ok: `reason` null, `version` a string, `kpss`/`adf`/`pp` ints in 0…`max_d`, `agrees` true exactly when all three equal `d_selected`. When unavailable: `reason` a string, `version` nullable, the four values null |
 
 `transforms[]`:
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | closed enum `"log"`, `"diff1"`, `"diff2"` | |
-| `d` | int | 0, 1, 2 |
-| `n` | int | observations after differencing (n_train − d) |
-| `adf` | `{statistic, p_value, used_lag, nobs, critical_values: {"1%","5%","10%"}, regression: "c", autolag: "AIC", reject_unit_root: bool}` | statsmodels `adfuller` |
-| `kpss` | `{statistic, p_value, p_value_bound, nlags, critical_values: {"10%","5%","2.5%","1%"}, regression: "c", reject_stationarity: bool}` | `p_value_bound` is **nullable**, closed enum `"smaller"` (the true p is below the reported 0.01) or `"greater"` (the true p is above the reported 0.10), mirroring the wording of statsmodels' `InterpolationWarning`; `null` when the p-value was interpolated inside the table. statsmodels clips KPSS p-values to [0.01, 0.10] (`statsmodels/tsa/stattools/_stattools.py:3205-3235`). |
-| `verdict` | closed enum `"stationary"`, `"unit_root"`, `"conflict"` | |
-| `rows[]` | `{date, value, roll12_mean, roll12_std, roll252_mean, roll252_std}` | `value` is in this transform's unit (`log` → ln $, `diff1`/`diff2` → log points). Rolling fields are **nullable**: `null` until the window is full (the first 11 or 251 rows). Window 12 is the course's; 252 (one trading year) is added because 12 days is very short for daily data. |
+| `d` | int | 0, 1, 2, matching `id` |
+| `n` | int | `n_train − d` |
+| `adf` | `{statistic, p_value, used_lag, maxlag, nobs, critical_values: {"1%","5%","10%"}, regression: "c", autolag: "AIC", reject_unit_root}` | statsmodels `adfuller` with `maxlag` = ⌈12 (n/100)^¼⌉ passed explicitly (statsmodels' own default rule); `used_lag` ≤ `maxlag`; `reject_unit_root` = `p_value < alpha` |
+| `kpss` | `{statistic, p_value, p_value_bound, nlags, nlags_method: "auto", critical_values: {"10%","5%","2.5%","1%"}, regression: "c", reject_stationarity}` | `p_value` lies in [0.01, 0.10] because statsmodels clips it to its table (`statsmodels/tsa/stattools/_stattools.py:3224-3235`). `p_value_bound` is **nullable**, closed enum: `"smaller"` exactly when `p_value` is 0.01 (the true p is 0.01 or less), `"greater"` exactly when it is 0.10, `null` otherwise. The exporter stops if this reading disagrees with statsmodels' `InterpolationWarning` |
+| `verdict` | closed enum `"stationary"`, `"unit_root"`, `"conflict"`, `"inconclusive"` | the 2 × 2 table of concept note 05, from `reject_unit_root` and `reject_stationarity`; both readers check it. `"inconclusive"` (neither test rejects) was added when the planned three-value enum met the fourth cell of the table |
+| `with_trend` | `{adf, kpss, verdict}` | the same two tests with `regression: "ct"` (a constant and a linear trend). Reported to show whether the verdict depends on the deterministic term; **the rule never reads it** |
+
+**Changed from the plan:** the planned `rows[]` (the series, with 12- and 252-day rolling means and
+standard deviations) is not in the artifact. For the three transforms it would add 1,680,767 bytes
+(measured, written as the exporter writes), past the 1 MB budget for one file, and the d = 0 series
+is already in `prices.json`. The Stationarity page shows the tests and the correlograms, which need
+no series; a later minor version can add `rows[]` if a view needs it.
+
+Readers: Python's `validate_stationarity` (`src/arima_forecasting/payloads.py`) and the app's
+`parseStationarity` (`app/src/lib/contract.order.ts`).
 
 ---
 
-### 3.5 `acf_pacf` [M2]
+### 3.5 `acf_pacf` [M2, implemented]
 
-Autocorrelations used to *identify* candidate orders. **View:** stationarity lab, ACF/PACF
-panel for the selected d.
+Autocorrelations used to *identify* candidate orders. **View:** the Stationarity page, ACF and PACF
+panels for one d at a time (the chosen d first). Committed: correlations only.
 
 | Field | Type | Notes |
 |---|---|---|
 | `sample` | `"train"` | |
 | `nlags` | int | `50` (the course's value) |
 | `alpha` | number | `0.05` |
-| `acf_settings` | `{fft: true, adjusted: false}` | statsmodels defaults |
-| `pacf_method` | string | `"ywadjusted"` (statsmodels default) |
-| `series[]` | `{transform, n, rows[]}` | `transform` uses the same closed enum as `stationarity`; sorted by d |
-| `series[].rows[]` | `{lag, acf, pacf, acf_band, pacf_band}` | `lag` 0…50. `*_band` is the half-width of the 95% band **around zero**, as `plot_acf` draws it (`confint − value`, `statsmodels/graphics/tsaplots.py:146`). `acf_band` widens with lag (Bartlett's formula); `pacf_band` is constant, 1.96/√n. At lag 0 both values are 1 and both bands are 0. |
+| `z` | number | the two-sided normal quantile for `alpha`, 1.959963984540054. Tied to `alpha` by a table both readers hold (`Z_FOR_ALPHA` in `payloads.py` and `contract.order.ts`): the pair must be one of its rows, exactly, and its only row is (0.05, 1.959963984540054). A new alpha needs a row in both readers |
+| `acf_settings` | `{fft: false, adjusted: false, bartlett_confint: true}` | `plot_acf`'s own defaults, which the course's picture uses (the `acf` function itself defaults to `fft: true`; the two agree to about 1e-16) |
+| `pacf_method` | string | `"ywm"`, `plot_pacf`'s default (the `pacf` function itself defaults to `"ywadjusted"`, which can leave [−1, 1]) |
+| `series[]` | `{transform, d, n, acf_outside_count, pacf_outside_count, rows[]}` | `transform` uses the same closed enum as `stationarity`, `d` matches it; sorted by d; `n` = observations of that series. The two counts (added in 1.3.0) are the number of rows flagged outside, lags 1 to `nlags`; both readers recount them |
+| `series[].rows[]` | `{lag, acf, pacf, acf_band, pacf_band, acf_outside, pacf_outside}` | exactly `nlags + 1` rows, `lag` 0…`nlags` in order. `acf` and `pacf` lie in [−1, 1] and are 1 at lag 0. `*_band` is the half-width of the 95% band **around zero**, as `plot_acf` draws it (upper limit minus value, `statsmodels/graphics/tsaplots.py:146`): 0 at lag 0 and positive after. `acf_band` is Bartlett's formula, z √((1 + 2 Σⱼ₍<ₖ₎ rⱼ²) / n), so it widens with the lag; `pacf_band` is z / √n at every lag. `*_outside` (added in 1.3.0) is Python's verdict that the bar reaches past its band: \|value\| > band, strictly, and never at lag 0. Both readers refuse a flag that disagrees with its value and band; the app draws the flag and never compares a value with its band itself |
+
+Readers: Python's `validate_acf_pacf` and the app's `parseAcfPacf`.
 
 ---
 
-### 3.6 `aic_grid` [M2]
+### 3.6 `aic_grid` [M2, implemented]
 
-Every (d, p, q, trend) fit on the training split, plus the selection and the pmdarima
-cross-check. **View:** 3D AIC landscape (one surface per d and trend; **one d at a time**, never
-two d on a shared AIC axis, because d is chosen by the unit-root tests and AIC is compared only
-within one d; ADR-0002 §3 gives the reason).
+Every (d, p, q, trend) fit on the training split, the selection and the pmdarima cross-check.
+**View:** the AIC landscape page (one surface per d, never two d on a shared AIC axis, because d is
+chosen by the unit-root tests and AIC is compared only within one d; ADR-0002 §3). Committed:
+AIC values and fit diagnostics, never a price.
 
 | Field | Type | Notes |
 |---|---|---|
 | `sample` | `"train"` | |
 | `n_train` | int | |
 | `criterion` | `"aic"` | |
-| `grid.p`, `grid.q` | int[] | `[0,1,2,3,4,5]` |
-| `grid.specs[]` | `{d, trends[]}` | `[{d:0, trends:["c"]}, {d:1, trends:["n","t"]}, {d:2, trends:["n"]}]` |
-| `fit_settings` | `{library: "statsmodels", version, method: "statespace", optimizer: "lbfgs", maxiter, enforce_stationarity: true, enforce_invertibility: true, simple_differencing: false, near_unit_root_threshold: 0.99}` | identical for every cell |
-| `cells[]` | see below | sorted by `d`, `trend`, `p`, `q` |
+| `grid.p`, `grid.q` | int[] | `[0,1,2,3,4,5]`, strictly ascending |
+| `grid.specs[]` | `{d, trends[]}` | `[{d:0, trends:["c"]}, {d:1, trends:["n","t"]}, {d:2, trends:["n"]}]`; sorted by d, trends in alphabetical order |
+| `fit_settings` | `{library: "statsmodels", version, model: "ARIMA", method: "statespace", optimizer: "lbfgs", maxiter: 200, enforce_stationarity: true, enforce_invertibility: true, concentrate_scale: false, simple_differencing: false, near_unit_root_threshold: 0.99, starts, random_starts, start_seed, keep_tolerance, nesting_tolerance}` | identical for every cell; a test checks each value against what statsmodels used. The last five (added in 1.3.0) describe the several starts of each cell (ADR-0002, "Revised in the milestone-2 fix round"): `starts` in words; `random_starts` and `start_seed` (ints ≥ 0); `keep_tolerance` (≥ 0), within which a converged run is kept over a higher unconverged one; `nesting_tolerance`, which must be 2e-3, the bound the readers apply |
+| `cells[]` | see below | exactly one per (d, trend, p, q) of the grid (144), sorted by d, then trend, then p, then q |
 | `selection` | see below | |
 | `pmdarima_check` | see below | always present |
 
-`cells[]` (144 rows):
+`cells[]`:
 
 | Field | Type | Notes |
 |---|---|---|
 | `d`, `p`, `q` | int | |
 | `trend` | closed enum `"n"`, `"c"`, `"t"` | statsmodels `ARIMA` trend codes; `"t"` with d = 1 is a drift |
-| `status` | closed enum `"ok"`, `"not_converged"`, `"near_unit_root"`, `"failed"` | only `"ok"` is eligible for selection |
-| `aic`, `aicc`, `bic`, `llf` | number, **nullable** | `null` only when `status == "failed"` |
-| `delta_aic` | number, **nullable** | `aic` minus the lowest eligible AIC **within the same d**; `null` if `aic` is null or the d has no eligible cell |
-| `k_params` | int | estimated parameters, including `sigma2` |
-| `nobs_effective` | int, **nullable** | n_train − d; `null` when failed |
+| `status` | closed enum `"ok"`, `"not_converged"`, `"near_unit_root"`, `"failed"` | only `"ok"` is eligible. Precedence: failed (the fit raised), then not_converged (`converged` false), then near_unit_root (an inverse root modulus above the threshold), then ok. Both readers recompute it from the fields below |
+| `reason` | string, **nullable** | `null` exactly when `ok`; otherwise why, in words (the warnflag, the root moduli, or "the fit raised an error") |
+| `k_params` | int | p + q + (1 if trend is not `"n"`) + 1 for `sigma2`; known even for a failed fit |
+| `aic`, `aicc`, `bic`, `llf` | number, **nullable** | `null` exactly when `failed` |
+| `delta_aic` | number, **nullable** | `aic` minus the lowest `aic` among `ok` cells of the **same d**; `null` if `aic` is null or the d has no ok cell. Both readers recompute every value exactly (double subtraction is the same in both languages) |
+| `nobs_effective` | int, **nullable** | `n_train − d`; `null` when failed |
 | `converged` | bool, **nullable** | `mle_retvals["converged"]`; `null` when failed |
-| `max_inv_root_ar`, `max_inv_root_ma` | number, **nullable** | largest modulus of the inverse roots; `null` when p (or q) is 0 or the fit failed |
-| `warnings[]` | `{category, message}[]` | every warning raised during the fit, in order; empty if none |
-| `error` | string, **nullable** | exception text when `failed`, otherwise `null` |
+| `iterations`, `warnflag` | int, **nullable** | L-BFGS's iteration count and scipy's `warnflag` (0 converged, 1 a limit reached, 2 stopped for another reason); `null` when failed |
+| `max_inv_root_ar`, `max_inv_root_ma` | number, **nullable** | largest modulus of the inverse roots; `null` exactly when p (or q) is 0 or the fit failed |
+| `warnings[]` | `{category, message}[]` | every warning raised while building the model and during the kept run, in order; empty if none |
+| `error` | string, **nullable** | `"<ExceptionType>: <message>"` when `failed`, otherwise `null` |
+| `start` | string, **nullable** | added in 1.3.0: the start the kept run came from: `"default"` (statsmodels' own), `"random <k>"` (the k-th seeded random start, k ≤ `random_starts`, only when p and q are both ≥ 1), or `"nested (p, d, q) <trend>"` (a model of the grid one step smaller: the next smaller p, the next smaller q, or no trend, its estimates padded with zeros), optionally with `", perturbed +"` or `", perturbed -"` (the new AR or MA coefficients set to small seeded values of that sign; not on the trend step); each optionally followed by `", polished"` (that run did not converge and was restarted once from its own estimates). Or `"polished from (p, d, q) <trend>"`: won in the polish stage, from that cell's estimates (same d, any cell of the grid, the cell itself included), by Nelder-Mead then L-BFGS. `null` exactly when `failed`. Both readers check the grammar, that a nested start is one step smaller, and that a polish-stage source is a cell of the same d |
+| `params` | object, **nullable** | added in 1.3.0: the kept run's estimates by statsmodels' parameter name, exactly `k_params` finite numbers; `null` exactly when `failed`. A cell won in the polish stage cannot be replayed from its label alone; its likelihood is checked at these values |
+| `starts_tried` | int ≥ 1 | added in 1.3.0: how many runs the cell made, the polish included |
 
-`selection`:
+**The nesting rule** (both readers, 1.3.0). A cell *nests* another when it has the same d, no fewer
+AR and MA lags, and the same trend or a trend where the other has none: setting its extra
+coefficients to zero gives the smaller model exactly. So its maximised log-likelihood cannot be
+lower. Both readers refuse a file in which any fitted cell's `llf` is below that of a cell it nests
+by more than 2e-3, whatever the two cells' statuses: a lower value is a local optimum. The bound is
+pinned in each reader (`NESTING_TOLERANCE`), not read from the file, and a file whose
+`fit_settings.nesting_tolerance` states another value is refused. The milestone-2 review found 86 such pairs among the `ok` cells of d = 1 in the 1.2.0
+file.
+
+`selection` (both readers re-derive each part from `cells` and refuse a mismatch):
 
 | Field | Type | Notes |
 |---|---|---|
-| `d_selected` | int | must equal `stationarity.decision.d_selected` (a test checks this) |
-| `order` | `[p, d, q]` ints | |
+| `d_selected` | int | one of the grid's d; equal to `stationarity.decision.d_selected` (a test checks this) |
+| `order` | `[p, d, q]` ints | the lowest-AIC ok cell of `d_selected`; ties: fewer parameters, then smaller p + q, then smaller p, then the trend code |
 | `trend` | closed enum, as above | |
-| `aic` | number | |
-| `rule` | string | for example "lowest AIC among status=ok cells with d = 1; ties: fewer parameters, then smaller p+q" |
-| `within_2_aic[]` | `{p, q, trend, aic, delta_aic}` | near-ties within the selected d, sorted by AIC |
-| `best_per_d[]` | `{d, p, q, trend, aic}`, **nullable** entries | for display only; the app must label these "AIC is not used to choose d" |
+| `aic`, `bic`, `k_params` | number, number, int | the chosen cell's |
+| `rule` | string | the rule in words |
+| `within_2_aic[]` | `{p, q, trend, aic, delta_aic}` | every ok cell of `d_selected` with `delta_aic` ≤ 2, the chosen one included, in rank order |
+| `bic_choice` | `{p, q, trend, aic, bic}` | the ok cell of `d_selected` with the lowest BIC (same tie rule), for the write-up |
+| `best_per_d[]` | `{d, cell: {p, q, trend, aic} \| null}` | one per grid d in order; `cell` is **nullable** (no ok cell). For display only: the app labels it "AIC is not used to choose d" |
+| `status_counts[]` | `{d, ok, not_converged, near_unit_root, failed}` | one per grid d in order |
 
 `pmdarima_check`:
 
 | Field | Type | Notes |
 |---|---|---|
 | `status` | closed enum `"ok"`, `"unavailable"` | |
-| `reason` | string, **nullable** | import or runtime error when unavailable |
+| `reason` | string, **nullable** | null when ok; the import or runtime error when unavailable |
 | `version` | string, **nullable** | |
-| `runs[]` | `{label, settings, order, with_intercept, aic, visited[]}` | `label` open enum: `"course"` (`test="adf"`), `"defaults"` (`test="kpss"`). `settings` echoes every argument passed. `visited[]` = `{order: [p,d,q], with_intercept: bool, aic}`, the fits the stepwise search kept: pmdarima's `return_valid_fits=True` leaves out failed fits and fits whose AIC its root test set to infinity (`pmdarima/arima/_auto_solvers.py:42-43, 564-566`). Empty array when unavailable. |
-| `agreement` | `{d: bool, order: bool, aic_gap_same_order}`, **nullable** | `aic_gap_same_order` = pmdarima's AIC minus our AIC for pmdarima's chosen order with the matching trend; expected within ±1. It is not always near 0: on a near-cancelling ARMA(1,1) the two optimisers can stop at opposite ends of a flat ridge (ADR-0002 §7: φ ≈ 0.818 against φ ≈ 0.004, an AIC gap of 0.48) |
+| `runs[]` | see below | non-empty when ok, empty when unavailable |
+
+`runs[]`: `{label, settings, order, with_intercept, trend, aic, converged, iterations, visited[], warnings[], agreement}`.
+`label` is an **open** enum: `"course"` (the course's arguments, `test="adf"`, start (1, 1)) and
+`"defaults"` (pmdarima's defaults plus `seasonal=False`). `settings` echoes every argument passed,
+`return_valid_fits: true` included (the course's `trace=True` only prints and is not passed). `trend`
+is our code for pmdarima's model, **nullable**: `"n"` without an intercept, `"c"` with one at d = 0, `"t"`
+with one at d = 1, `null` at d = 2 (no matching cell). `converged` and `iterations` describe the chosen
+model's fit. `visited[]` = `{order, with_intercept, aic}`, the fits the stepwise search kept, best
+first: `return_valid_fits=True` leaves out failed fits and fits whose AIC its root test set to
+infinity (`pmdarima/arima/_auto_solvers.py:42-43, 564-566`); the first entry is the chosen model.
+`agreement` = `{d, order, trend, same_order_status, aic_gap_same_order}`: three booleans comparing
+the run with `selection`, the status of our cell with the same (p, d, q, trend) (**nullable**), and
+pmdarima's AIC minus that cell's (**nullable**). The gap is not always near 0. On AAPL the default run's
+(2, 1, 2) fit stopped at pmdarima's `maxiter=50` without converging, and the gap is +7.56 (milestone-2
+walkthrough).
+
+Readers: Python's `validate_aic_grid` and the app's `parseAicGrid`.
 
 ---
 
@@ -435,8 +493,8 @@ Forecast accuracy per method and segment. **View:** metrics table beside the for
 | Envelope valid before writing | `export_app_data.py` → `contract.validate_envelope` | malformed envelope |
 | Both readers agree on every envelope | pytest and vitest each run `app/src/test/fixtures/envelope_cases.json` (§1) | a rule changed in `contract.py` or `contract.ts` but not in the other |
 | No NaN/Infinity, no unsafe integers | `contract.dumps` (`allow_nan=False`, plus the ±(2^53 − 1) integer check) | failed calculations leaking into JSON; integers the browser would round |
-| Payload shape per artifact | `src/arima_forecasting/payloads.py` (`validate_meta`, `validate_prices`, `validate_eda`), run by the exporter on every payload before writing, by `read_artifact` and `--check`, and by pytest | Python-side shape drift |
+| Payload shape per artifact | `src/arima_forecasting/payloads.py` (`validate_meta`, `validate_prices`, `validate_eda`, `validate_stationarity`, `validate_acf_pacf`, `validate_aic_grid`), run by the exporter on every payload before writing, by `read_artifact` and `--check`, and by pytest | Python-side shape drift |
 | Both readers agree on every payload | pytest and vitest each run `app/src/test/fixtures/payload_cases.json` (§1): integral floats such as `4.0` count as integers (JavaScript cannot tell them apart), integers beyond ±(2^53 − 1) and numbers too big for a double are refused, and "blank" is one explicit whitespace class on both sides | a payload rule changed in `payloads.py` or `contract.payloads.ts` but not in the other |
-| App parses the **real** files | vitest, `app/src/lib/contract.realdata.test.ts`: every file in `app/public/data/` through the production `parseEnvelope`, its `artifact` equal to the file stem, its payload through that artifact's parser (`parseMeta`, `parsePrices`, `parseEda`; an artifact with no registered parser fails), and the set of files equal to `meta.data.artifacts` less the held ones that are absent (each such file gets a skipped test that says why) | Python changed, app not updated |
-| Files are current | `tools/export_app_data.py --check`: regenerate from the raw snapshot, compare `schema_version`, `artifact`, `data`, and the set of files, and refuse a file the app would refuse (its envelope and payload are validated too); exit 1 on a difference, 2 without a snapshot. Without the snapshot, `tests/test_committed_artifacts.py` checks every step after it: `meta.json` = `meta_payload()`, and `prices.json` and `eda.json`, where present, equal what the current code builds from `prices.json`'s own closes | code changed, nobody re-exported |
-| Cross-artifact consistency | pytest: `aic_grid.selection.d_selected == stationarity.decision.d_selected`; `forecasts` dates ⊂ `prices` dates; every `methods[].model_id` exists in `fit` | artifacts disagreeing with each other |
+| App parses the **real** files | vitest, `app/src/lib/contract.realdata.test.ts`: every file in `app/public/data/` through the production `parseEnvelope`, its `artifact` equal to the file stem, its payload through that artifact's parser (`parseMeta`, `parsePrices`, `parseEda`, `parseStationarity`, `parseAcfPacf`, `parseAicGrid`; an artifact with no registered parser fails), and the set of files equal to `meta.data.artifacts` less the held ones that are absent (each such file gets a skipped test that says why) | Python changed, app not updated |
+| Files are current | `tools/export_app_data.py --check`: regenerate from the raw snapshot, compare `schema_version`, `artifact`, `data`, and the set of files, and refuse a file the app would refuse (its envelope and payload are validated too); exit 1 on a difference, 2 without a snapshot. It refits all 144 grid cells, so it takes about a minute (59.2 s measured on 2026-10-29). Without the snapshot, `tests/test_committed_artifacts.py` checks every step after it: `meta.json` = `meta_payload()`; `prices.json` and `eda.json`, where present, equal what the current code builds from `prices.json`'s own closes; where `prices.json` is present, `stationarity.json` and `acf_pacf.json` equal a fresh computation and a sample of grid cells refits exactly; and in every copy the committed selection and d follow from the committed cells and tests | code changed, nobody re-exported |
+| Cross-artifact consistency | pytest (`tests/test_committed_artifacts.py`, in every copy): `aic_grid.selection.d_selected == stationarity.decision.d_selected`, and the three milestone-2 files describe the same training rows; planned: `forecasts` dates ⊂ `prices` dates, every `methods[].model_id` exists in `fit` | artifacts disagreeing with each other |

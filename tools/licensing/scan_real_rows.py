@@ -21,7 +21,8 @@ price data; they are reported with their rule number so the two kinds can be tol
 
 It prints only ``file:line`` and the rule number, never the text that matched. Exit 0 clean,
 1 something flagged by rules 1 to 3, 2 no raw data to compare with. It is not a test: a fresh clone
-has no raw data. Run it before every commit that touches data, docs or fixtures.
+has no raw data. Since the owner's decision of 2026-10-29 (DATA.md) it is an optional tool, not a
+gate: the exported data is committed, and tests/test_repo_data.py guards the raw files instead.
 """
 
 from __future__ import annotations

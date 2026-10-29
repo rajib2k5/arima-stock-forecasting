@@ -8,12 +8,15 @@ the snapshot:
 - prices.json is exactly what prices_payload() builds from prices.json's own close series, so the
   log, the split and the segment labels match the current code;
 - eda.json is exactly what eda_payload() builds from the training rows of prices.json, so a change
-  to the summary, the KDE or the decomposition code fails here until someone re-exports.
+  to the summary, the KDE or the decomposition code fails here until someone re-exports;
+- stationarity.json and acf_pacf.json are exactly what the current code builds from those rows, and
+  in aic_grid.json a sample of cells (the choice, BIC's choice, the best of each d and one cell of
+  each status) refits to the same values. All 144 cells are refitted by `--check` (about a minute).
 
-The owner gate (ADR-0001): prices.json and eda.json are git-ignored until the owner decides whether
-Yahoo-derived prices may be published, so a fresh clone has only meta.json. A test that needs a held
-file SKIPS with a message that names the file and the commands that build it. A missing file that
-is not held FAILS: only the gate may explain an absence.
+Every exported file is committed (the owner's decision of 2026-10-29, DATA.md), so all of these
+tests run in every copy, a fresh clone included. The held-artifact mechanism stays: a file that
+meta.data.held_artifacts names and this copy lacks would SKIP with a message that names it and the
+commands that build it, and a missing file that is not held FAILS. Since 2026-10-29 none is held.
 
 The one step not covered is the snapshot -> close series step (normalize_download and clean_close).
 JSON keeps every float exactly (Python writes the shortest repr that reads back to the same
@@ -28,9 +31,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from arima_forecasting import selection, stationarity
 from arima_forecasting.artifacts import read_artifact, table_from_prices
 from arima_forecasting.contract import SCHEMA_VERSION
 from arima_forecasting.export import ARTIFACTS, HELD_ARTIFACTS, eda_payload, meta_payload, prices_payload
+from arima_forecasting.identification import acf_pacf_payload
 from arima_forecasting.prep import price_table
 
 REPO = Path(__file__).resolve().parent.parent
@@ -47,8 +52,8 @@ BUILD_HINT = (
 
 def held_reason(name: str) -> str:
     return (
-        f"{name}.json is not in this copy: it is git-ignored until the owner decides whether "
-        f"Yahoo-derived prices may be published (ADR-0001). {BUILD_HINT}"
+        f"{name}.json is not in this copy: meta.data.held_artifacts names it as written by the export "
+        f"but not committed (ADR-0001). {BUILD_HINT}"
     )
 
 
@@ -103,9 +108,9 @@ def test_eda_json_used_the_training_rows_and_nothing_after_them():
     assert (summary["n"], summary["start"], summary["end"]) == (train["n"], train["start"], train["end"])
 
 
-@pytest.mark.parametrize("name", ["prices", "eda"])
+@pytest.mark.parametrize("name", [name for name in ARTIFACTS if name != "meta"])
 def test_each_data_file_is_within_the_size_budget(name):
-    load(name)  # skips with the owner-gate message when the file is held and absent
+    load(name)  # would skip with the held message if the file were held and absent
     size = (APP_DATA / f"{name}.json").stat().st_size
     assert size <= SIZE_BUDGET_BYTES, f"{name}.json is {size:,} bytes; contract.md sets a 1 MB budget"
 
@@ -127,3 +132,92 @@ def test_table_from_prices_keeps_the_dates_and_floats():
     assert table.index.tolist() == [pd.Timestamp("2015-01-02"), pd.Timestamp("2024-01-02")]
     assert table["close_usd"].tolist() == [10.123456789012345, 20.5]  # made-up values
     assert table["segment"].tolist() == ["train", "oos"]
+
+
+# --- milestone 2: stationarity, acf_pacf and aic_grid -----------------------------------------
+
+def train_log_close():
+    prices = load("prices")["data"]
+    table = table_from_prices(prices)
+    return table.loc[table["segment"] == "train", "log_close"].to_numpy()
+
+
+def test_the_order_selection_files_are_committed_not_held():
+    for name in ("stationarity", "acf_pacf", "aic_grid"):
+        assert name not in HELD_ARTIFACTS
+        assert (APP_DATA / f"{name}.json").is_file(), f"{name}.json is missing; re-export"
+
+
+def test_stationarity_json_is_what_the_current_code_builds_from_the_training_rows():
+    assert stationarity.stationarity_payload(train_log_close()) == load("stationarity")["data"]
+
+
+def test_acf_pacf_json_is_what_the_current_code_builds_from_the_training_rows():
+    assert acf_pacf_payload(train_log_close()) == load("acf_pacf")["data"]
+
+
+def test_a_sample_of_aic_grid_cells_refits_to_the_committed_values():
+    y = train_log_close()
+    grid = load("aic_grid")["data"]
+    cells = {(c["d"], c["p"], c["q"], c["trend"]): c for c in grid["cells"]}
+    s = grid["selection"]
+    sample = {(s["d_selected"], s["order"][0], s["order"][2], s["trend"])}
+    sample.add((s["d_selected"], s["bic_choice"]["p"], s["bic_choice"]["q"], s["bic_choice"]["trend"]))
+    sample |= {(e["d"], e["cell"]["p"], e["cell"]["q"], e["cell"]["trend"]) for e in s["best_per_d"] if e["cell"]}
+    for status in selection.STATUSES:
+        first = next((key for key, c in cells.items() if c["status"] == status), None)
+        if first:
+            sample.add(first)
+    assert len(sample) >= 5
+    for key in sorted(sample):
+        # From the recorded winning start alone (and, for a nested start, the cells it came from).
+        refit, _ = selection.refit_cell(y, grid["cells"], key)
+        committed = {k: v for k, v in cells[key].items() if k != "delta_aic"}
+        if selection.replayable(grid["cells"], key):
+            assert refit == committed, key
+        else:  # won in the polish stage: its recorded parameters must give its log-likelihood
+            assert refit["llf"] == pytest.approx(committed["llf"], abs=1e-6), key
+
+
+def test_aic_grid_json_is_the_grid_adr_0002_specifies():
+    grid = load("aic_grid")["data"]
+    assert grid["grid"] == {"p": list(range(6)), "q": list(range(6)), "specs": [{"d": 0, "trends": ["c"]}, {"d": 1, "trends": ["n", "t"]}, {"d": 2, "trends": ["n"]}]}
+    assert len(grid["cells"]) == 144
+    assert grid["fit_settings"] == selection.FIT_SETTINGS
+
+
+def test_the_committed_selection_follows_from_the_committed_cells():
+    # Pure: re-rank the committed cells with the current code; needs aic_grid.json only.
+    grid = load("aic_grid")["data"]
+    cells = [dict(c) for c in grid["cells"]]
+    for c in cells:
+        c.pop("delta_aic")
+    selection.add_delta_aic(cells)
+    assert [c["delta_aic"] for c in cells] == [c["delta_aic"] for c in grid["cells"]]
+    specs = [(spec["d"], tuple(spec["trends"])) for spec in grid["grid"]["specs"]]
+    assert selection.select(cells, grid["selection"]["d_selected"], specs) == grid["selection"]
+
+
+def test_the_committed_d_follows_from_the_committed_tests_and_both_files_use_it():
+    st = load("stationarity")["data"]
+    for t in st["transforms"]:
+        assert t["verdict"] == stationarity.verdict(t["adf"]["reject_unit_root"], t["kpss"]["reject_stationarity"])
+    d, conflict = stationarity.decide_d(st["transforms"])
+    assert (st["decision"]["d_selected"], st["decision"]["tests_conflict"]) == (d, conflict)
+    assert load("aic_grid")["data"]["selection"]["d_selected"] == d
+
+
+def test_the_three_files_describe_the_same_training_rows():
+    st, ap, grid = (load(name)["data"] for name in ("stationarity", "acf_pacf", "aic_grid"))
+    assert st["n_train"] == grid["n_train"] == ap["series"][0]["n"]
+    assert [s["n"] for s in ap["series"]] == [t["n"] for t in st["transforms"]]
+    assert load("prices")["data"]["splits"]["train"]["n"] == st["n_train"]
+
+
+def test_no_committed_cell_sits_at_the_optimum_of_a_model_it_nests():
+    # The round-2 review found seven cells whose llf equalled, to 1e-6, a model one step smaller: a
+    # zero-padded start that L-BFGS never left. Perturbed starts and the polish stage remove that.
+    cells = [c for c in load("aic_grid")["data"]["cells"] if c["llf"] is not None]
+    key = lambda c: (c["d"], c["p"], c["q"], c["trend"])  # noqa: E731
+    ties = [(key(s), key(b)) for b in cells for s in cells if selection.nests(key(s), key(b)) and abs(b["llf"] - s["llf"]) <= selection.TIE]
+    assert ties == []

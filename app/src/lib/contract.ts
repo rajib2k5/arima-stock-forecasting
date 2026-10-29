@@ -51,8 +51,8 @@ export interface Meta {
   milestones: Milestone[]
   artifacts: string[]
   /**
-   * Artifacts the export wrote that the repository does not commit (the owner gate in ADR-0001),
-   * so a fresh clone lacks them. Added in 1.1.0; a 1.0.x file has no such key and reads as [].
+   * Artifacts the export wrote that the repository does not commit (ADR-0001), so a copy may lack
+   * them. Added in 1.1.0; a 1.0.x file has no such key and reads as []. Empty since 2026-10-29.
    */
   held_artifacts: string[]
 }

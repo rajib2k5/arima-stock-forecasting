@@ -26,6 +26,21 @@ class ArtifactError(ValueError):
     """A file is missing, is not JSON, or breaks the contract."""
 
 
+def _refuse_constant(token: str) -> None:
+    raise ValueError(f"{token} is not JSON (the app's JSON.parse refuses it)")
+
+
+def loads_strict(text: str) -> Any:
+    """json.loads as the app's JSON.parse reads a file: NaN, Infinity and -Infinity are refused.
+
+    Python's json.loads accepts those three tokens by default, so without this a file the app
+    cannot even parse could pass every Python check (an unknown key is ignored by both readers,
+    so a NaN under one was the milestone-2 review's example). Raises ValueError, which includes
+    json.JSONDecodeError.
+    """
+    return json.loads(text, parse_constant=_refuse_constant)
+
+
 def find_app_data(start: Path | None = None) -> Path:
     """The repo's app/public/data folder, found from `start` (default: the current folder) upward.
 
@@ -45,8 +60,8 @@ def read_artifact(folder: Path, name: str) -> dict[str, Any]:
     if not path.is_file():
         raise ArtifactError(f"{path} does not exist")
     try:
-        envelope = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as error:
+        envelope = loads_strict(path.read_text(encoding="utf-8"))
+    except ValueError as error:
         raise ArtifactError(f"{path} is not valid JSON: {error}") from error
     problems = validate_envelope(envelope)
     if not problems and envelope["artifact"] != name:
@@ -128,8 +143,8 @@ def compare_exports(folder: Path, regenerated: Mapping[str, Mapping[str, Any]]) 
             problems.append(f"{name}: {path} is missing")
             continue
         try:
-            committed = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as error:
+            committed = loads_strict(path.read_text(encoding="utf-8"))
+        except ValueError as error:
             problems.append(f"{name}: {path} is not valid JSON ({error})")
             continue
         if not isinstance(committed, dict):

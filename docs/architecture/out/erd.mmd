@@ -76,17 +76,13 @@ erDiagram
         text id PK
         text artifact FK
         int d
+        int n
+        float64 adf_statistic
         float64 adf_p_value
+        float64 kpss_statistic
         float64 kpss_p_value
         text kpss_p_value_bound "nullable"
         text verdict
-    }
-    stationarity_row {
-        text transform PK, FK
-        date date PK, FK
-        float64 value
-        float64 roll12_mean "nullable"
-        float64 roll252_mean "nullable"
     }
     acf_pacf_row {
         text transform PK, FK
@@ -103,6 +99,7 @@ erDiagram
         text trend PK
         text artifact FK
         text status
+        text reason "nullable"
         float64 aic "nullable"
         float64 delta_aic "nullable"
         bool converged "nullable"
@@ -156,7 +153,6 @@ erDiagram
     meta ||--|{ meta_milestone : "milestones"
     meta ||--|{ meta_artifact : "artifacts"
     envelope ||--|| meta_artifact : "names"
-    unit_root_test ||--|{ stationarity_row : "series"
     unit_root_test ||--|{ acf_pacf_row : "lags"
     forecast_method ||--|{ forecast_row : "forecasts"
     forecast_method ||--|{ metric_row : "scored"
@@ -164,7 +160,6 @@ erDiagram
     price_row ||--o{ decomposition_row : ""
     envelope ||--o{ decomposition_row : ""
     envelope ||--o{ unit_root_test : ""
-    price_row ||--o{ stationarity_row : ""
     envelope ||--o{ aic_cell : ""
     envelope ||--o{ fit_param : ""
     price_row ||--o{ residual_row : ""

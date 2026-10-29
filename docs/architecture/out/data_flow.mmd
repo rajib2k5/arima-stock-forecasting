@@ -10,6 +10,7 @@ flowchart TB
     splitpos["Split by position\n90#37; train / 10#37; test + OOS"]
     edastats["EDA\nsummary, KDEs, decomposition"]
     unitroot[["ADF + KPSS\ntrain only → d"]]
+    acfpacf["ACF + PACF\ntrain only, 95#37; bands"]
     grid[["AIC grid\np, q 0–5, trend, per d"]]
     autoarima[["auto_arima check\ntrain only"]]
     fitmodel[["Fit ARIMA\nstatsmodels, order + trend"]]
@@ -27,6 +28,7 @@ flowchart TB
     splitpos -->|"train"| unitroot
     splitpos -->|"train"| edastats
     unitroot -->|"d fixed"| grid
+    splitpos -->|"train"| acfpacf
     splitpos -->|"train"| autoarima
     autoarima -.->|"cross-check"| grid
     grid -->|"lowest AIC"| fitmodel
@@ -41,6 +43,7 @@ flowchart TB
     backtx -.->|"forecasts"| artifacts
     grid -.->|"aic_grid"| artifacts
     unitroot -.->|"stationarity"| artifacts
+    acfpacf -.->|"acf_pacf"| artifacts
     splitpos -.->|"prices"| artifacts
     edastats -.->|"eda"| artifacts
     classDef source fill:#E0F2FE,stroke:#0284C7,color:#0F172A
@@ -48,14 +51,15 @@ flowchart TB
     classDef store fill:#FEF3C7,stroke:#D97706,color:#0F172A
     class snapshot store
     classDef process fill:#E0E7FF,stroke:#4F46E5,color:#0F172A
-    class closepx,logpx,diffs,splitpos,edastats,backtx,scoring process
+    class closepx,logpx,diffs,splitpos,edastats,acfpacf,backtx,scoring process
     classDef model fill:#EDE9FE,stroke:#7C3AED,color:#0F172A
     class unitroot,grid,autoarima,fitmodel,static,walkfwd,randwalk model
     classDef output fill:#D1FAE5,stroke:#059669,color:#0F172A
     class artifacts output
-    linkStyle 9 stroke:#94A3B8
-    linkStyle 19 stroke:#94A3B8
+    linkStyle 10 stroke:#94A3B8
     linkStyle 20 stroke:#94A3B8
     linkStyle 21 stroke:#94A3B8
     linkStyle 22 stroke:#94A3B8
     linkStyle 23 stroke:#94A3B8
+    linkStyle 24 stroke:#94A3B8
+    linkStyle 25 stroke:#94A3B8

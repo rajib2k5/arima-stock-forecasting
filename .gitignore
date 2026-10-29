@@ -14,11 +14,9 @@
 *.csv.gz
 *.parquet
 
-# Owner gate (ADR-0001): Yahoo-derived prices are not committed until the owner decides whether
-# they may be published. The exporter still writes these two files locally. eda.json is held too,
-# because its decomposition rows carry observed_log, the training log closes themselves.
-/app/public/data/prices.json
-/app/public/data/eda.json
+# The exported JSON in app/public/data/ is committed, prices.json and eda.json included: the owner
+# decided on 2026-10-29 that the real data the app and the docs need goes into the repo (DATA.md).
+# Bulk raw files stay out: the rules above, and tests/test_repo_data.py, which fails if git tracks one.
 
 # Secrets
 .env

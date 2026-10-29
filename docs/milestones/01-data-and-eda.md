@@ -37,8 +37,10 @@ carry all of that to the app under schema `1.1.0`. The app has its first data-dr
 **Price explorer**: the price on a dollar or log axis with the three segments shaded, and side
 panels for both KDEs and all four decomposition parts.
 
-**The owner gate.** Whether Yahoo-derived prices may go into this public repository is the owner's
-decision, and it is not made yet (ADR-0001). So `prices.json` and `eda.json` are **not committed**:
+**The owner gate.** Whether Yahoo-derived prices may go into this public repository was the owner's
+decision. **Update: the owner decided on 2026-10-29 to commit them** (ADR-0001, `DATA.md`): since
+milestone 2 both files are committed and `held_artifacts` is empty. What follows describes milestone 1,
+when the decision was open. Then `prices.json` and `eda.json` were **not committed**:
 both are git-ignored and built locally by two commands. `eda.json` is held too, because its
 decomposition rows carry `observed_log`, the training log closes themselves. The committed
 `meta.json` names both in `held_artifacts`. A fresh clone therefore passes every gate, the tests
@@ -62,7 +64,7 @@ is not built in this copy and how to build it.
 | **EDA on the training segment only** | The course's whole-series EDA | What you notice in the test period can shape the model you pick (ADR-0002 §1) | The summary covers 2015-01-02 to 2023-02-03, not the course's full window |
 | **Two KDEs: `log_close` and `log_return`**, Scott's bandwidth, 200 points, grid ±3 bandwidths, a normal curve beside each | The course's KDE of the dollar close; pandas' default grid (1,000 points over ±50% of the range); scipy's `'silverman'` | The log return is the series a model sees and shows the fat tails; the normal curve makes them visible without the app computing anything | The course's own dollar-close KDE is not drawn (the open enum allows adding it later) |
 | **Additive decomposition of `log_close`**; the course's multiplicative-on-logs version only in the notebook and the docs | Ship both decompositions in `eda.json` | The additive model on logs is the meaningful one; the comparison is a teaching point, not a view | The app cannot show the course's version |
-| **`prices.json` and `eda.json` on hold** (git-ignored; named in `meta.data.held_artifacts`) | Commit them (the first version, a default that redistributed the prices); build them in CI; commit only aggregates (ADR-0001) | The owner has not decided whether Yahoo-derived prices may be published here | A fresh clone must run two commands before the explorer or notebook 01 show data |
+| **`prices.json` and `eda.json` on hold** (git-ignored; named in `meta.data.held_artifacts`) | Commit them (the first version, a default that redistributed the prices); build them in CI; commit only aggregates (ADR-0001) | The owner had not decided yet. (Decided on 2026-10-29: committed, from milestone 2.) | A fresh clone must run two commands before the explorer or notebook 01 show data |
 | **`meta.json` lists all three artifacts and names the two held ones** | List only `meta` | `meta` describes what the export writes, so a local export and the committed file agree; `held_artifacts` lets the app and the tests tell "not built here" from "broken" | One more meta field (a 1.1.0 addition; a 1.0.x file reads as `[]`) |
 | **`--check` in the exporter**, which also refuses a file the app would refuse; **plus an offline test of the files** | Only `--check` (needs the snapshot); download in CI | `--check` covers the whole chain where the snapshot exists; `test_committed_artifacts.py` covers every step after it wherever the files exist | The snapshot → close step is checked only where the snapshot exists |
 | **`source_commit` is the last commit outside `app/public/data`** | HEAD (the first version) | With HEAD, a re-export at the JSON commit rewrote `source_commit` in every file, so the committed JSON never reproduced from its own commit (the review's probe); now it does, byte for byte (tested) | A shallow clone whose only commit is a JSON commit stamps that commit |
@@ -551,8 +553,9 @@ The scanner (`tools/licensing/scan_real_rows.py`, added by the hub) compares eve
 would commit with the local raw snapshots and prints only `file:line` and a rule number: a copied
 price (rules 1-3), or a raw file size or snapshot hash (rules 4-5). Before the second fix round it
 flagged 9 price lines and 4 provenance lines; they were replaced by made-up values in tests, and by
-derived statistics or "see your local `data/` manifest" in the docs. Run it before every commit
-that touches data, docs or fixtures.
+derived statistics or "see your local `data/` manifest" in the docs. (Since the owner's decision of
+2026-10-29 the scanner is an optional tool, not a gate; `tests/test_repo_data.py` guards the raw
+files instead. See `DATA.md`.)
 
 How a missing held file reaches the app, measured in the fresh clone after the first fix round: the
 Vite dev server and `vite preview` both answer `/data/prices.json` with `200 text/html` (their index
@@ -634,9 +637,9 @@ training rows above. It adds `stationarity`, `acf_pacf` and `aic_grid` under sch
 
 **Open for the owner:**
 
-- **`prices.json` and `eda.json` are on hold since 2026-10-29** (ADR-0001, "Open question for the
-  learner"; PR/FAQ question 2). Until the owner decides, they are built locally and never
-  committed. ADR-0001 says what lifting the hold changes.
+- **`prices.json` and `eda.json`: decided by the owner on 2026-10-29, committed** (ADR-0001,
+  "The owner's decision on the price files"; PR/FAQ question 2, answered; `DATA.md`). Milestone 2
+  commits them and empties `held_artifacts`; bulk raw files stay out.
 - **Python pins** (PR/FAQ question 5; concept note 01 §8): the current `uv.lock` pins stay, and every
   new or upgraded Python pin must be at least 14 days old on the day it is locked. Milestone 1
   added no dependency.
