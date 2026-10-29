@@ -52,7 +52,7 @@ two cannot drift apart.
 addition, and PATCH for a backward-compatible fix.
 
 For a JSON contract, the "API" is the *shape* that readers rely on. The contract's own table
-(`docs/architecture/contract.md:81-85`) applies semver like this:
+(`docs/architecture/contract.md:90-94`) applies semver like this:
 
 - **Breaking (major):** removing or renaming a field; changing its type, unit or meaning; making a
   non-nullable field nullable; adding a value to a *closed* enum (one the reader may switch over
@@ -61,7 +61,7 @@ For a JSON contract, the "API" is the *shape* that readers rely on. The contract
 - **Patch:** no shape change, such as fixing how a value is computed without changing what it means.
 
 Two design choices make this workable. First, the version describes shape, not content:
-re-exporting with new data never bumps it (`contract.md:78-79`). Second, units live in field
+re-exporting with new data never bumps it (`contract.md:87-88`). Second, units live in field
 names (`close_usd`, `log_close`), so a unit change *is* a rename, which is visibly major.
 
 "Adding a field is not breaking" is only true if old readers ignore fields they do not know. That
@@ -90,11 +90,11 @@ not to the other.
 
 - **The envelope's top level is closed.** Both readers, Python's `validate_envelope`
   (`src/arima_forecasting/contract.py:119-122`) and the app's `parseEnvelope`
-  (`app/src/lib/contract.ts:166-171`), reject a missing *or* an unknown top-level key. The five
+  (`app/src/lib/contract.ts:182-187`), reject a missing *or* an unknown top-level key. The five
   envelope keys are what every artifact shares and what the loader trusts before it reads any
-  payload, so a new one is a major bump (`docs/architecture/contract.md:43-47`).
+  payload, so a new one is a major bump (`docs/architecture/contract.md:44-48`).
 - **The `data` payload is open.** The app's payload parsers build a *new* object from the keys
-  they know (`contract.ts:176-179`, `:272`). Unknown keys inside `data` are ignored and not passed
+  they know (`contract.ts:192-195`, `:305`). Unknown keys inside `data` are ignored and not passed
   on, so a minor version can add a field without breaking an older app. Missing or wrongly typed
   known keys are still errors; tolerance is not coercion.
 
@@ -160,7 +160,7 @@ that with a `SyntaxError` for the whole document (measured). In the other direct
 `JSON.stringify({x: NaN, y: Infinity})` silently writes `{"x":null,"y":null}` (measured). Both
 directions lose information without the producer noticing. The contract's answer: `allow_nan=False`
 on export, and a missing value is an explicit `null` with a sibling field that says why
-(`docs/architecture/contract.md:67`).
+(`docs/architecture/contract.md:76`).
 
 The same binary64 format sets a second limit. Its 52 fraction bits (53 with the implicit leading
 bit) hold every integer exactly only up to $2^{53} - 1 = 9{,}007{,}199{,}254{,}740{,}991$, which
@@ -169,7 +169,7 @@ double, so `JSON.parse("9007199254740993")` gives `9007199254740992`, and the 31
 that Python writes happily becomes `Infinity` (both measured in Node 22). So `dumps` refuses any
 integer beyond ±(2^53 − 1), naming its path, after `json.dumps` has run
 (`src/arima_forecasting/contract.py:173-191`, the walk at `:152-170`;
-`docs/architecture/contract.md:36-41`). A value that really needs more digits must travel as a
+`docs/architecture/contract.md:37-42`). A value that really needs more digits must travel as a
 string.
 
 **Assumptions**
@@ -192,16 +192,16 @@ Sources of accidental difference, and the guard for each:
 - **The clock.** The [`SOURCE_DATE_EPOCH` specification](https://reproducible-builds.org/specs/source-date-epoch/)
   says: if this environment variable is set, a build must use it (seconds since 1970-01-01 00:00
   UTC, written like the output of `date +%s`) instead of the current time, and should exit with an
-  error if it is malformed. `build_time` does this (`src/arima_forecasting/provenance.py:93-112`).
+  error if it is malformed. `build_time` does this (`src/arima_forecasting/provenance.py:109-128`).
   Two exports with `SOURCE_DATE_EPOCH=1700000000` were byte-identical; without it, exactly one
   line, `generated_at`, differed (measured). The contract also bans wall-clock values inside
-  `data` (`contract.md:74`).
+  `data` (`contract.md:83`).
 - **The exporter's own output.** In a committed repo, the first export rewrites the tracked
   `meta.json`. If provenance counted that as a change, the second export of the same code would
   stamp `-dirty` and the two files would differ. Section 6 explains the exclusion that prevents
   it; `test_two_exports_with_a_fixed_source_date_epoch_are_byte_identical` checks the result.
 - **Random ids.** nbformat gives each new cell a random id; two calls gave `bd6a5883` and
-  `6e7f134d` (measured). The builder sets `cell-00`, `cell-01`, ... (`tools/build_notebooks.py:204`).
+  `6e7f134d` (measured). The builder sets `cell-00`, `cell-01`, ... (`tools/build_notebooks.py:403`).
 - **Key order.** `sort_keys=True` makes the bytes independent of dict insertion order
   (`contract.py:189`).
 - **Formatting.** Fixed two-space indent and exactly one trailing newline.
@@ -213,7 +213,7 @@ Sources of accidental difference, and the guard for each:
 - Python's `int()` is looser than the spec. The first version of `build_time` used it and
   accepted `"1_000"`, `" 5 "` and `"-86400"` (measured), so a typo like `1_700000000` would have
   been read as a real time instead of failing. It now accepts ASCII digits only
-  (`provenance.py:107`), and a test rejects those three plus `"5\n"`, `"+5"` and `"١٠"`.
+  (`provenance.py:123`), and a test rejects those three plus `"5\n"`, `"+5"` and `"١٠"`.
 - Byte identity has been checked only on one machine. Optimiser results in later milestones may
   differ in the last digits across CPUs or maths libraries; that is untested.
 
@@ -230,14 +230,16 @@ That only works if the code that ran **is** the commit. If the working tree had 
 staged, deleted or new untracked files), the SHA alone cannot reproduce the file, so
 `source_commit` appends `-dirty`. Untracked files count, because a new module the exporter imports
 changes its output. Not every tool agrees: `git describe --always --dirty` ignored an untracked
-file that `source_commit` flagged (measured). And if there is no commit at all, as in this repo
-today, there is no SHA to give, so the value is `uncommitted` rather than a fake.
+file that `source_commit` flagged (measured). And if there is no commit at all, as in a brand-new
+repository, there is no SHA to give, so the value is `uncommitted` rather than a fake. This repo
+was in that state until its first commit, `720705f`, on 2026-10-28; its first `meta.json` said
+`uncommitted`.
 
 **What "dirty" leaves out, and why.** The exporter writes into the repository, into
 `app/public/data/`. Provenance names the *code* that produced a file, and regenerating the output
 does not change the code. So the dirty check leaves out exactly that folder, with the pathspec
-`-- ':(top)' ':(exclude)app/public/data'` (`src/arima_forecasting/provenance.py:75-83`, reasons in
-the comment at `:64-71`). Without it, the first export would modify the tracked `meta.json` and
+`-- ':(top)' ':(exclude)app/public/data'` (`src/arima_forecasting/provenance.py:91-99`, reasons in
+the comment at `:80-87`). Without it, the first export would modify the tracked `meta.json` and
 the second would stamp `-dirty`: provenance would report the exporter's own footprint as a code
 change. The other half of the pathspec matters too. `':(top)'` is the whole repository; a bare
 `'.'` would limit the check to the folder `source_commit` was asked about, so a call from a
@@ -248,6 +250,13 @@ A file cannot contain the SHA of the commit that contains it: writing the SHA ch
 which changes the SHA. So the procedure is two commits: commit the code, export on the clean tree,
 commit the JSON (`docs/adr/0001-python-computes-app-visualises.md:157-162`).
 
+**Since milestone 1, the SHA is the last code commit, not HEAD.** `source_commit` asks
+`git log -1 -- ':(top)' ':(exclude)app/public/data'`: the last commit that touched anything outside
+the export folder. The JSON commit touches only that folder, so a re-export at the JSON commit
+stamps the same code commit and rewrites nothing; the committed files now reproduce from their own
+commit. Before, the stamp was HEAD, and the milestone-1 review showed that every re-export at the
+JSON commit rewrote `source_commit` in all three files: the procedure never reached a fixed point.
+
 **Assumptions**
 - The commit is pushed and stays reachable.
 - Ignored files do not affect the output.
@@ -257,7 +266,7 @@ commit the JSON (`docs/adr/0001-python-computes-app-visualises.md:157-162`).
   file never makes the tree dirty (`test_gitignored_files_do_not_make_the_tree_dirty`). That is why
   the planned `prices` artifact records the raw snapshot's SHA-256 too.
 - A file marked `git update-index --assume-unchanged` or `--skip-worktree` is invisible to
-  `git status`, so editing it does not make the tree dirty (`provenance.py:73-74`).
+  `git status`, so editing it does not make the tree dirty (`provenance.py:89-90`).
 - If the export folder ever held a hand-written file, a change to it would not count either.
   Today it holds only exporter output.
 - A rebase or force-push can make the recorded commit disappear.
@@ -316,7 +325,7 @@ Every dependency is code you run without reading. A *supply-chain attack* publis
 release of a real package, or a look-alike name, and waits for installs.
 
 - **Minimum release age.** The app's lock used only versions at least 14 days old on the lock day,
-  2026-10-28 (`app/README.md:89`). The bet is that a bad release is usually noticed and pulled
+  2026-10-28 (`app/README.md:93`). The bet is that a bad release is usually noticed and pulled
   within that time. Measured: of the 23 direct app dependencies, the youngest was `vite@7.3.7`,
   published 2026-10-06, 21.8 days before. Only direct dependencies were checked, not all 372 lock
   entries.
@@ -333,7 +342,7 @@ release of a real package, or a look-alike name, and waits for installs.
   blindly.
 - **Integrity hashes** stop a tampered file posing as a known version. They do not stop a
   malicious version that was genuinely published.
-- **The Python side does not apply the rule yet.** Measured against PyPI's upload times, 17 of
+- **The Python side: the old pins stay, new pins follow the rule.** Measured against PyPI's upload times, 17 of
   the 83 package versions in `uv.lock` were less than 14 days old when the lock was written
   (2026-10-28, 12:11 UTC). Two are direct dependencies: `pandas==3.1.0` (6.0 days) and
   `pytest==9.2.0` (0.6 days); the rest are transitive, such as `tzdata==2026.6`, uploaded 0.1 days
@@ -341,6 +350,10 @@ release of a real package, or a look-alike name, and waits for installs.
   pinned statistics stack, and the concept notes and ADRs cite that stack's behaviour at
   `file:line`, so every such citation would have to be re-checked. That is an owner decision,
   question 5 of the [PR/FAQ owner questions](../prfaq.md#open-questions-for-the-owner-to-settle-at-the-milestone-0-checkpoint).
+  **Default taken on 2026-10-29, which the owner can override:** keep the current `uv.lock` pins,
+  and require every Python pin that is added or upgraded from now on to be at least 14 days old on
+  the day it is locked. Milestone 1 added no Python dependency, so the rule has not yet had to
+  refuse anything.
 
 **Assumptions**
 - The advisory database is complete; transitive dependencies are as old as the direct ones (not
@@ -349,7 +362,8 @@ release of a real package, or a look-alike name, and waits for installs.
 **Where it breaks**
 - An old package can have an undiscovered flaw; age is not safety.
 - npm runs dependencies' install scripts by default, so `npm ci` itself executes third-party code.
-- The Python side has hashes in `uv.lock` but no minimum-age rule yet (next paragraph).
+- The Python side has hashes in `uv.lock`. Its minimum-age rule covers only new or upgraded pins,
+  and it is a written rule, not a tool setting: nothing such as uv's `exclude-newer` enforces it.
 
 ---
 

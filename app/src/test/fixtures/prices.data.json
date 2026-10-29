@@ -1,0 +1,27 @@
+{
+  "ticker": "AAPL",
+  "price_basis": "adjusted_close",
+  "source": {
+    "provider": "yahoo_via_yfinance",
+    "yfinance_version": "1.7.0",
+    "raw_sha256": "abababababababababababababababababababababababababababababababab",
+    "raw_rows": 6,
+    "downloaded_at": "2026-10-29T12:07:20Z",
+    "request": { "start": "2015-01-01", "end_exclusive": "2026-10-01", "interval": "1d", "auto_adjust": true }
+  },
+  "fill": { "method": "ffill", "filled_dates": ["2015-01-06"] },
+  "splits": {
+    "train_fraction": 0.9,
+    "train": { "start": "2015-01-02", "end": "2015-01-07", "n": 4 },
+    "test": { "start": "2015-01-08", "end": "2015-01-08", "n": 1 },
+    "oos": { "start": "2024-01-02", "end": "2024-01-02", "n": 1 }
+  },
+  "rows": [
+    { "date": "2015-01-02", "close_usd": 24.0, "log_close": 3.1781, "segment": "train" },
+    { "date": "2015-01-05", "close_usd": 23.5, "log_close": 3.1570, "segment": "train" },
+    { "date": "2015-01-06", "close_usd": 23.5, "log_close": 3.1570, "segment": "train" },
+    { "date": "2015-01-07", "close_usd": 24.0, "log_close": 3.1781, "segment": "train" },
+    { "date": "2015-01-08", "close_usd": 25.0, "log_close": 3.2189, "segment": "test" },
+    { "date": "2024-01-02", "close_usd": 185.0, "log_close": 5.2204, "segment": "oos" }
+  ]
+}

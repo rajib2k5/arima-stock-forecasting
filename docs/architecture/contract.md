@@ -5,9 +5,10 @@ The *why* behind the overall design is in [ADR-0001](../adr/0001-python-computes
 the order-selection rules that the `stationarity` and `aic_grid` artifacts expose are in
 [ADR-0002](../adr/0002-order-selection.md).
 
-**Status by artifact:** `meta` is implemented (milestone 0). Every other section is the
-**planned** shape. It is fixed enough to build against, and each milestone may refine it
-under the versioning policy below.
+**Status by artifact:** `meta` (milestone 0), `prices` and `eda` (milestone 1, schema `1.1.0`)
+are implemented, and their sections describe the shipped fields. Every other section is the
+**planned** shape. It is fixed enough to build against, and each milestone may refine it under
+the versioning policy below.
 
 ---
 
@@ -17,7 +18,7 @@ Every file is `app/public/data/<artifact>.json` and has exactly these five keys:
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "artifact": "meta",
   "generated_at": "2026-10-28T12:00:00Z",
   "source_commit": "0123456789abcdef0123456789abcdef01234567",
@@ -30,7 +31,7 @@ Every file is `app/public/data/<artifact>.json` and has exactly these five keys:
 | `schema_version` | string | Semver `MAJOR.MINOR.PATCH`. One version for the whole contract, shared by every file written in one export. The app accepts any `1.x.y` and refuses every other major. |
 | `artifact` | string | Matches `^[a-z][a-z0-9_]*$` on both sides (Python's `validate_envelope` and the app's `parseEnvelope`) and equals the file stem. The app also checks it against the file it asked for. |
 | `generated_at` | string | UTC, exactly `YYYY-MM-DDTHH:MM:SSZ`, and a date and time that exist. Both sides apply the same calendar rules: years 0001–9999, real month lengths and leap years, and no leap second (a seconds field of 60 is refused). The app checks them with plain calendar arithmetic, because JavaScript's `Date.UTC` reads years 0–99 as 1900–1999; the shared fixture below checks that the two sides agree. Taken from `SOURCE_DATE_EPOCH` when that is set (see "Byte-identical re-exports" below). |
-| `source_commit` | string | A git object name, 40 lowercase hex characters (SHA-1) or 64 (SHA-256), optionally followed by `-dirty`; or `uncommitted`. |
+| `source_commit` | string | A git object name, 40 lowercase hex characters (SHA-1) or 64 (SHA-256), optionally followed by `-dirty`; or `uncommitted`. Since milestone 1 it names the last commit that touched anything outside `app/public/data/` (see "Byte-identical re-exports"). |
 | `data` | object | The payload, described per artifact below. |
 
 **Serialisation** (`arima_forecasting.contract.dumps`): `json.dumps(envelope, sort_keys=True,
@@ -49,14 +50,22 @@ without breaking an older app.
 **One fixture, two test suites.** `app/src/test/fixtures/envelope_cases.json` is a shared list
 of valid and invalid envelopes. The Python suite runs every case through `validate_envelope` and
 the app's suite runs every case through `parseEnvelope`, so a rule that changes on one side only
-fails a test. That fixture is the guard against the two readers drifting apart.
+fails a test. That fixture is the guard against the two readers drifting apart. Milestone 1 adds
+the same for payloads: `app/src/test/fixtures/payload_cases.json` (86 cases) edits the hand-written
+`meta.data.json`, `prices.data.json` and `eda.data.json` and states each verdict;
+`tests/test_payload_corpus.py` and `app/src/lib/contract.payloads.corpus.test.ts` run it through both
+readers (`validate_meta`/`parseMeta`, `validate_prices`/`parsePrices`, `validate_eda`/`parseEda`).
 
 **Byte-identical re-exports.** With `SOURCE_DATE_EPOCH` set, two exports of the same code (and,
 from milestone 1, the same raw snapshot) write byte-identical files. That holds because the
 dirty check behind `source_commit` leaves out `app/public/data/`, the exporter's own output:
 provenance names the *code* that produced a file, so the first export rewriting `meta.json`
 does not turn the second export's `source_commit` into `-dirty`. Any other uncommitted change,
-untracked files included, still does. Known limit: a file marked with
+untracked files included, still does. For the same reason, `source_commit` is the last commit
+that touched anything outside `app/public/data/` (`git log -1 -- ':(top)'
+':(exclude)app/public/data'`), not HEAD: after "commit the code, export, commit the JSON", a
+re-export at the JSON commit stamps the same code commit and reproduces the committed files byte
+for byte. A repository whose commits only ever touched that folder gives `uncommitted`. Known limit: a file marked with
 `git update-index --assume-unchanged` or `--skip-worktree` is invisible to `git status`, so a
 change to it is not reported as dirty.
 
@@ -89,12 +98,24 @@ and `aic_grid` (1.2.0), M3 adds `fit` and `residuals` (1.3.0), and M4 adds `fore
 `metrics` (1.4.0). `meta.data.artifacts` always lists exactly the artifacts written by that
 export, so the app knows which views can be switched on.
 
-### Size budgets (estimates, to be measured when each artifact first ships)
+### Size budgets
 
-Aim for ≤ 1 MB per file before compression (GitHub Pages serves gzip). The two largest are
-expected to be `prices` (about 2,950 trading days from 2015 to September 2026) and `forecasts`
-(about 2,700 rows). If a file passes 2 MB, the fix is a columnar layout for that artifact,
-which is a major bump.
+Aim for ≤ 1 MB (1,000,000 bytes) per file before compression (GitHub Pages serves gzip). If a
+file passes 2 MB, the fix is a columnar layout for that artifact, which is a major bump.
+`tests/test_committed_artifacts.py` fails if `prices.json` or `eda.json` passes 1,000,000 bytes
+(it skips where those held files are absent).
+
+Measured on 2026-10-29 on the local export of the 13:37 UTC snapshot (`wc -c`, and Python's
+`gzip.compress(data, 6)`; GNU `gzip -6` gives slightly different sizes). The export's
+`source_commit` ended in `-dirty`; a clean stamp is 6 bytes shorter per file.
+
+| File | Rows | Bytes | Share of 1 MB | gzip level 6 (Python) |
+|---|---|---|---|---|
+| `meta.json` | n/a | 1,509 | 0.2% | 547 |
+| `prices.json` (held, not committed) | 2,953 price rows | 456,025 | 45.6% | 67,175 |
+| `eda.json` (held, not committed) | 2,037 decomposition rows + 2 × 200 KDE points | 529,907 | 53.0% | 101,509 |
+
+`forecasts` (about 2,700 rows) is still an estimate; it is measured when it ships.
 
 ## 3. Artifacts by milestone
 
@@ -117,6 +138,7 @@ progress bar), and the gate that switches on views whose artifact exists.
 | `windows.oos` | `{start: date, end_exclusive: date}` | `2024-01-01` → `2026-10-01` |
 | `milestones[]` | `{id: int, slug: string, title: string, status}` | `status` is a **closed** enum: `"done"`, `"current"`, `"planned"`. Exactly one is `"current"`. Sorted by `id`. |
 | `artifacts[]` | string[] | slugs written by this export, for example `["meta"]` |
+| `held_artifacts[]` | string[] | added in 1.1.0: the subset of `artifacts` that the export writes but the repository does not commit (git-ignored), under the owner gate in ADR-0001: `["prices", "eda"]` since 2026-10-29. A fresh clone lacks these files; the app then says how to build them, and the real-data tests skip them with that message. Each entry must be one of `artifacts`, named once, and never `meta` itself (the app learns what is held from meta). Both readers check this (`validate_meta`, `parseMeta`). The app reads a 1.0.x file, which has no such key, as `[]` |
 
 Source of truth: `src/arima_forecasting/export.py` (`meta_payload`) and `config.py` (the windows).
 
@@ -133,14 +155,15 @@ explorer (dollar or log axis, segments shaded).
 | `price_basis` | string, closed enum | `"adjusted_close"`: yfinance's `Close` with `auto_adjust=True` (see the ERD) |
 | `source.provider` | string | `"yahoo_via_yfinance"` |
 | `source.yfinance_version` | string | `"1.7.0"` |
-| `source.raw_sha256` | string (64 hex) | SHA-256 of the raw snapshot file; links to its manifest |
-| `source.raw_rows` | int | rows in the raw snapshot |
+| `source.raw_sha256` | string (64 hex) | SHA-256 of the raw snapshot file's bytes; equals `sha256` in its manifest |
+| `source.raw_rows` | int | rows in the raw snapshot (one download covers both windows) |
 | `source.downloaded_at` | UTC timestamp string | from the snapshot manifest, not the export clock |
-| `fill.method` | string | `"ffill"`, done with `.ffill()` (pandas 3.1 removed `fillna(method=...)`) |
-| `fill.filled_dates` | date[] | dates whose close was forward-filled; usually empty, because yfinance already drops rows whose price and volume columns are all NaN or zero, unless `keepna=True` (`yfinance/scrapers/history.py:621-624`) |
-| `splits.train_fraction` | number | `0.9` |
-| `splits.train` / `.test` / `.oos` | `{start: date, end: date, n: int}` | the **actual** first and last trading dates in each segment (inclusive) and the row count |
-| `rows[]` | see below | sorted by `date` ascending; course window then OOS window |
+| `source.request` | `{start: date, end_exclusive: date, interval: string, auto_adjust: true}` | the yfinance request that made the snapshot (`start`, `end`, `interval`, `auto_adjust` in the manifest's `request`). Added in 1.1.0 with the artifact itself. |
+| `fill.method` | string, closed enum | `"ffill"`, done with `.ffill()` (pandas 3.1 removed `fillna(method=...)`) |
+| `fill.filled_dates` | date[] | dates whose close was missing in the snapshot and forward-filled, sorted; each is one of `rows[].date`. A fill may carry a close at most 7 calendar days (`prep.MAX_GAP_DAYS`); a longer run of missing closes, or a missing tail, stops the export instead. Usually empty, because yfinance already drops rows whose price and volume columns are all NaN or zero, unless `keepna=True` (`yfinance/scrapers/history.py:621-625`). Empty in the 2026-10-29 snapshots. |
+| `splits.train_fraction` | number | `0.9`. The course window's first `int(n × 0.9)` rows are `train` (truncation, as the course does it), the rest `test` |
+| `splits.train` / `.test` / `.oos` | `{start: date, end: date, n: int}` | the **actual** first and last trading dates in each segment (inclusive) and the row count. Both readers check them against `rows[]` |
+| `rows[]` | see below | sorted by `date` strictly ascending; course window then OOS window; segments in one block each, in the order `train`, `test`, `oos` |
 
 `rows[]`:
 
@@ -151,7 +174,10 @@ explorer (dollar or log axis, segments shaded).
 | `log_close` | number | ln($) |
 | `segment` | closed enum `"train"`, `"test"`, `"oos"` | |
 
-Open question: whether this file is committed at all is the learner's decision; see ADR-0001.
+**Not committed: on hold since 2026-10-29** until the owner decides whether Yahoo-derived prices may
+be published (ADR-0001, "Open question for the learner"). The exporter writes it locally; `.gitignore`
+ignores it; `meta.data.held_artifacts` names it. Readers: Python's `validate_prices` (`src/arima_forecasting/payloads.py`) and the app's
+`parsePrices` (`app/src/lib/contract.payloads.ts`).
 
 ---
 
@@ -162,20 +188,29 @@ decomposition).
 
 | Field | Type | Notes |
 |---|---|---|
-| `sample` | `"train"` | |
-| `summary.n`, `summary.start`, `summary.end` | int, date, date | |
+| `sample` | closed enum `"train"` | |
+| `summary.n`, `summary.start`, `summary.end` | int, date, date | the training rows; equal to `prices.splits.train` |
 | `summary.close_usd` | `{min, max, mean, median}` | $ |
-| `summary.log_return` | `{mean, std, skew, excess_kurtosis}` | over `diff1` of `log_close` |
-| `kdes[]` | `{variable, bandwidth_method, bandwidth, points[]}` | `variable` is an **open** enum: `"log_close"` (the course's KDE) and `"log_return"` (shows the fat tails). `points[]` = `{x, density}`, 200 points; `x` is in the variable's unit. |
+| `summary.log_return` | `{n, mean, std, skew, excess_kurtosis}` | over `diff1` of `log_close`, so `n = summary.n − 1`; both readers refuse any other value. Estimators: `std` divides by n − 1; `skew` is the adjusted Fisher–Pearson G1 (pandas `skew()`, scipy `skew(bias=False)`); `excess_kurtosis` is the bias-corrected G2 (pandas `kurt()`, scipy `kurtosis(bias=False)`), 0 for a normal |
+| `kdes[]` | `{variable, n, bandwidth_method, bandwidth_factor, bandwidth, points[]}` | `variable` is an **open** enum: `"log_close"` and `"log_return"` (shows the fat tails); both are required, others may be added. (The course's own KDE is of the *dollar* close; see the milestone-1 walkthrough.) `bandwidth_method` is `"scott"` (scipy `gaussian_kde` default); `bandwidth_factor` is scipy's `factor` = n^(−1/5); `bandwidth` is the kernel's standard deviation in the variable's unit, factor × the sample sd (ddof 1). `points[]` = `{x, density, normal_density}`, 200 points, `x` strictly ascending in the variable's unit on an even grid from (min − 3 × bandwidth) to (max + 3 × bandwidth). `normal_density` is the normal density with the sample's mean and sd, for comparison. |
 | `decomposition.model` | closed enum `"additive"` | applied to `log_close` (see note) |
 | `decomposition.period` | int | `252` (trading days per year, approximately) |
-| `decomposition.rows[]` | `{date, observed_log, trend_log, seasonal_log, resid_log}` | `trend_log` and `resid_log` are **nullable**: `null` for the first and last `period // 2` = 126 rows, because the centred moving average is undefined there (statsmodels `seasonal_decompose`, default `extrapolate_trend=0`; measured 126 NaN at each end with `period=252`). |
+| `decomposition.rows[]` | `{date, observed_log, trend_log, seasonal_log, resid_log}` | one per training row, sorted by date. `trend_log` and `resid_log` are **nullable**, and null on exactly the same rows: the first and last `period // 2` = 126 rows, because the centred moving average is undefined there (statsmodels `seasonal_decompose`, default `extrapolate_trend=0`; measured 126 at each end in the shipped file). `validate_eda` checks that exact pattern. |
+
+Readers: Python's `validate_eda` (`src/arima_forecasting/payloads.py`) and the app's `parseEda`
+(`app/src/lib/contract.payloads.ts`).
 
 **Note on the course's decomposition.** The course calls
 `seasonal_decompose(log_series, model='multiplicative', period=252)`. Taking logs already turns
 a multiplicative structure into an additive one, so "multiplicative on logs" multiplies
-components that are already logs. We use `additive` on `log_close`, which is equivalent to
-`multiplicative` on the dollar price. The write-up shows both and explains the difference.
+components that are already logs. We use `additive` on `log_close`. As a *model* that is the
+multiplicative model of the dollar price. As an *estimate* it is close but not identical: the
+trend of the logs, exponentiated, is a weighted geometric moving average of prices, while a
+multiplicative decomposition of dollars uses the arithmetic one. The gap is about half the weighted
+variance of ln P inside one 253-day window, which in the 2020 run-up was mostly drift (measured on
+the training rows: at most 3.03% in the trend and 0.73% in the seasonal part).
+The milestone-1 walkthrough and [concept note 04](../concepts/04-classical-decomposition-additive-on-logs.md)
+show both versions with measured differences.
 
 ---
 
@@ -400,7 +435,8 @@ Forecast accuracy per method and segment. **View:** metrics table beside the for
 | Envelope valid before writing | `export_app_data.py` → `contract.validate_envelope` | malformed envelope |
 | Both readers agree on every envelope | pytest and vitest each run `app/src/test/fixtures/envelope_cases.json` (§1) | a rule changed in `contract.py` or `contract.ts` but not in the other |
 | No NaN/Infinity, no unsafe integers | `contract.dumps` (`allow_nan=False`, plus the ±(2^53 − 1) integer check) | failed calculations leaking into JSON; integers the browser would round |
-| Payload shape per artifact | a validator per artifact in the package (from M1), run by pytest on the exporter's output | Python-side shape drift |
-| App parses the **real** committed files | vitest, `app/src/lib/contract.realdata.test.ts`: every file in `app/public/data/` through the production `parseEnvelope`, its `artifact` equal to the file stem, its payload through that artifact's parser (`parseMeta` for `meta`; an artifact with no registered parser fails), and the set of files equal to `meta.data.artifacts` | Python changed, app not updated |
-| Committed files are current | export check mode: regenerate, compare `schema_version`, `artifact`, `data` | code changed, nobody re-exported |
+| Payload shape per artifact | `src/arima_forecasting/payloads.py` (`validate_meta`, `validate_prices`, `validate_eda`), run by the exporter on every payload before writing, by `read_artifact` and `--check`, and by pytest | Python-side shape drift |
+| Both readers agree on every payload | pytest and vitest each run `app/src/test/fixtures/payload_cases.json` (§1): integral floats such as `4.0` count as integers (JavaScript cannot tell them apart), integers beyond ±(2^53 − 1) and numbers too big for a double are refused, and "blank" is one explicit whitespace class on both sides | a payload rule changed in `payloads.py` or `contract.payloads.ts` but not in the other |
+| App parses the **real** files | vitest, `app/src/lib/contract.realdata.test.ts`: every file in `app/public/data/` through the production `parseEnvelope`, its `artifact` equal to the file stem, its payload through that artifact's parser (`parseMeta`, `parsePrices`, `parseEda`; an artifact with no registered parser fails), and the set of files equal to `meta.data.artifacts` less the held ones that are absent (each such file gets a skipped test that says why) | Python changed, app not updated |
+| Files are current | `tools/export_app_data.py --check`: regenerate from the raw snapshot, compare `schema_version`, `artifact`, `data`, and the set of files, and refuse a file the app would refuse (its envelope and payload are validated too); exit 1 on a difference, 2 without a snapshot. Without the snapshot, `tests/test_committed_artifacts.py` checks every step after it: `meta.json` = `meta_payload()`, and `prices.json` and `eda.json`, where present, equal what the current code builds from `prices.json`'s own closes | code changed, nobody re-exported |
 | Cross-artifact consistency | pytest: `aic_grid.selection.d_selected == stationarity.decision.d_selected`; `forecasts` dates ⊂ `prices` dates; every `methods[].model_id` exists in `fit` | artifacts disagreeing with each other |

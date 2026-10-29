@@ -55,3 +55,38 @@ def test_raw_data_at_the_repo_root_is_ignored_by_the_anchored_rule():
     rule = ignoring_rule("data/raw/AAPL.csv")
     assert rule is not None
     assert rule.startswith(".gitignore:") and rule.endswith(":/data/"), rule
+
+
+# --- Milestone 1: the owner gate and the second layer for raw data -------------------------
+
+def test_every_held_artifact_is_ignored_and_every_other_artifact_is_not():
+    # ADR-0001's owner gate: export.HELD_ARTIFACTS are written locally but never committed.
+    from arima_forecasting.export import ARTIFACTS, HELD_ARTIFACTS
+
+    assert set(HELD_ARTIFACTS) == {"prices", "eda"}
+    for name in ARTIFACTS:
+        rule = ignoring_rule(f"app/public/data/{name}.json")
+        if name in HELD_ARTIFACTS:
+            assert rule is not None and rule.endswith(f":/app/public/data/{name}.json"), (name, rule)
+        else:
+            assert rule is None, (name, rule)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "snapshots/arima-stock-forecasting/raw/AAPL_1d_2015-01-01_2026-10-01.csv",
+        "snapshots/arima-stock-forecasting/raw/AAPL_1d_2015-01-01_2026-10-01.manifest.json",
+        "elsewhere/deep/arima-stock-forecasting/cache/cookies.db",
+        # VOL_DATA_DIR=<parent of the repo> would write <repo>/raw and <repo>/cache.
+        "raw/AAPL_1d_2015-01-01_2026-10-01.csv",
+        "cache/tkr-tz.db",
+    ],
+)
+def test_a_snapshot_or_cache_anywhere_in_the_repo_is_ignored(path):
+    assert ignoring_rule(path) is not None
+
+
+def test_result_tables_in_reports_are_not_ignored():
+    # *.csv stays allowed on purpose: reports/ will hold result tables from milestone 4.
+    assert ignoring_rule("reports/metrics.csv") is None

@@ -2,8 +2,23 @@
 # Anchored with a leading slash: a bare `data/` would also ignore app/src/data/ (the loader)
 # and app/public/data/ (the exported JSON the app reads).
 /data/
+# A second layer, in case VOL_DATA_DIR ever points elsewhere inside the repo (config.data_root
+# refuses that): this project's raw snapshot and yfinance's caches, at any depth. Plain *.csv
+# stays allowed on purpose, because reports/ will hold result tables.
+**/arima-stock-forecasting/raw/
+**/arima-stock-forecasting/cache/
+# ...and the repo's own raw/ and cache/, which VOL_DATA_DIR=<parent of the repo> would create when
+# the checkout is named arima-stock-forecasting (config.data_root refuses that too).
+/raw/
+/cache/
 *.csv.gz
 *.parquet
+
+# Owner gate (ADR-0001): Yahoo-derived prices are not committed until the owner decides whether
+# they may be published. The exporter still writes these two files locally. eda.json is held too,
+# because its decomposition rows carry observed_log, the training log closes themselves.
+/app/public/data/prices.json
+/app/public/data/eda.json
 
 # Secrets
 .env

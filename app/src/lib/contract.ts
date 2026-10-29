@@ -50,6 +50,11 @@ export interface Meta {
   windows: { course: DateWindow; oos: DateWindow }
   milestones: Milestone[]
   artifacts: string[]
+  /**
+   * Artifacts the export wrote that the repository does not commit (the owner gate in ADR-0001),
+   * so a fresh clone lacks them. Added in 1.1.0; a 1.0.x file has no such key and reads as [].
+   */
+  held_artifacts: string[]
 }
 
 export type EnvelopeResult = { ok: true; envelope: Envelope } | { ok: false; errors: string[] }
@@ -65,11 +70,22 @@ const COMMIT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})(-dirty)?$/
 const ARTIFACT = /^[a-z][a-z0-9_]*$/
 const ENVELOPE_KEYS = ['schema_version', 'artifact', 'generated_at', 'source_commit', 'data'] as const
 
-function isRecord(v: unknown): v is Record<string, unknown> {
+/**
+ * A string made only of these characters counts as empty. The same class is written in
+ * src/arima_forecasting/payloads.py: the union of what JavaScript's trim and Python's str.strip
+ * remove (trim strips U+FEFF, strip does not; strip removes U+001C-U+001F and U+0085, trim does
+ * not), so neither reader accepts a value the other calls blank. Shared with the payload parsers.
+ */
+// eslint-disable-next-line no-control-regex -- U+001C-U+001F are listed on purpose: Python's strip removes them
+export const BLANK = /^[\t\n\v\f\r \u001c-\u001f\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*$/
+
+/** A plain JSON object (not null, not an array). Shared with the payload parsers. */
+export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-function typeName(v: unknown): string {
+/** The JSON type of a value, for error messages. Shared with the payload parsers. */
+export function typeName(v: unknown): string {
   if (v === null) return 'null'
   if (Array.isArray(v)) return 'array'
   return typeof v
@@ -122,7 +138,7 @@ function readString(obj: Record<string, unknown>, key: string, path: string, err
     errors.push(`${at}: expected a string, got ${typeName(v)}`)
     return undefined
   }
-  if (opts.nonEmpty && v.trim() === '') {
+  if (opts.nonEmpty && BLANK.test(v)) {
     errors.push(`${at}: must not be empty`)
     return undefined
   }
@@ -206,7 +222,7 @@ function parseMilestone(raw: unknown, path: string, seenIds: Set<number>, errors
   const before = errors.length
   let id: number | undefined
   if (!Object.hasOwn(raw, 'id')) errors.push(`${path}.id: missing`)
-  else if (typeof raw.id !== 'number' || !Number.isInteger(raw.id) || raw.id < 0) errors.push(`${path}.id: expected a non-negative integer, got ${JSON.stringify(raw.id)}`)
+  else if (typeof raw.id !== 'number' || !Number.isSafeInteger(raw.id) || raw.id < 0) errors.push(`${path}.id: expected a non-negative integer, got ${JSON.stringify(raw.id)}`)
   else if (seenIds.has(raw.id)) errors.push(`${path}.id: duplicate id ${raw.id}`)
   else {
     id = raw.id
@@ -263,11 +279,28 @@ export function parseMeta(data: unknown): MetaResult {
   if (!Object.hasOwn(data, 'artifacts')) errors.push('data.artifacts: missing')
   else if (!Array.isArray(data.artifacts)) errors.push(`data.artifacts: expected an array, got ${typeName(data.artifacts)}`)
   else {
-    const bad = data.artifacts.findIndex((a) => typeof a !== 'string' || a.trim() === '')
+    const bad = data.artifacts.findIndex((a) => typeof a !== 'string' || BLANK.test(a))
     if (bad >= 0) errors.push(`data.artifacts[${bad}]: expected a non-empty string, got ${JSON.stringify(data.artifacts[bad])}`)
     else artifacts = data.artifacts as string[]
   }
 
-  if (errors.length > 0 || !project || !title || !ticker || !course || !oos || !milestones || !artifacts) return { ok: false, errors }
-  return { ok: true, meta: { project, title, ticker, windows: { course, oos }, milestones, artifacts } }
+  let held: string[] | undefined = []
+  if (Object.hasOwn(data, 'held_artifacts')) {
+    if (!Array.isArray(data.held_artifacts)) {
+      errors.push(`data.held_artifacts: expected an array, got ${typeName(data.held_artifacts)}`)
+      held = undefined
+    } else {
+      // Each held name is a listed artifact, named once, and never meta itself: the app reads
+      // meta.json to learn what is held, so meta cannot be missing on purpose.
+      const list = data.held_artifacts
+      const bad = list.findIndex((a, i) => typeof a !== 'string' || !(artifacts ?? []).includes(a) || a === 'meta' || list.indexOf(a) !== i)
+      if (bad >= 0) {
+        errors.push(`data.held_artifacts[${bad}]: ${JSON.stringify(list[bad])} must be a listed artifact other than meta, named once`)
+        held = undefined
+      } else held = list as string[]
+    }
+  }
+
+  if (errors.length > 0 || !project || !title || !ticker || !course || !oos || !milestones || !artifacts || !held) return { ok: false, errors }
+  return { ok: true, meta: { project, title, ticker, windows: { course, oos }, milestones, artifacts, held_artifacts: held } }
 }

@@ -2,19 +2,25 @@
   "artifact": "meta",
   "data": {
     "artifacts": [
-      "meta"
+      "meta",
+      "prices",
+      "eda"
+    ],
+    "held_artifacts": [
+      "prices",
+      "eda"
     ],
     "milestones": [
       {
         "id": 0,
         "slug": "scaffold",
-        "status": "current",
+        "status": "done",
         "title": "Scaffold, contract and design"
       },
       {
         "id": 1,
         "slug": "data-eda",
-        "status": "planned",
+        "status": "current",
         "title": "Data and EDA"
       },
       {
@@ -56,7 +62,7 @@
       }
     }
   },
-  "generated_at": "2026-10-28T16:02:49Z",
-  "schema_version": "1.0.0",
-  "source_commit": "720705ff1d2491a35b6c806c7904b827fd12446c"
+  "generated_at": "2026-10-29T13:40:46Z",
+  "schema_version": "1.1.0",
+  "source_commit": "bd2eab393f68cfacb109174cd052ade9b7a9ccf9-dirty"
 }

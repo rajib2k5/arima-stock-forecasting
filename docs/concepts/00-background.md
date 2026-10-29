@@ -643,8 +643,11 @@ Each was checked in the installed source and, where possible, run on simulated d
 2. **One ticker still gives MultiIndex columns.** `multi_level_index=True` is the default; columns
    are (Price, Ticker), such as `('Close', 'AAPL')`, so `df['Close']` is a one-column DataFrame,
    not a Series. Pass `multi_level_index=False` to flatten a single-ticker download.[^yf-mi]
-3. **`end` is exclusive.** `end='2024-01-01'` is needed to include 31 December 2023 (read in the
-   source; not run, since that needs a download).[^yf-end]
+3. **`end` is exclusive.** `end='2024-01-01'` covers every day up to 31 December 2023. That day
+   was a Sunday, so the course's `end='2023-12-31'` returns the same bars (last one Friday
+   2023-12-29), as `config.py` notes. Read in the source at milestone 0; measured in milestone 1:
+   the snapshots requested with `end='2026-10-01'` on 2026-10-29 end on 2026-09-30, though
+   2026-10-01 is a Thursday and not a US market holiday.[^yf-end]
 4. **`fillna(method='ffill')` is gone in pandas 3.1.0.** `fillna` accepts only `value`, `axis`,
    `inplace` and `limit`, and the call raises `TypeError` (measured, for Series and DataFrame). Use
    `.ffill()`.[^pd-fillna]

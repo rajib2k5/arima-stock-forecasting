@@ -1,0 +1,16 @@
+{
+  "project": "arima-stock-forecasting",
+  "title": "ARIMA stock forecasting, done carefully",
+  "ticker": "AAPL",
+  "windows": {
+    "course": { "start": "2015-01-01", "end_exclusive": "2024-01-01" },
+    "oos": { "start": "2024-01-01", "end_exclusive": "2026-10-01" }
+  },
+  "milestones": [
+    { "id": 0, "slug": "scaffold", "title": "Scaffold, contract and design", "status": "done" },
+    { "id": 1, "slug": "data-eda", "title": "Data and EDA", "status": "current" },
+    { "id": 2, "slug": "stationarity", "title": "Stationarity and identification", "status": "planned" }
+  ],
+  "artifacts": ["meta", "prices", "eda"],
+  "held_artifacts": ["prices", "eda"]
+}

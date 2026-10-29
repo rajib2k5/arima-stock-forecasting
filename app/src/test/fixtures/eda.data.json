@@ -1,0 +1,46 @@
+{
+  "sample": "train",
+  "summary": {
+    "n": 4,
+    "start": "2015-01-02",
+    "end": "2015-01-07",
+    "close_usd": { "min": 23.5, "max": 24.0, "mean": 23.75, "median": 23.75 },
+    "log_return": { "n": 3, "mean": 0.0, "std": 0.0172, "skew": 0.0, "excess_kurtosis": -1.5 }
+  },
+  "kdes": [
+    {
+      "variable": "log_close",
+      "n": 4,
+      "bandwidth_method": "scott",
+      "bandwidth_factor": 0.7579,
+      "bandwidth": 0.0092,
+      "points": [
+        { "x": 3.13, "density": 0.5, "normal_density": 0.4 },
+        { "x": 3.17, "density": 30.0, "normal_density": 25.0 },
+        { "x": 3.21, "density": 0.5, "normal_density": 0.4 }
+      ]
+    },
+    {
+      "variable": "log_return",
+      "n": 3,
+      "bandwidth_method": "scott",
+      "bandwidth_factor": 0.8027,
+      "bandwidth": 0.0138,
+      "points": [
+        { "x": -0.06, "density": 0.1, "normal_density": 0.05 },
+        { "x": 0.0, "density": 18.0, "normal_density": 23.0 },
+        { "x": 0.06, "density": 0.1, "normal_density": 0.05 }
+      ]
+    }
+  ],
+  "decomposition": {
+    "model": "additive",
+    "period": 2,
+    "rows": [
+      { "date": "2015-01-02", "observed_log": 3.1781, "trend_log": null, "seasonal_log": 0.0053, "resid_log": null },
+      { "date": "2015-01-05", "observed_log": 3.1570, "trend_log": 3.1623, "seasonal_log": -0.0053, "resid_log": 0.0 },
+      { "date": "2015-01-06", "observed_log": 3.1570, "trend_log": 3.1623, "seasonal_log": 0.0053, "resid_log": -0.0106 },
+      { "date": "2015-01-07", "observed_log": 3.1781, "trend_log": null, "seasonal_log": -0.0053, "resid_log": null }
+    ]
+  }
+}

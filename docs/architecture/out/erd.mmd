@@ -12,14 +12,15 @@ erDiagram
     }
     raw_manifest["raw snapshot manifest"] {
         char(64) sha256 PK
-        text file_name
-        text ticker
-        date start
-        date end_exclusive
-        bool auto_adjust
+        text file
+        int rows
+        date first_date
+        date last_date
+        date request_start
+        date request_end
+        bool request_auto_adjust
         text yfinance_version
         timestamp_utc downloaded_at
-        int rows
     }
     envelope {
         text artifact PK
