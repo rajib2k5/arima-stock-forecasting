@@ -35,8 +35,8 @@ builder = load_builder()
 NAMES = sorted(builder.NOTEBOOKS)
 
 
-def test_the_builder_knows_the_project_tour():
-    assert "00_project_tour.ipynb" in NAMES
+def test_the_builder_knows_the_project_tour_and_the_milestone_1_notebook():
+    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb"]
 
 
 # --- (a) committed notebooks equal the in-memory build -----------------------------------
@@ -207,8 +207,25 @@ def test_the_test_kernel_ignores_the_users_ipython_startup_files(users_ipython_d
     assert run_probe(kernel_name).strip() == "decoy startup ran: False"
 
 
+# Notebooks that read the held artifacts (ADR-0001's owner gate: prices.json and eda.json are
+# git-ignored, so a fresh clone lacks them). Their execution tests SKIP, with this message, when the
+# files are absent; everywhere the files exist, they run.
+NEEDS_HELD_DATA = {"01_data_and_eda.ipynb": ("prices", "eda")}
+
+
+def skip_without_held_data(name: str) -> None:
+    absent = [a for a in NEEDS_HELD_DATA.get(name, ()) if not (REPO / "app" / "public" / "data" / f"{a}.json").is_file()]
+    if absent:
+        pytest.skip(
+            f"{name} reads {', '.join(a + '.json' for a in absent)}, which this copy lacks: held by the "
+            "owner gate (ADR-0001). Build with: uv run python tools/fetch_prices.py, then "
+            "uv run python tools/export_app_data.py"
+        )
+
+
 @pytest.mark.parametrize("name", NAMES)
 def test_notebook_runs_without_errors(name, kernel_name):
+    skip_without_held_data(name)
     notebook = execute(NOTEBOOK_DIR / name, kernel_name)
     code_cells = [cell for cell in notebook.cells if cell.cell_type == "code"]
     assert code_cells, "a notebook with no code cells would pass this test without running anything"
@@ -240,3 +257,50 @@ def test_project_tour_prints_the_values_it_explains(kernel_name):
     assert "problems: []" in printed
     # The NaN envelope was refused.
     assert "rejected: Out of range float values are not JSON compliant" in printed
+
+
+def test_data_and_eda_notebook_prints_the_values_in_the_committed_files(kernel_name):
+    # The notebook reads app/public/data; the expected lines are built here from the same files,
+    # read independently with json, so the test proves the cells ran the real package on them.
+    skip_without_held_data("01_data_and_eda.ipynb")
+    notebook = execute(NOTEBOOK_DIR / "01_data_and_eda.ipynb", kernel_name)
+    printed = "".join(
+        output.get("text", "")
+        for cell in notebook.cells
+        if cell.cell_type == "code"
+        for output in cell.outputs
+        if output.output_type == "stream" and output.name == "stdout"
+    )
+    app_data = REPO / "app" / "public" / "data"
+    prices = json.loads((app_data / "prices.json").read_text())["data"]
+    eda = json.loads((app_data / "eda.json").read_text())["data"]
+    assert f"snapshot sha256: {prices['source']['raw_sha256']}" in printed
+    assert "      auto_adjust: True" in printed
+    # The trap, shown on a hand-built frame, and the guard.
+    assert "type of frame['Close']: DataFrame" in printed
+    assert "all NaN: True" in printed
+    assert "after normalize_download: Series [10.0, 11.0, 12.0]" in printed
+    assert "course call raises TypeError:" in printed
+    assert ".ffill() gives: [1.0, 1.0, 3.0]" in printed
+    for name in ("train", "test", "oos"):
+        s = prices["splits"][name]
+        assert f"{name:>5}: {s['start']} to {s['end']}, {s['n']} rows" in printed
+    course_n = prices["splits"]["train"]["n"] + prices["splits"]["test"]["n"]
+    assert f"int({course_n} * 0.9) = {prices['splits']['train']['n']}" in printed
+    # The notebook recomputed eda.json from prices.json and got the same object.
+    assert "eda.json matches a fresh computation: True" in printed
+    assert f"train rows: {eda['summary']['n']} from {eda['summary']['start']}" in printed
+    for kde in eda["kdes"]:
+        assert f"bandwidth {kde['bandwidth']:.6f}" in printed
+    assert "trend undefined for the first 126 and last 126 rows" in printed
+    # Every number the tail and decomposition cells print, against the package called here on the
+    # same rows (the functions themselves are pinned by hand-worked tests in tests/test_eda.py).
+    from arima_forecasting import eda as eda_module
+    from arima_forecasting.artifacts import table_from_prices
+
+    table = table_from_prices(prices)
+    train = table[table["segment"] == "train"]
+    tails = eda_module.tail_share(eda_module.log_returns(train["log_close"]), 3.0)
+    assert f"returns beyond 3 sd: {tails['observed']:.2%} observed, {tails['normal']:.2%} under a normal" in printed
+    for key, value in eda_module.course_comparison(train).items():
+        assert f"{key:>28}: {value:.6g}" in printed, key

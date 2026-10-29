@@ -16,6 +16,13 @@ How to use it:
 Every `file:line` reference is relative to the repository root. Every number in this document
 was measured on 2026-10-28 with the commands shown in the Results section.
 
+**Line numbers belong to milestone 0.** The `file:line` references were written against the
+milestone-0 commit `720705f`. Later commits moved lines: the diagram-kit commit `bd2eab3` changed
+`docs/architecture/README.md`, and milestone 1 rewrote `tools/export_app_data.py` and parts of
+`export.py` and moved lines in `config.py`, `contract.ts`, `build_notebooks.py`, the ADRs and the
+contract. To read a reference as written, use `git show 720705f:<path>`. The
+[milestone 1 walkthrough](01-data-and-eda.md) cites the current lines.
+
 ---
 
 ## What was built, and why this design
@@ -280,6 +287,12 @@ _SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 *Provenance* means "where a file came from". This module is the only one that talks to git and
 the clock (`provenance.py:3-4`).
+
+> **Changed in milestone 1.** The sha described below was HEAD. Since milestone 1 it is the last
+> commit that touched anything outside `app/public/data` (`git log -1 -- ':(top)'
+> ':(exclude)app/public/data'`), so the JSON commit re-exports byte-identically; see
+> [the milestone 1 walkthrough](01-data-and-eda.md#code-walkthrough), step 19, and
+> [concept note 01, section 6](../concepts/01-reproducibility-and-contracts.md#6-provenance-commit-sha-dirty-trees-and-why-uncommitted-exists).
 
 **`source_commit`** (`provenance.py:43-90`)
 

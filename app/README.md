@@ -2,12 +2,14 @@
 
 A small React app that visualises the results of the Python study in the parent folder. **The app never computes a result.** Python does all the statistics and writes versioned JSON; the app reads that JSON and draws it, plus a few small, unit-tested display transforms in `src/lib/`.
 
-Milestone 0 ships the shell only: an **About** page (the project, the analysis path, study windows and milestones read from `meta.json`), an **Architecture** page (three animated diagrams and a 3D wiring check), the data-contract loader, and light and dark themes. Charts, the stationarity lab, the AIC landscape, the walk-forward forecast and the residual diagnostics arrive in later milestones.
+Milestone 0 shipped the shell: an **About** page (the project, the analysis path, study windows and milestones read from `meta.json`), an **Architecture** page (three animated diagrams and a 3D wiring check), the data-contract loader, and light and dark themes. Milestone 1 adds the **Price explorer**, the first page drawn from data: the adjusted close from `prices.json` on a dollar or log axis with the train, test and out-of-sample segments shaded, and panels for the two KDEs and the four decomposition parts from `eda.json`. The page is offered only when `meta.json` lists both files, and its code is a separate chunk, loaded when the page first opens. The two files are not committed (`meta.json` names them in `held_artifacts`), so in a fresh clone the page says that the data is not built in this copy and gives the two commands that build it. The stationarity lab, the AIC landscape, the walk-forward forecast and the residual diagnostics arrive in later milestones.
 
 ## Run it
 
 ```bash
-# 1. generate the data the app reads (from the repository root)
+# 1. download the prices once, then build the JSON, from the repository root. prices.json and
+#    eda.json are not committed (owner gate, ADR-0001); without them the Price explorer says so.
+uv run python tools/fetch_prices.py
 uv run python tools/export_app_data.py
 
 # 2. start the app (from this folder)
@@ -59,15 +61,17 @@ The `meta` artifact's `data` holds `project`, `title`, `ticker`, `windows` (`cou
 The code:
 
 - `src/lib/contract.ts` is the pure parser: `parseEnvelope(raw)` and `parseMeta(data)` return `{ok: true, ...}` or `{ok: false, errors: string[]}`. No fetch, no clock, no DOM.
+- `src/lib/contract.payloads.ts` holds the milestone-1 payload parsers, `parsePrices` and `parseEda`, in the same style. They sit in their own module because `contract.ts` is bundled into the main chunk and these are needed only by the lazily loaded explorer (measured: the main chunk is 10.27 kB smaller this way).
 - `src/data/loadArtifact.ts` is the only I/O: `loadArtifact(name, fetchImpl = fetch)` fetches `${BASE_URL}data/${name}.json` and runs the parser. HTTP errors, network errors, invalid JSON, contract violations and a wrong artifact name all come back as typed values (`src/lib/loadError.ts`).
 
 ## Layout
 
 ```
-src/lib/        pure UI logic (coverage-gated): contract parser, 3D axes geometry,
+src/lib/        pure UI logic (coverage-gated): contract and payload parsers, the SVG plot and
+                its helpers, explorer presentation, the view gate, 3D axes geometry,
                 capability probes, display transforms, theme, storage, diagrams, shell
-src/data/       the artifact loader and the hook that loads meta.json
-src/views/      About, Architecture and the lazily loaded 3D preview
+src/data/       the artifact loader, the hook that loads meta.json, and the explorer's loader
+src/views/      About, Price explorer (lazy), Architecture and the lazily loaded 3D preview
 src/test/       test setup and hand-built contract fixtures
 ```
 
@@ -88,7 +92,7 @@ Tests assert behaviour against hand-worked values or hand-built fixtures, not ag
 
 Every dependency in `package.json` is pinned to an exact version, and `package-lock.json` is committed. The versions in the lock file were chosen to be at least 14 days old on the day the lock was created (2026-10-28), as a small supply-chain precaution. `@fontsource/inter` (SIL Open Font License 1.1) supplies the one font file the 3D labels use, so no font is fetched from a CDN at run time.
 
-`src/data/` (the loader) and `public/data/` (the exported JSON) are committed like any other source. The repository's top-level `.gitignore` keeps raw market data out with the anchored rule `/data/`, which matches only a `data/` folder at the repository root; a bare `data/` would also have matched these two folders. This app's own `.gitignore` has no `data` rule. `tests/test_gitignore.py` (in the repository root) checks all of this with `git check-ignore`.
+`src/data/` (the loader) is committed like any other source, and so is `public/data/meta.json`. The two price files the exporter also writes there, `prices.json` and `eda.json`, are git-ignored by the owner gate (ADR-0001) and built locally. The repository's top-level `.gitignore` keeps raw market data out with the anchored rule `/data/`, which matches only a `data/` folder at the repository root; a bare `data/` would also have matched these two folders. This app's own `.gitignore` has no `data` rule. `tests/test_gitignore.py` (in the repository root) checks all of this with `git check-ignore`.
 
 ## Not financial advice
 

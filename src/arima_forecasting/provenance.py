@@ -43,9 +43,17 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
 def source_commit(repo: Path) -> str:
     """The commit a file was built from: "<sha>", "<sha>-dirty" or "uncommitted".
 
-    "-dirty" means the working tree had changes that are not in that commit, so the sha alone
-    would not let anyone reproduce the file. "uncommitted" covers a repo with no commits yet,
-    a folder that is not a git repo, and a machine where git is missing or cannot be run.
+    The sha is the LAST COMMIT THAT TOUCHED ANYTHING OUTSIDE THE EXPORT FOLDER (app/public/data),
+    not HEAD. Provenance names the code, and a commit that only adds regenerated JSON changes no
+    code. So after "commit the code, export, commit the JSON", a re-export at the JSON commit stamps
+    the same sha as the JSON it regenerates: the committed files reproduce from their own commit.
+    (With HEAD, every re-export at the JSON commit rewrote source_commit, and the JSON could never
+    name the commit that contains it.)
+
+    "-dirty" means the working tree had changes outside the export folder that are not committed,
+    so the sha alone would not let anyone reproduce the file. "uncommitted" covers a repo with no
+    commits yet, one whose commits only ever touched the export folder, a folder that is not a git
+    repo, and a machine where git is missing or cannot be run.
 
     The sha is whatever the repository uses: 40 hex characters, or 64 in a SHA-256 repository.
     A problem with git or the repository never raises: it ends in "uncommitted" or "-dirty".
@@ -55,6 +63,14 @@ def source_commit(repo: Path) -> str:
         if head.returncode != 0:  # no commits yet, or not a repo
             return UNCOMMITTED
         sha = head.stdout.strip()
+        # The last commit that changed a path outside the export folder, with the same pathspecs
+        # as the dirty check below. If git log itself fails, fall back to HEAD (the milestone-0
+        # rule), which can only be newer, never wrong about the code it contains.
+        last = _git(repo, "log", "-1", "--format=%H", "--", ":(top)", f":(exclude){EXPORT_DIR}")
+        if last.returncode == 0:
+            if not last.stdout.strip():  # every commit touched only the export folder
+                return UNCOMMITTED
+            sha = last.stdout.strip()
 
         # --porcelain is the stable, machine-readable format: one line per changed or untracked
         # file, and no output at all when the tree is clean. We ask for untracked files

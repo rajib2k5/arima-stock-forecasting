@@ -4,6 +4,7 @@ import App from './App'
 import { resetMemoryFallback, safeStorage } from './lib/storage'
 import type { FetchLike } from './data/loadArtifact'
 import { validMetaEnvelope, withValue } from './test/fixtures/fixtures'
+import { edaEnvelope, pricesEnvelope } from './test/fixtures/payloads'
 
 const STORE = safeStorage()
 
@@ -70,6 +71,52 @@ describe('App (integration)', () => {
 
   it('offers only About and Architecture: no Admin, no Metrics, no key fields', async () => {
     stubFetch(validMetaEnvelope())
+    render(<App />)
+    await screen.findByText('AAPL')
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'Architecture'])
+  })
+
+  it('offers the price explorer once meta lists prices and eda, and loads both only when it opens', async () => {
+    const meta = withValue(['data', 'artifacts'], ['meta', 'prices', 'eda'])
+    const fn = vi.fn<FetchLike>(async (url) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => (url.endsWith('data/prices.json') ? pricesEnvelope() : url.endsWith('data/eda.json') ? edaEnvelope() : meta),
+    }))
+    vi.stubGlobal('fetch', fn)
+    render(<App />)
+    await screen.findByText('AAPL')
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'Price explorer', 'Architecture'])
+    expect(fn).toHaveBeenCalledTimes(1) // only meta.json so far
+    fireEvent.click(within(nav).getByRole('link', { name: 'Price explorer' }))
+    expect(await screen.findByRole('table', { name: 'Training summary' })).toBeInTheDocument()
+    expect(fn.mock.calls.map(([url]) => url.replace(/^.*data\//, '')).sort()).toEqual(['eda.json', 'meta.json', 'prices.json'])
+  })
+
+  it('in a fresh clone (held files absent) offers the explorer and says how to build its data', async () => {
+    let env = withValue(['data', 'artifacts'], ['meta', 'prices', 'eda'])
+    ;(env as { data: Record<string, unknown> }).data.held_artifacts = ['prices', 'eda']
+    env = { ...(env as object) } as typeof env
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<FetchLike>(async (url) =>
+        url.endsWith('data/meta.json')
+          ? { ok: true, status: 200, statusText: 'OK', json: async () => env }
+          : { ok: false, status: 404, statusText: 'Not Found', json: async () => ({}) },
+      ),
+    )
+    render(<App />)
+    await screen.findByText('AAPL')
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Price explorer' }))
+    const panel = await screen.findByRole('status', { name: 'Data not built here' })
+    expect(within(panel).getByText('uv run python tools/fetch_prices.py')).toBeInTheDocument()
+  })
+
+  it('does not offer the price explorer when meta lists only one of its two files', async () => {
+    stubFetch(withValue(['data', 'artifacts'], ['meta', 'prices']))
     render(<App />)
     await screen.findByText('AAPL')
     const nav = screen.getByRole('navigation', { name: 'Primary' })

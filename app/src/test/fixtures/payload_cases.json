@@ -1,0 +1,1244 @@
+{
+ "about": "Shared payload corpus. Each case applies its edits to a base payload (meta.data.json, prices.data.json or eda.data.json in this folder) and states whether the result is valid. tests/test_payload_corpus.py runs every case through Python's validate_meta/validate_prices/validate_eda, and src/lib/contract.payloads.corpus.test.ts runs the same cases through parseMeta/parsePrices/parseEda, so the two readers cannot disagree on any of them. An edit is {path, value} or {path, delete: true}; value is written as JSON, so 4.0 stays a float for Python while JavaScript reads the number 4.",
+ "cases": [
+  {
+   "name": "prices: the base fixture",
+   "base": "prices",
+   "edits": [],
+   "valid": true
+  },
+  {
+   "name": "prices: an unknown key in data is ignored (open payload)",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "notes"
+     ],
+     "value": "later"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "prices: a count written 4.0 is the integer 4 (JavaScript cannot tell them apart)",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "splits",
+      "train",
+      "n"
+     ],
+     "value": 4.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "prices: raw_rows written 6.0",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "raw_rows"
+     ],
+     "value": 6.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "prices: raw_rows 0 is below the minimum of 1",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "raw_rows"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: raw_rows 2.5 is not an integer",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "raw_rows"
+     ],
+     "value": 2.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: raw_rows true is not an integer",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "raw_rows"
+     ],
+     "value": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: raw_rows 2**53 + 1 is not a safe integer",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "raw_rows"
+     ],
+     "value": 9007199254740993
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: raw_rows as a 401-digit integer",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "raw_rows"
+     ],
+     "value": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: close_usd as a 401-digit integer (Python: too big for a float; JS: Infinity)",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      0,
+      "close_usd"
+     ],
+     "value": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: close_usd 1e400 (Python: inf; JS: Infinity)",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      0,
+      "close_usd"
+     ],
+     "value": 1e400
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: close_usd 1e300 is finite",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      0,
+      "close_usd"
+     ],
+     "value": 1e+300
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "prices: close_usd 0",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      0,
+      "close_usd"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: log_close null",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      1,
+      "log_close"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: an empty ticker",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "ticker"
+     ],
+     "value": ""
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a ticker of spaces",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "ticker"
+     ],
+     "value": "   "
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a ticker of U+001C only (Python strips it, JavaScript trim does not)",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "ticker"
+     ],
+     "value": "\u001c"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a ticker of U+0085 only (Python strips it, JavaScript trim does not)",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "ticker"
+     ],
+     "value": "\u0085"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a ticker of U+FEFF only (JavaScript trim strips it, Python does not)",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "ticker"
+     ],
+     "value": "\ufeff"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a ticker of U+00A0 only",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "ticker"
+     ],
+     "value": "\u00a0"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a ticker with spaces around it",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "ticker"
+     ],
+     "value": " AAPL "
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "prices: price_basis close",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "price_basis"
+     ],
+     "value": "close"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: an upper-case raw_sha256",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "raw_sha256"
+     ],
+     "value": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: downloaded_at on 30 February",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "downloaded_at"
+     ],
+     "value": "2026-02-30T12:00:00Z"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: downloaded_at missing",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "downloaded_at"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: auto_adjust false",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "request",
+      "auto_adjust"
+     ],
+     "value": false
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: request start not before end",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "source",
+      "request",
+      "start"
+     ],
+     "value": "2026-10-01"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: fill method bfill",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "fill",
+      "method"
+     ],
+     "value": "bfill"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a filled date that is not a row",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "fill",
+      "filled_dates"
+     ],
+     "value": [
+      "2015-01-03"
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: filled dates out of order",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "fill",
+      "filled_dates"
+     ],
+     "value": [
+      "2015-01-07",
+      "2015-01-06"
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: train_fraction 1",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "splits",
+      "train_fraction"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: splits.train.n disagrees with the rows",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "splits",
+      "train",
+      "n"
+     ],
+     "value": 5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: splits.oos.end disagrees with the rows",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "splits",
+      "oos",
+      "end"
+     ],
+     "value": "2024-01-03"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: rows empty",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: rows not an array",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows"
+     ],
+     "value": {}
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a repeated date",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      2,
+      "date"
+     ],
+     "value": "2015-01-05"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: segment TRAIN (closed enum, case matters)",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      0,
+      "segment"
+     ],
+     "value": "TRAIN"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "prices: a train row after a test row",
+   "base": "prices",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      3,
+      "segment"
+     ],
+     "value": "test"
+    },
+    {
+     "path": [
+      "rows",
+      4,
+      "segment"
+     ],
+     "value": "train"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: the base fixture",
+   "base": "eda",
+   "edits": [],
+   "valid": true
+  },
+  {
+   "name": "eda: an extra KDE variable is allowed (open enum)",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "kdes",
+      2
+     ],
+     "value": {"variable": "close_usd", "n": 4, "bandwidth_method": "scott", "bandwidth_factor": 0.7579, "bandwidth": 0.5, "points": [{"x": 23.0, "density": 0.1, "normal_density": 0.1}, {"x": 24.0, "density": 0.5, "normal_density": 0.4}]}
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "eda: period written 2.0",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "period"
+     ],
+     "value": 2.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "eda: summary.n written 4.0",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "summary",
+      "n"
+     ],
+     "value": 4.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "eda: period 1 is below the minimum of 2",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "period"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: log_return.n is not summary.n - 1",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "summary",
+      "log_return",
+      "n"
+     ],
+     "value": 5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: log_return.n -5",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "summary",
+      "log_return",
+      "n"
+     ],
+     "value": -5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: a KDE with n 1",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "kdes",
+      0,
+      "n"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: sample course",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "sample"
+     ],
+     "value": "course"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: model multiplicative",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "model"
+     ],
+     "value": "multiplicative"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: no log_return KDE",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "kdes",
+      1
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: two KDEs of one variable",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "kdes",
+      1,
+      "variable"
+     ],
+     "value": "log_close"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: KDE x not ascending",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "kdes",
+      0,
+      "points",
+      2,
+      "x"
+     ],
+     "value": 3.17
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: a negative normal density",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "kdes",
+      1,
+      "points",
+      0,
+      "normal_density"
+     ],
+     "value": -0.1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: bandwidth 0",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "kdes",
+      0,
+      "bandwidth"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: a null trend beside a numeric residual",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "rows",
+      0,
+      "resid_log"
+     ],
+     "value": 0.1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: a null trend and residual in the middle",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "rows",
+      1,
+      "trend_log"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "decomposition",
+      "rows",
+      1,
+      "resid_log"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: no nulls at the start",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "rows",
+      0,
+      "trend_log"
+     ],
+     "value": 3.17
+    },
+    {
+     "path": [
+      "decomposition",
+      "rows",
+      0,
+      "resid_log"
+     ],
+     "value": 0.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: period 4 but only one null row at each end (period // 2 = 2 expected)",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "period"
+     ],
+     "value": 4
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: observed_log null",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "rows",
+      2,
+      "observed_log"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: decomposition rows empty while summary.n is 4",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "rows"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: decomposition rows end before the summary does",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "decomposition",
+      "rows",
+      3
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: summary start not before end",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "summary",
+      "start"
+     ],
+     "value": "2015-01-07"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "eda: a summary moment that is a string",
+   "base": "eda",
+   "edits": [
+    {
+     "path": [
+      "summary",
+      "close_usd",
+      "mean"
+     ],
+     "value": "23.75"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: the base fixture",
+   "base": "meta",
+   "edits": [],
+   "valid": true
+  },
+  {
+   "name": "meta: an unknown key in data is ignored (open payload)",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "notes"
+     ],
+     "value": "later"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "meta: held_artifacts absent, as in every 1.0.x file",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "held_artifacts"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "meta: held_artifacts empty",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "held_artifacts"
+     ],
+     "value": []
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "meta: held_artifacts 5 (not an array)",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "held_artifacts"
+     ],
+     "value": 5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: held_artifacts names an unlisted artifact",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "held_artifacts"
+     ],
+     "value": [
+      "nope"
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: held_artifacts holds a number",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "held_artifacts"
+     ],
+     "value": [
+      1
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: held_artifacts names one artifact twice",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "held_artifacts"
+     ],
+     "value": [
+      "prices",
+      "prices"
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: held_artifacts holds meta itself",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "held_artifacts"
+     ],
+     "value": [
+      "meta"
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: a milestone id written 2.0",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "milestones",
+      2,
+      "id"
+     ],
+     "value": 2.0
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "meta: a milestone id -1",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "milestones",
+      0,
+      "id"
+     ],
+     "value": -1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: a milestone id 2**53 + 1",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "milestones",
+      2,
+      "id"
+     ],
+     "value": 9007199254740993
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: two milestones with one id",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "milestones",
+      1,
+      "id"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: two current milestones",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "milestones",
+      0,
+      "status"
+     ],
+     "value": "current"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: no current milestone",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "milestones",
+      1,
+      "status"
+     ],
+     "value": "done"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: status DONE (closed enum, case matters)",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "milestones",
+      0,
+      "status"
+     ],
+     "value": "DONE"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: a ticker of U+FEFF only",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "ticker"
+     ],
+     "value": "\ufeff"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: a title of U+001C only",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "title"
+     ],
+     "value": "\u001c"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: an artifacts entry of U+0085 only",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "artifacts",
+      2
+     ],
+     "value": "\u0085"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: artifacts not an array",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "artifacts"
+     ],
+     "value": "meta"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: a window whose start is not before its end",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "windows",
+      "oos",
+      "start"
+     ],
+     "value": "2026-10-01"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: a window date that does not exist",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "windows",
+      "course",
+      "start"
+     ],
+     "value": "2015-02-30"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: windows without oos",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "windows",
+      "oos"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "meta: project missing",
+   "base": "meta",
+   "edits": [
+    {
+     "path": [
+      "project"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  }
+ ]
+}

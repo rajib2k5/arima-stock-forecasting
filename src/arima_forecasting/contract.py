@@ -28,7 +28,7 @@ from typing import Any
 
 # Semver. A major bump (2.0.0) means a breaking change the app must refuse. Minor and patch
 # bumps (1.1.0, 1.0.1) only add things, so an app that understands 1.x can still read them.
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 SUPPORTED_MAJOR = 1
 
 ENVELOPE_KEYS = frozenset({"schema_version", "artifact", "generated_at", "source_commit", "data"})

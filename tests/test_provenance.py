@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from synthetic import write_synthetic_snapshot
 
 from arima_forecasting.contract import make_envelope, validate_envelope
 from arima_forecasting.provenance import build_time, source_commit
@@ -309,14 +310,19 @@ def test_two_exports_with_a_fixed_source_date_epoch_are_byte_identical(tmp_path)
     git(repo, "commit", "-q", "-m", "snapshot")
     sha = git(repo, "rev-parse", "HEAD")
 
+    # The raw snapshot lives outside the repository, as the real one does (a synthetic one here).
+    data_root = tmp_path / "vol-data"
+    write_synthetic_snapshot(data_root)
     env = {
         **os.environ,
         "SOURCE_DATE_EPOCH": "1700000000",
+        "VOL_DATA_DIR": str(data_root),
         "PYTHONPATH": str(repo / "src"),  # the copy, not the real package
         "PYTHONDONTWRITEBYTECODE": "1",  # no stray __pycache__ to make the copy dirty
     }
+    folder = exported.parent
 
-    def export() -> bytes:
+    def export() -> dict[str, bytes]:
         done = subprocess.run(
             [sys.executable, str(repo / "tools" / "export_app_data.py")],
             cwd=tmp_path,
@@ -326,15 +332,85 @@ def test_two_exports_with_a_fixed_source_date_epoch_are_byte_identical(tmp_path)
             check=False,
         )
         assert done.returncode == 0, done.stderr
-        return exported.read_bytes()
+        return {path.name: path.read_bytes() for path in sorted(folder.glob("*.json"))}
 
     first = export()
-    assert first != b"{}\n"  # sanity-check: the first run really did rewrite the tracked file
+    assert sorted(first) == ["eda.json", "meta.json", "prices.json"]
+    assert first["meta.json"] != b"{}\n"  # sanity-check: the first run really did rewrite the tracked file
     assert "meta.json" in git(repo, "status", "--porcelain")
     second = export()
     assert second == first
-    assert json.loads(first)["source_commit"] == sha  # neither run called the tree dirty
-    assert json.loads(first)["generated_at"] == "2023-11-14T22:13:20Z"  # 1_700_000_000 s, as above
+    for text in first.values():
+        assert json.loads(text)["source_commit"] == sha  # neither run called the tree dirty
+        assert json.loads(text)["generated_at"] == "2023-11-14T22:13:20Z"  # 1_700_000_000 s, as above
+
+
+# --- 1b'. The source commit is the last commit outside the export folder (milestone 1) -----
+
+def test_a_commit_that_only_changes_exported_files_does_not_move_the_source_commit(tmp_path):
+    repo = new_repo(tmp_path / "repo")
+    code = commit_tree(repo, {"a.py": "x = 1\n", EXPORT_FILE: "{}\n"})
+    data_only = commit_tree(repo, {EXPORT_FILE: '{"regenerated": true}\n'})
+    assert data_only != code  # sanity-check: HEAD really moved
+    assert git(repo, "rev-parse", "HEAD") == data_only
+    assert source_commit(repo) == code
+
+
+def test_a_commit_that_changes_code_becomes_the_source_commit(tmp_path):
+    repo = new_repo(tmp_path / "repo")
+    commit_tree(repo, {"a.py": "x = 1\n"})
+    commit_tree(repo, {EXPORT_FILE: "{}\n"})
+    both = commit_tree(repo, {"a.py": "x = 2\n", EXPORT_FILE: '{"x": 2}\n'})
+    assert source_commit(repo) == both
+
+
+def test_a_repo_whose_commits_only_touch_the_export_folder_is_uncommitted(tmp_path):
+    repo = new_repo(tmp_path / "repo")
+    commit_tree(repo, {EXPORT_FILE: "{}\n"})
+    assert source_commit(repo) == "uncommitted"
+
+
+def test_the_json_commit_reexports_byte_identically(tmp_path):
+    # The two-commit procedure, end to end: commit the code, export, commit the JSON, export again.
+    # The second export runs AT the JSON commit and must reproduce the committed files byte for
+    # byte, so `git status` stays clean. With HEAD as the stamp it rewrote source_commit.
+    repo = new_repo(tmp_path / "repo")
+    shutil.copytree(REPO / "src", repo / "src", ignore=shutil.ignore_patterns("__pycache__"))
+    (repo / "tools").mkdir()
+    shutil.copy(REPO / "tools" / "export_app_data.py", repo / "tools" / "export_app_data.py")
+    (repo / ".gitignore").write_text("__pycache__/\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "code")
+    code = git(repo, "rev-parse", "HEAD")
+
+    data_root = tmp_path / "vol-data"
+    write_synthetic_snapshot(data_root)
+    env = {
+        **os.environ,
+        "SOURCE_DATE_EPOCH": "1700000000",
+        "VOL_DATA_DIR": str(data_root),
+        "PYTHONPATH": str(repo / "src"),
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+    folder = (repo / EXPORT_FILE).parent
+
+    def export() -> dict[str, bytes]:
+        done = subprocess.run(
+            [sys.executable, str(repo / "tools" / "export_app_data.py")],
+            cwd=tmp_path, env=env, capture_output=True, text=True, check=False,
+        )
+        assert done.returncode == 0, done.stderr
+        return {path.name: path.read_bytes() for path in sorted(folder.glob("*.json"))}
+
+    first = export()
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "export")
+    json_commit = git(repo, "rev-parse", "HEAD")
+    assert json_commit != code
+    second = export()
+    assert second == first
+    assert git(repo, "status", "--porcelain") == ""  # nothing to commit after re-exporting
+    assert {json.loads(t)["source_commit"] for t in second.values()} == {code}
 
 
 # --- 1c. SHA-256 repositories ------------------------------------------------------------

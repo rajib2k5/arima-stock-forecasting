@@ -152,3 +152,75 @@ def test_last_bars_match_the_calendar():
     assert last_weekday_before(COURSE_WINDOW.end_exclusive) == date(2023, 12, 29)
     # OOS: the day before Thursday 2026-10-01 is Wednesday 2026-09-30, a weekday.
     assert last_weekday_before(OOS_WINDOW.end_exclusive) == date(2026, 9, 30)
+
+
+# --- 2b. data_root refuses folders inside the repository, except <repo>/data -------------
+
+REPO = config.REPO_ROOT
+
+
+def test_repo_root_is_this_repository():
+    assert (REPO / "pyproject.toml").is_file() and (REPO / "src" / "arima_forecasting").is_dir()
+
+
+@pytest.mark.parametrize("inside", ["data", "data/vol", "data/arima-stock-forecasting/raw/.."])
+def test_data_root_accepts_the_ignored_data_folder_of_the_repo(inside):
+    assert config.data_root({"VOL_DATA_DIR": str(REPO / inside)}) == REPO / inside
+
+
+@pytest.mark.parametrize("inside", ["", "snapshots", "app/public", "data-raw", "data/../tests"])
+def test_data_root_refuses_any_other_folder_inside_the_repo(inside):
+    # "data-raw" shares a prefix with "data"; "data/../tests" only looks like it is under data/.
+    with pytest.raises(ValueError, match="inside the repository"):
+        config.data_root({"VOL_DATA_DIR": str(REPO / inside) if inside else str(REPO)})
+
+
+def test_data_root_refuses_a_relative_folder_that_resolves_inside_the_repo(monkeypatch):
+    monkeypatch.chdir(REPO / "app")
+    with pytest.raises(ValueError, match="inside the repository"):
+        config.data_root({"VOL_DATA_DIR": "public"})
+    monkeypatch.chdir(REPO)
+    assert config.data_root({"VOL_DATA_DIR": "data"}) == Path("data")
+
+
+def test_data_root_checks_against_the_repo_it_is_given(tmp_path):
+    repo = tmp_path / "repo"
+    with pytest.raises(ValueError, match="inside the repository"):
+        config.data_root({"VOL_DATA_DIR": str(repo / "snapshots")}, repo=repo)
+    assert config.data_root({"VOL_DATA_DIR": str(repo / "data")}, repo=repo) == repo / "data"
+    assert config.data_root({"VOL_DATA_DIR": str(tmp_path / "outside")}, repo=repo) == tmp_path / "outside"
+
+
+def test_raw_dir_and_cache_dir_inherit_the_check():
+    with pytest.raises(ValueError, match="inside the repository"):
+        config.raw_dir({"VOL_DATA_DIR": str(REPO / "snapshots")})
+    with pytest.raises(ValueError, match="inside the repository"):
+        config.cache_dir({"VOL_DATA_DIR": str(REPO / "snapshots")})
+
+
+def test_data_root_refuses_the_repos_parent_when_the_repo_is_named_after_the_project(tmp_path):
+    # VOL_DATA_DIR=<parent of repo>: raw_dir would be <repo>/raw, inside the repo but not in data/.
+    # Found by the milestone-1 re-review: the old check looked at the root's own path only.
+    repo = tmp_path / "arima-stock-forecasting"
+    (repo / "data").mkdir(parents=True)
+    with pytest.raises(ValueError, match="inside the repository"):
+        config.data_root({"VOL_DATA_DIR": str(tmp_path)}, repo=repo)
+    # Its data/ folder is still fine, and so is a sibling folder outside the repo.
+    assert config.data_root({"VOL_DATA_DIR": str(repo / "data")}, repo=repo) == repo / "data"
+    assert config.data_root({"VOL_DATA_DIR": str(tmp_path / "elsewhere")}, repo=repo) == tmp_path / "elsewhere"
+
+
+def test_data_root_refuses_a_symlink_that_leads_into_the_repo(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "snapshots").mkdir(parents=True)
+    link = tmp_path / "looks-outside"
+    link.symlink_to(repo / "snapshots", target_is_directory=True)
+    with pytest.raises(ValueError, match="inside the repository"):
+        config.data_root({"VOL_DATA_DIR": str(link)}, repo=repo)
+
+
+def test_this_repos_parent_is_refused_when_the_checkout_is_named_after_the_project():
+    if REPO.name != config.PROJECT_SLUG:
+        pytest.skip(f"this checkout is named {REPO.name!r}, so its parent puts data elsewhere")
+    with pytest.raises(ValueError, match="inside the repository"):
+        config.raw_dir({"VOL_DATA_DIR": str(REPO.parent)})

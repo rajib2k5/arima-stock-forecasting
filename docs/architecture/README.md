@@ -121,10 +121,12 @@ title: "Data flow from prices to metrics"
 ---
 flowchart TB
     ohlcv(["Daily OHLCV\nyfinance, adjusted"])
+    snapshot[("Raw snapshot\nCSV + SHA-256 manifest")]
     closepx["Adjusted close\n#36;, .ffill() if gaps"]
     logpx["Log price\nln(close)"]
     diffs["Differences\nd = 1, 2 (pointwise, no leak)"]
     splitpos["Split by position\n90#37; train / 10#37; test + OOS"]
+    edastats["EDA\nsummary, KDEs, decomposition"]
     unitroot[["ADF + KPSS\ntrain only → d"]]
     grid[["AIC grid\np, q 0–5, trend, per d"]]
     autoarima[["auto_arima check\ntrain only"]]
@@ -135,11 +137,13 @@ flowchart TB
     backtx["Back-transform\nexp(mean), exp(bounds)"]
     scoring["Metrics\nRMSE, MAE, MAPE; ratio to RW"]
     artifacts[/"JSON artifacts\nprices … metrics"/]
-    ohlcv -->|"Close column"| closepx
+    ohlcv -->|"download once"| snapshot
+    snapshot -->|"Close column"| closepx
     closepx --> logpx
     logpx --> diffs
     diffs --> splitpos
     splitpos -->|"train"| unitroot
+    splitpos -->|"train"| edastats
     unitroot -->|"d fixed"| grid
     splitpos -->|"train"| autoarima
     autoarima -.->|"cross-check"| grid
@@ -155,26 +159,32 @@ flowchart TB
     backtx -.->|"forecasts"| artifacts
     grid -.->|"aic_grid"| artifacts
     unitroot -.->|"stationarity"| artifacts
-    logpx -.->|"prices, eda"| artifacts
+    splitpos -.->|"prices"| artifacts
+    edastats -.->|"eda"| artifacts
     classDef source fill:#E0F2FE,stroke:#0284C7,color:#0F172A
     class ohlcv source
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#0F172A
+    class snapshot store
     classDef process fill:#E0E7FF,stroke:#4F46E5,color:#0F172A
-    class closepx,logpx,diffs,splitpos,backtx,scoring process
+    class closepx,logpx,diffs,splitpos,edastats,backtx,scoring process
     classDef model fill:#EDE9FE,stroke:#7C3AED,color:#0F172A
     class unitroot,grid,autoarima,fitmodel,static,walkfwd,randwalk model
     classDef output fill:#D1FAE5,stroke:#059669,color:#0F172A
     class artifacts output
-    linkStyle 7 stroke:#94A3B8
-    linkStyle 17 stroke:#94A3B8
-    linkStyle 18 stroke:#94A3B8
+    linkStyle 9 stroke:#94A3B8
     linkStyle 19 stroke:#94A3B8
     linkStyle 20 stroke:#94A3B8
+    linkStyle 21 stroke:#94A3B8
+    linkStyle 22 stroke:#94A3B8
+    linkStyle 23 stroke:#94A3B8
 ```
 
 **How to read it.** This is the life of one number, from a daily price bar to a forecast
-error. Everything before **Split by position** is pointwise: the log at day t uses only day t,
-and the difference at day t uses days t and t−1. So it is safe to compute over the whole series.
-Everything after the split that *estimates* something (the unit-root tests, the AIC grid, the
+error. The bars are downloaded once into a **Raw snapshot** outside git; every later run reads
+that file, whose SHA-256 the `prices` artifact repeats. Everything before **Split by position** is
+pointwise: the log at day t uses only day t, and the difference at day t uses days t and t−1. So
+it is safe to compute over the whole series. Everything after the split that *estimates*
+something (the **EDA** summary, KDEs and decomposition, the unit-root tests, the AIC grid, the
 `auto_arima` cross-check, the fit) sees only the training part. The fit then feeds two of the
 three forecast methods; the random walk needs no fit at all, only the actual prices. All three
 pass through the same **Back-transform** (exp of the log forecast and of its interval bounds)
@@ -273,14 +283,15 @@ erDiagram
     }
     raw_manifest["raw snapshot manifest"] {
         char(64) sha256 PK
-        text file_name
-        text ticker
-        date start
-        date end_exclusive
-        bool auto_adjust
+        text file
+        int rows
+        date first_date
+        date last_date
+        date request_start
+        date request_end
+        bool request_auto_adjust
         text yfinance_version
         timestamp_utc downloaded_at
-        int rows
     }
     envelope {
         text artifact PK

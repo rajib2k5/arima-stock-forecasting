@@ -295,7 +295,7 @@ describe('parseMeta: valid input', () => {
     const r = parseMeta(metaData(env))
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(Object.keys(r.meta).sort()).toEqual(['artifacts', 'milestones', 'project', 'ticker', 'title', 'windows'])
+      expect(Object.keys(r.meta).sort()).toEqual(['artifacts', 'held_artifacts', 'milestones', 'project', 'ticker', 'title', 'windows'])
       expect(Object.keys(r.meta.milestones[0]).sort()).toEqual(['id', 'slug', 'status', 'title'])
     }
   })
@@ -418,5 +418,24 @@ describe('parseMeta: milestones and artifacts', () => {
       'data.milestones[0].status: expected one of done, current, planned, got "nope"',
       'data.milestones[1].id: duplicate id 0',
     ])
+  })
+})
+
+describe('parseMeta: held_artifacts (the owner gate, added in 1.1.0)', () => {
+  it('reads a file without the key, as every 1.0.x file is, as holding nothing', () => {
+    const r = parseMeta(metaData(validMetaEnvelope()))
+    expect(r.ok && r.meta.held_artifacts).toEqual([])
+  })
+  it('reads the held names when each is one of the artifacts', () => {
+    let env = withValue(['data', 'artifacts'], ['meta', 'prices', 'eda'])
+    ;(env as { data: Record<string, Json> }).data.held_artifacts = ['prices', 'eda']
+    env = { ...(env as object) } as Json
+    const r = parseMeta(metaData(env))
+    expect(r.ok && r.meta.held_artifacts).toEqual(['prices', 'eda'])
+  })
+  it('refuses a held name that is not an artifact, and a value that is not an array', () => {
+    expect(metaErrorsOf(metaData(withValue(['data', 'held_artifacts'], ['prices'])))).toEqual(['data.held_artifacts[0]: "prices" must be a listed artifact other than meta, named once'])
+    expect(metaErrorsOf(metaData(withValue(['data', 'held_artifacts'], ['meta'])))).toEqual(['data.held_artifacts[0]: "meta" must be a listed artifact other than meta, named once'])
+    expect(metaErrorsOf(metaData(withValue(['data', 'held_artifacts'], 'prices')))).toEqual(['data.held_artifacts: expected an array, got string'])
   })
 })

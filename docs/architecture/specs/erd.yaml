@@ -16,14 +16,15 @@ entities:
     label: raw snapshot manifest
     columns:
       - {name: sha256, type: char(64), pk: true}
-      - {name: file_name, type: text}
-      - {name: ticker, type: text}
-      - {name: start, type: date}
-      - {name: end_exclusive, type: date}
-      - {name: auto_adjust, type: bool}
+      - {name: file, type: text}
+      - {name: rows, type: int}
+      - {name: first_date, type: date}
+      - {name: last_date, type: date}
+      - {name: request_start, type: date}
+      - {name: request_end, type: date}
+      - {name: request_auto_adjust, type: bool}
       - {name: yfinance_version, type: text}
       - {name: downloaded_at, type: timestamp_utc}
-      - {name: rows, type: int}
   # ---- contract side: app/public/data/<artifact>.json (docs/architecture/contract.md) ----
   # Columns that are not JSON fields: `artifact` (the envelope a payload or row sits in),
   # `transform` on stationarity_row and acf_pacf_row and `model_id` on fit_param (the parent

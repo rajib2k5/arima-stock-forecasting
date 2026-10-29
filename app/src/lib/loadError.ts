@@ -28,3 +28,12 @@ export function describeLoadError(e: ArtifactLoadError): string[] {
       return [`Expected the "${e.expected}" artifact but the file says it is "${e.actual}".`]
   }
 }
+
+/**
+ * True when the failure means "the file is not there": a 404 from a static host, or the HTML page a
+ * dev server sends instead of a missing file, which then fails to parse as JSON. The explorer uses
+ * it, for held artifacts only, to say "not built in this copy" instead of showing an error.
+ */
+export function looksAbsent(e: ArtifactLoadError): boolean {
+  return (e.kind === 'http' && e.status === 404) || e.kind === 'json'
+}

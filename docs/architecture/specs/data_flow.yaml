@@ -4,10 +4,12 @@ subtitle: Every estimated quantity uses the training split only; test and OOS ar
 direction: TB
 nodes:
   - {id: ohlcv,     label: Daily OHLCV,            sublabel: "yfinance, adjusted",            type: source}
+  - {id: snapshot,  label: Raw snapshot,           sublabel: "CSV + SHA-256 manifest",        type: store}
   - {id: closepx,   label: Adjusted close,         sublabel: "$, .ffill() if gaps",           type: process}
   - {id: logpx,     label: Log price,              sublabel: ln(close),                       type: process}
   - {id: diffs,     label: Differences,            sublabel: "d = 1, 2 (pointwise, no leak)", type: process}
   - {id: splitpos,  label: Split by position,      sublabel: 90% train / 10% test + OOS,      type: process}
+  - {id: edastats,  label: EDA,                    sublabel: "summary, KDEs, decomposition",  type: process}
   - {id: unitroot,  label: ADF + KPSS,             sublabel: train only → d,                  type: model}
   - {id: grid,      label: AIC grid,               sublabel: "p, q 0–5, trend, per d",        type: model}
   - {id: autoarima, label: auto_arima check,       sublabel: train only,                      type: model}
@@ -19,11 +21,13 @@ nodes:
   - {id: scoring,   label: Metrics,                sublabel: "RMSE, MAE, MAPE; ratio to RW",  type: process}
   - {id: artifacts, label: JSON artifacts,         sublabel: prices … metrics,                type: output}
 edges:
-  - {from: ohlcv, to: closepx, label: Close column}
+  - {from: ohlcv, to: snapshot, label: download once}
+  - {from: snapshot, to: closepx, label: Close column}
   - {from: closepx, to: logpx}
   - {from: logpx, to: diffs}
   - {from: diffs, to: splitpos}
   - {from: splitpos, to: unitroot, label: train}
+  - {from: splitpos, to: edastats, label: train}
   - {from: unitroot, to: grid, label: d fixed}
   - {from: splitpos, to: autoarima, label: train}
   - {from: autoarima, to: grid, label: cross-check, style: dashed}
@@ -39,4 +43,5 @@ edges:
   - {from: backtx, to: artifacts, label: forecasts, style: dashed}
   - {from: grid, to: artifacts, label: aic_grid, style: dashed}
   - {from: unitroot, to: artifacts, label: stationarity, style: dashed}
-  - {from: logpx, to: artifacts, label: "prices, eda", style: dashed}
+  - {from: splitpos, to: artifacts, label: prices, style: dashed}
+  - {from: edastats, to: artifacts, label: eda, style: dashed}

@@ -10,6 +10,13 @@
   --up: #3fa66a;
   --down: #c25450;
   --mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  /* plot tokens: segment bands and line tones (dark) */
+  --seg-train: rgba(79, 184, 168, 0.10);
+  --seg-test: rgba(224, 164, 88, 0.16);
+  --seg-oos: rgba(125, 155, 209, 0.16);
+  --line-primary: #e6e9ef;
+  --line-secondary: #e0a458;
+  --line-muted: #929db0;
 }
 * { box-sizing: border-box; }
 body {
@@ -78,6 +85,12 @@ a { color: var(--teal); }
   --teal: #25655B;
   --up: #1F7A48;
   --down: #A63E3A;
+  --seg-train: rgba(37, 101, 91, 0.10);
+  --seg-test: rgba(138, 109, 28, 0.16);
+  --seg-oos: rgba(56, 88, 150, 0.14);
+  --line-primary: #1B1E24;
+  --line-secondary: #8A6D1C;
+  --line-muted: #646A75;
 }
 
 /* ---- pages ---- */
@@ -107,3 +120,36 @@ code { font-family: var(--mono); font-size: .85em; }
 @media (max-width: 560px) { .layer-notes { grid-template-columns: 1fr; } }
 .stat .v.v-sm { font-size: 1.05rem; margin-top: .45rem; }
 .grid + .sub { margin-top: .9rem; }
+
+/* ---- plots (SeriesPlot) and the price explorer ---- */
+.plot { margin: 0; }
+.plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+.plot svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.plot text { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+.plot .grid { stroke: var(--line); stroke-width: 1; }
+.plot .zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; }
+.plot .line { fill: none; stroke-width: 1.4; stroke-linejoin: round; }
+.plot .line.dashed { stroke-dasharray: 5 4; }
+.line-primary { stroke: var(--line-primary); }
+.line-secondary { stroke: var(--line-secondary); }
+.line-muted { stroke: var(--line-muted); }
+.band-train { fill: var(--seg-train); background: var(--seg-train); }
+.band-test { fill: var(--seg-test); background: var(--seg-test); }
+.band-oos { fill: var(--seg-oos); background: var(--seg-oos); }
+.plot .cursor line { stroke: var(--accent); stroke-width: 1; }
+.plot .cursor text { fill: var(--ink); }
+.plot-legend, .segment-legend { list-style: none; margin: .4rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; font-size: .8rem; color: var(--muted); }
+.segment-legend strong { color: var(--ink); font-weight: 600; }
+.swatch { display: inline-block; width: 1.4rem; height: .7rem; margin-right: .4rem; vertical-align: middle; border-radius: 2px; }
+.plot-legend .swatch { height: 0; border-top: 2px solid; border-radius: 0; }
+.plot-legend .swatch.line-primary { border-color: var(--line-primary); }
+.plot-legend .swatch.line-muted { border-color: var(--line-muted); }
+.plot-legend .swatch.dashed { border-top-style: dashed; }
+.segment-legend .swatch { border: 1px solid var(--line); }
+.panel-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.panel h3 { font-size: .9rem; margin: 0 0 .4rem; }
+.note { margin: .6rem 0 0; font-size: .82rem; }
+.control-label { font-family: var(--mono); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-right: .2rem; }
+button.toggle.on { border-color: var(--accent); color: var(--accent); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (max-width: 560px) { .panel-grid { grid-template-columns: 1fr; } }
