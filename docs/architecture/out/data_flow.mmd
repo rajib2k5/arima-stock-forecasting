@@ -1,22 +1,22 @@
 ---
 title: "Data flow from prices to metrics"
 ---
-flowchart LR
-    ohlcv(["Daily OHLCV<br/><small>yfinance, adjusted</small>"])
-    closepx["Adjusted close<br/><small>$, .ffill() if gaps</small>"]
-    logpx["Log price<br/><small>ln(close)</small>"]
-    diffs["Differences<br/><small>d = 1, 2 (pointwise, no leak)</small>"]
-    splitpos["Split by position<br/><small>90% train / 10% test + OOS</small>"]
-    unitroot[["ADF + KPSS<br/><small>train only → d</small>"]]
-    grid[["AIC grid<br/><small>p, q 0–5, trend, per d</small>"]]
-    autoarima[["auto_arima check<br/><small>train only</small>"]]
-    fitmodel[["Fit ARIMA<br/><small>statsmodels, order + trend</small>"]]
-    static[["Static multi-step<br/><small>one origin to horizon h</small>"]]
-    walkfwd[["Walk-forward one-step<br/><small>params frozen, filter updated</small>"]]
-    randwalk[["Random walk<br/><small>forecast = previous close</small>"]]
-    backtx["Back-transform<br/><small>exp(mean), exp(bounds)</small>"]
-    scoring["Metrics<br/><small>RMSE, MAE, MAPE; ratio to RW</small>"]
-    artifacts[/"JSON artifacts<br/><small>prices … metrics</small>"/]
+flowchart TB
+    ohlcv(["Daily OHLCV\nyfinance, adjusted"])
+    closepx["Adjusted close\n#36;, .ffill() if gaps"]
+    logpx["Log price\nln(close)"]
+    diffs["Differences\nd = 1, 2 (pointwise, no leak)"]
+    splitpos["Split by position\n90#37; train / 10#37; test + OOS"]
+    unitroot[["ADF + KPSS\ntrain only → d"]]
+    grid[["AIC grid\np, q 0–5, trend, per d"]]
+    autoarima[["auto_arima check\ntrain only"]]
+    fitmodel[["Fit ARIMA\nstatsmodels, order + trend"]]
+    static[["Static multi-step\none origin to horizon h"]]
+    walkfwd[["Walk-forward one-step\nparams frozen, filter updated"]]
+    randwalk[["Random walk\nforecast = previous close"]]
+    backtx["Back-transform\nexp(mean), exp(bounds)"]
+    scoring["Metrics\nRMSE, MAE, MAPE; ratio to RW"]
+    artifacts[/"JSON artifacts\nprices … metrics"/]
     ohlcv -->|"Close column"| closepx
     closepx --> logpx
     logpx --> diffs
@@ -32,7 +32,7 @@ flowchart LR
     static --> backtx
     walkfwd --> backtx
     randwalk --> backtx
-    backtx -->|"vs actual $"| scoring
+    backtx -->|"vs actual #36;"| scoring
     scoring -->|"metrics"| artifacts
     backtx -.->|"forecasts"| artifacts
     grid -.->|"aic_grid"| artifacts

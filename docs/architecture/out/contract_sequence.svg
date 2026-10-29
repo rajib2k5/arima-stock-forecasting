@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1383" height="1444" viewBox="0 0 1383 1444">
+  <title>One artifact from export to screen</title>
+  <rect x="0" y="0" width="1383" height="1444" fill="#F8FAFC"/>
+  <text x="32" y="52" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="20" font-weight="700" fill="#0F172A">One artifact from export to screen</text>
+  <g id="block_0">
+    <rect x="102" y="314" width="533" height="286" rx="10" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1"/>
+    <path d="M102 324Q102 314 112 314H141.14V328L135.14 334H102Z" fill="#E2E8F0"/>
+    <text x="110" y="328" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="10" font-weight="700" letter-spacing="0.8" fill="#334155">ALT</text>
+    <text x="151.14" y="328.5" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="600" fill="#334155">[invalid envelope, or NaN, Infinity or an unsafe integer in payload]</text>
+    <path d="M102 486H635" fill="none" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="114" y="504" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="600" fill="#334155">[envelope valid, every float finite, every integer safe]</text>
+  </g>
+  <g id="block_1">
+    <rect x="777" y="786" width="574" height="556" rx="10" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1"/>
+    <path d="M777 796Q777 786 787 786H816.14V800L810.14 806H777Z" fill="#E2E8F0"/>
+    <text x="785" y="800" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="10" font-weight="700" letter-spacing="0.8" fill="#334155">ALT</text>
+    <text x="826.14" y="800.5" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="600" fill="#334155">[network or HTTP error, or not valid JSON]</text>
+    <path d="M777 864H1351" fill="none" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="789" y="882" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="600" fill="#334155">[parsed]</text>
+  </g>
+  <g id="block_2">
+    <rect x="799" y="930" width="530" height="392" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1"/>
+    <path d="M799 940Q799 930 809 930H838.14V944L832.14 950H799Z" fill="#E2E8F0"/>
+    <text x="807" y="944" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="10" font-weight="700" letter-spacing="0.8" fill="#334155">ALT</text>
+    <text x="848.14" y="944.5" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="600" fill="#334155">[major ≠ 1, or a key missing, unknown or invalid]</text>
+    <path d="M799 1048H1329" fill="none" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="811" y="1066" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="600" fill="#334155">[envelope valid]</text>
+  </g>
+  <path d="M134 128V1364" fill="none" stroke="#CBD5E1" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M406 128V1364" fill="none" stroke="#CBD5E1" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M613 128V1364" fill="none" stroke="#CBD5E1" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M821 128V1364" fill="none" stroke="#CBD5E1" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M1073 128V1364" fill="none" stroke="#CBD5E1" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <path d="M1262 128V1364" fill="none" stroke="#CBD5E1" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <g id="participant_exporter">
+    <rect x="31.5" y="81" width="205" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="30.5" y="82" width="207" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="29.5" y="84" width="209" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="31.5" y="80" width="205" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="54.23" y="92" width="24" height="24" rx="7" fill="#E0E7FF"/>
+    <g transform="translate(58.23 96)" fill="none" stroke="#4F46E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 5h11M2.5 11h11"/>
+      <circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/>
+      <circle cx="10.5" cy="11" r="1.8" fill="#FFFFFF"/>
+    </g>
+    <text x="86.23" y="109" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">export_app_data.py</text>
+    <rect x="31.5" y="1365" width="205" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="30.5" y="1366" width="207" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="29.5" y="1368" width="209" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="31.5" y="1364" width="205" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="54.23" y="1376" width="24" height="24" rx="7" fill="#E0E7FF"/>
+    <g transform="translate(58.23 1380)" fill="none" stroke="#4F46E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 5h11M2.5 11h11"/>
+      <circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/>
+      <circle cx="10.5" cy="11" r="1.8" fill="#FFFFFF"/>
+    </g>
+    <text x="86.23" y="1393" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">export_app_data.py</text>
+  </g>
+  <g id="participant_pycontract">
+    <rect x="333.5" y="81" width="145" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="332.5" y="82" width="147" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="331.5" y="84" width="149" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="333.5" y="80" width="145" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="353.62" y="92" width="24" height="24" rx="7" fill="#E0E7FF"/>
+    <g transform="translate(357.62 96)" fill="none" stroke="#4F46E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 5h11M2.5 11h11"/>
+      <circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/>
+      <circle cx="10.5" cy="11" r="1.8" fill="#FFFFFF"/>
+    </g>
+    <text x="385.62" y="109" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">contract.py</text>
+    <rect x="333.5" y="1365" width="145" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="332.5" y="1366" width="147" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="331.5" y="1368" width="149" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="333.5" y="1364" width="145" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="353.62" y="1376" width="24" height="24" rx="7" fill="#E0E7FF"/>
+    <g transform="translate(357.62 1380)" fill="none" stroke="#4F46E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 5h11M2.5 11h11"/>
+      <circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/>
+      <circle cx="10.5" cy="11" r="1.8" fill="#FFFFFF"/>
+    </g>
+    <text x="385.62" y="1393" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">contract.py</text>
+  </g>
+  <g id="participant_disk">
+    <rect x="526.5" y="81" width="173" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="525.5" y="82" width="175" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="524.5" y="84" width="177" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="526.5" y="80" width="173" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="547.5" y="92" width="24" height="24" rx="7" fill="#FEF3C7"/>
+    <g transform="translate(551.5 96)" fill="none" stroke="#D97706" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="8" cy="4" rx="5" ry="2"/>
+      <path d="M3 4v8c0 1.1 2.24 2 5 2s5-.9 5-2V4"/>
+      <path d="M3 8c0 1.1 2.24 2 5 2s5-.9 5-2"/>
+    </g>
+    <text x="579.5" y="109" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">app/public/data</text>
+    <rect x="526.5" y="1365" width="173" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="525.5" y="1366" width="175" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="524.5" y="1368" width="177" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="526.5" y="1364" width="173" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="547.5" y="1376" width="24" height="24" rx="7" fill="#FEF3C7"/>
+    <g transform="translate(551.5 1380)" fill="none" stroke="#D97706" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="8" cy="4" rx="5" ry="2"/>
+      <path d="M3 4v8c0 1.1 2.24 2 5 2s5-.9 5-2V4"/>
+      <path d="M3 8c0 1.1 2.24 2 5 2s5-.9 5-2"/>
+    </g>
+    <text x="579.5" y="1393" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">app/public/data</text>
+  </g>
+  <g id="participant_loader">
+    <rect x="747.5" y="81" width="147" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="746.5" y="82" width="149" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="745.5" y="84" width="151" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="747.5" y="80" width="147" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="767.5" y="92" width="24" height="24" rx="7" fill="#E0E7FF"/>
+    <g transform="translate(771.5 96)" fill="none" stroke="#4F46E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 5h11M2.5 11h11"/>
+      <circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/>
+      <circle cx="10.5" cy="11" r="1.8" fill="#FFFFFF"/>
+    </g>
+    <text x="799.5" y="109" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">loadArtifact</text>
+    <rect x="747.5" y="1365" width="147" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="746.5" y="1366" width="149" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="745.5" y="1368" width="151" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="747.5" y="1364" width="147" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="767.5" y="1376" width="24" height="24" rx="7" fill="#E0E7FF"/>
+    <g transform="translate(771.5 1380)" fill="none" stroke="#4F46E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 5h11M2.5 11h11"/>
+      <circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/>
+      <circle cx="10.5" cy="11" r="1.8" fill="#FFFFFF"/>
+    </g>
+    <text x="799.5" y="1393" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">loadArtifact</text>
+  </g>
+  <g id="participant_tsparser">
+    <rect x="1003" y="81" width="140" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="1002" y="82" width="142" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="1001" y="84" width="144" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="1003" y="80" width="140" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="1022.49" y="92" width="24" height="24" rx="7" fill="#E0E7FF"/>
+    <g transform="translate(1026.49 96)" fill="none" stroke="#4F46E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 5h11M2.5 11h11"/>
+      <circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/>
+      <circle cx="10.5" cy="11" r="1.8" fill="#FFFFFF"/>
+    </g>
+    <text x="1054.49" y="109" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">contract.ts</text>
+    <rect x="1003" y="1365" width="140" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="1002" y="1366" width="142" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="1001" y="1368" width="144" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="1003" y="1364" width="140" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="1022.49" y="1376" width="24" height="24" rx="7" fill="#E0E7FF"/>
+    <g transform="translate(1026.49 1380)" fill="none" stroke="#4F46E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2.5 5h11M2.5 11h11"/>
+      <circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/>
+      <circle cx="10.5" cy="11" r="1.8" fill="#FFFFFF"/>
+    </g>
+    <text x="1054.49" y="1393" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">contract.ts</text>
+  </g>
+  <g id="participant_view">
+    <rect x="1191.5" y="81" width="141" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="1190.5" y="82" width="143" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="1189.5" y="84" width="145" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="1191.5" y="80" width="141" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="1211.11" y="92" width="24" height="24" rx="7" fill="#FCE7F3"/>
+    <g transform="translate(1215.11 96)" fill="none" stroke="#DB2777" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2"/>
+      <path d="M1.5 6h13"/>
+      <circle cx="4" cy="4.25" r="0.5"/>
+    </g>
+    <text x="1243.11" y="109" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">React view</text>
+    <rect x="1191.5" y="1365" width="141" height="48" rx="10" fill="#0F172A" fill-opacity="0.05"/>
+    <rect x="1190.5" y="1366" width="143" height="49" rx="11" fill="#0F172A" fill-opacity="0.04"/>
+    <rect x="1189.5" y="1368" width="145" height="50" rx="12" fill="#0F172A" fill-opacity="0.03"/>
+    <rect x="1191.5" y="1364" width="141" height="48" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <rect x="1211.11" y="1376" width="24" height="24" rx="7" fill="#FCE7F3"/>
+    <g transform="translate(1215.11 1380)" fill="none" stroke="#DB2777" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2"/>
+      <path d="M1.5 6h13"/>
+      <circle cx="4" cy="4.25" r="0.5"/>
+    </g>
+    <text x="1243.11" y="1393" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="13.5" font-weight="600" fill="#0F172A">React view</text>
+  </g>
+  <g id="message_1">
+    <path d="M134 180H398" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="176.28" y="160" width="187.43" height="16" rx="3" fill="#F8FAFC"/>
+    <text x="270" y="172" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">make_envelope(artifact, payload)</text>
+    <polygon points="405,180 396,184.5 396,175.5" fill="#475569"/>
+    <circle cx="134" cy="180" r="8.5" fill="#334155"/>
+    <text x="134" y="183.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">1</text>
+  </g>
+  <g id="note_1">
+    <rect x="418" y="196" width="227" height="28" rx="6" fill="#FEF9C3" stroke="#FDE68A" stroke-width="1"/>
+    <text x="430" y="214" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" fill="#713F12">commit + time from provenance.py</text>
+  </g>
+  <g id="message_2">
+    <path d="M406 260H136" fill="none" stroke="#64748B" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="229.64" y="240" width="80.72" height="16" rx="3" fill="#F8FAFC"/>
+    <text x="270" y="252" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">envelope dict</text>
+    <path d="M144 255L135 260L144 265" fill="none" stroke="#64748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="406" cy="260" r="8.5" fill="#334155"/>
+    <text x="406" y="263.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">2</text>
+  </g>
+  <g id="message_3">
+    <path d="M134 300H398" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="191.78" y="280" width="156.44" height="16" rx="3" fill="#F8FAFC"/>
+    <text x="270" y="292" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">validate_envelope + dumps</text>
+    <polygon points="405,300 396,304.5 396,295.5" fill="#475569"/>
+    <circle cx="134" cy="300" r="8.5" fill="#334155"/>
+    <text x="134" y="303.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">3</text>
+  </g>
+  <g id="message_4">
+    <path d="M406 374H136" fill="none" stroke="#64748B" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="185.31" y="354" width="169.39" height="16" rx="3" fill="#F1F5F9"/>
+    <text x="270" y="366" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">problems list, or dumps raises</text>
+    <path d="M144 369L135 374L144 379" fill="none" stroke="#64748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="406" cy="374" r="8.5" fill="#334155"/>
+    <text x="406" y="377.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">4</text>
+  </g>
+  <g id="message_5">
+    <path d="M134 402H164Q170 402 170 408V418Q170 424 164 424H143" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <text x="182" y="415" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" fill="#334155">exit 1</text>
+    <polygon points="136,424 145,419.5 145,428.5" fill="#475569"/>
+    <circle cx="148" cy="402" r="8.5" fill="#334155"/>
+    <text x="148" y="405.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">5</text>
+  </g>
+  <g id="note_5">
+    <rect x="146" y="444" width="124" height="28" rx="6" fill="#FEF9C3" stroke="#FDE68A" stroke-width="1"/>
+    <text x="158" y="462" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" fill="#713F12">nothing is written</text>
+  </g>
+  <g id="message_6">
+    <path d="M406 538H136" fill="none" stroke="#64748B" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="176.63" y="518" width="186.74" height="16" rx="3" fill="#F1F5F9"/>
+    <text x="270" y="530" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">JSON text (sorted keys, indent 2)</text>
+    <path d="M144 533L135 538L144 543" fill="none" stroke="#64748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="406" cy="538" r="8.5" fill="#334155"/>
+    <text x="406" y="541.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">6</text>
+  </g>
+  <g id="message_7">
+    <path d="M134 578H605" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="323.49" y="558" width="100.03" height="16" rx="3" fill="#F1F5F9"/>
+    <text x="373.5" y="570" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">write artifact.json</text>
+    <polygon points="612,578 603,582.5 603,573.5" fill="#475569"/>
+    <circle cx="134" cy="578" r="8.5" fill="#334155"/>
+    <text x="134" y="581.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">7</text>
+  </g>
+  <g id="message_8">
+    <path d="M821 638H621" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="653.3" y="618" width="127.4" height="16" rx="3" fill="#F8FAFC"/>
+    <text x="717" y="630" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">fetch data/artifact.json</text>
+    <polygon points="614,638 623,633.5 623,642.5" fill="#475569"/>
+    <circle cx="821" cy="638" r="8.5" fill="#334155"/>
+    <text x="821" y="641.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">8</text>
+  </g>
+  <g id="message_9">
+    <path d="M613 678H819" fill="none" stroke="#64748B" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="672.64" y="658" width="88.72" height="16" rx="3" fill="#F8FAFC"/>
+    <text x="717" y="670" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">response body</text>
+    <path d="M811 683L820 678L811 673" fill="none" stroke="#64748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="613" cy="678" r="8.5" fill="#334155"/>
+    <text x="613" y="681.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">9</text>
+  </g>
+  <g id="message_10">
+    <path d="M821 706H851Q857 706 857 712V722Q857 728 851 728H830" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <text x="869" y="719" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" fill="#334155">res.json() parses the body</text>
+    <polygon points="823,728 832,723.5 832,732.5" fill="#475569"/>
+    <circle cx="835" cy="706" r="8.5" fill="#334155"/>
+    <text x="835" y="709.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">10</text>
+  </g>
+  <g id="note_10">
+    <rect x="833" y="748" width="201" height="28" rx="6" fill="#FEF9C3" stroke="#FDE68A" stroke-width="1"/>
+    <text x="845" y="766" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" fill="#713F12">a bare NaN token throws here</text>
+  </g>
+  <g id="message_11">
+    <path d="M821 846H1254" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="994.47" y="826" width="94.05" height="16" rx="3" fill="#F1F5F9"/>
+    <text x="1041.5" y="838" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">load error panel</text>
+    <polygon points="1261,846 1252,850.5 1252,841.5" fill="#475569"/>
+    <circle cx="821" cy="846" r="8.5" fill="#334155"/>
+    <text x="821" y="849.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">11</text>
+  </g>
+  <g id="message_12">
+    <path d="M821 916H1065" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="888.31" y="896" width="117.38" height="16" rx="3" fill="#F1F5F9"/>
+    <text x="947" y="908" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">parseEnvelope(raw)</text>
+    <polygon points="1072,916 1063,920.5 1063,911.5" fill="#475569"/>
+    <circle cx="821" cy="916" r="8.5" fill="#334155"/>
+    <text x="821" y="919.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">12</text>
+  </g>
+  <g id="message_13">
+    <path d="M1073 990H823" fill="none" stroke="#64748B" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="897.32" y="970" width="99.36" height="16" rx="3" fill="#FFFFFF"/>
+    <text x="947" y="982" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">ok: false, errors[]</text>
+    <path d="M831 985L822 990L831 995" fill="none" stroke="#64748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="1073" cy="990" r="8.5" fill="#334155"/>
+    <text x="1073" y="993.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">13</text>
+  </g>
+  <g id="message_14">
+    <path d="M821 1030H1254" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="950.79" y="1010" width="181.41" height="16" rx="3" fill="#FFFFFF"/>
+    <text x="1041.5" y="1022" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">error panel listing every problem</text>
+    <polygon points="1261,1030 1252,1034.5 1252,1025.5" fill="#475569"/>
+    <circle cx="821" cy="1030" r="8.5" fill="#334155"/>
+    <text x="821" y="1033.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">14</text>
+  </g>
+  <g id="message_15">
+    <path d="M1073 1100H823" fill="none" stroke="#64748B" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="901.3" y="1080" width="91.4" height="16" rx="3" fill="#FFFFFF"/>
+    <text x="947" y="1092" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">typed envelope</text>
+    <path d="M831 1095L822 1100L831 1105" fill="none" stroke="#64748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="1073" cy="1100" r="8.5" fill="#334155"/>
+    <text x="1073" y="1103.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">15</text>
+  </g>
+  <g id="note_15">
+    <rect x="833" y="1116" width="319" height="28" rx="6" fill="#FEF9C3" stroke="#FDE68A" stroke-width="1"/>
+    <text x="845" y="1134" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" fill="#713F12">loadArtifact also rejects an artifact name mismatch</text>
+  </g>
+  <g id="message_16">
+    <path d="M821 1180H1065" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="904.31" y="1160" width="85.39" height="16" rx="3" fill="#FFFFFF"/>
+    <text x="947" y="1172" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">parse payload</text>
+    <polygon points="1072,1180 1063,1184.5 1063,1175.5" fill="#475569"/>
+    <circle cx="821" cy="1180" r="8.5" fill="#334155"/>
+    <text x="821" y="1183.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">16</text>
+  </g>
+  <g id="note_16">
+    <rect x="1085" y="1196" width="222" height="28" rx="6" fill="#FEF9C3" stroke="#FDE68A" stroke-width="1"/>
+    <text x="1097" y="1214" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" fill="#713F12">unknown keys in data are ignored</text>
+  </g>
+  <g id="message_17">
+    <path d="M1073 1260H823" fill="none" stroke="#64748B" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="913.98" y="1240" width="66.04" height="16" rx="3" fill="#FFFFFF"/>
+    <text x="947" y="1252" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">typed data</text>
+    <path d="M831 1255L822 1260L831 1265" fill="none" stroke="#64748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="1073" cy="1260" r="8.5" fill="#334155"/>
+    <text x="1073" y="1263.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">17</text>
+  </g>
+  <g id="message_18">
+    <path d="M821 1300H1254" fill="none" stroke="#475569" stroke-width="1.6"/>
+    <rect x="1019.16" y="1280" width="44.69" height="16" rx="3" fill="#FFFFFF"/>
+    <text x="1041.5" y="1292" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="12" font-weight="400" text-anchor="middle" fill="#334155">render</text>
+    <polygon points="1261,1300 1252,1304.5 1252,1295.5" fill="#475569"/>
+    <circle cx="821" cy="1300" r="8.5" fill="#334155"/>
+    <text x="821" y="1303.4" font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, 'Liberation Sans', sans-serif" font-size="9.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">18</text>
+  </g>
+</svg>

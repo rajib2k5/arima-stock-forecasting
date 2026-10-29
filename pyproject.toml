@@ -32,3 +32,7 @@ dev = [
   "nbclient==0.11.0",
   "ipykernel==7.4.0",
 ]
+diagrams = [
+    "pyyaml==6.0.3",
+    "resvg-py==0.5.0",
+]

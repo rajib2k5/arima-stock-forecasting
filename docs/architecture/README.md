@@ -19,15 +19,15 @@ versioning policy, and one section per artifact from `meta` (milestone 0) to `me
 
 ## Diagrams
 
-Each diagram has a YAML source in [`specs/`](specs/) and a generated Mermaid file next to this
-README. The blocks below are byte-for-byte copies of those `.mmd` files, so GitHub can draw them
-inline. Do not edit the `.mmd` files or these blocks by hand.
+Each diagram has a YAML source in [`specs/`](specs/) and generated files in [`out/`](out/): a
+Mermaid file (`.mmd`) plus SVG, PNG, draw.io and Lucid versions. The blocks below are
+byte-for-byte copies of the `out/*.mmd` files, so GitHub can draw them inline. Do not edit the
+files in `out/` or these blocks by hand.
 
-The `.mmd` files are generated from the YAML specs by a shared diagram kit (the same kit also
-renders SVG, PNG and draw.io versions). The kit is not public yet; the plan is to vendor it into
-`tools/diagrams/` so that anyone can rebuild the diagrams. Until then, **the YAML specs are the
-source of truth** and the `.mmd` files are committed outputs. The committed files were built
-with kit commit `56aad83`, and only the Mermaid output is committed.
+The files in `out/` are generated from the YAML specs by a diagram kit that is vendored in
+[`tools/diagrams/`](../../tools/diagrams/README.md), so anyone can rebuild the diagrams.
+**The YAML specs are the source of truth.** The committed files were built with kit commit
+`7493b4b`.
 
 ### 1. Architecture
 
@@ -35,32 +35,32 @@ with kit commit `56aad83`, and only the Mermaid output is committed.
 ---
 title: "ARIMA stock forecasting architecture"
 ---
-flowchart LR
+flowchart TB
     subgraph source["Source"]
-        yahoo{{"Yahoo Finance<br/><small>chart API</small>"}}
-        yfin(["yfinance 1.7.0<br/><small>download(), auto_adjust=True</small>"])
+        yahoo{{"Yahoo Finance\nchart API"}}
+        yfin(["yfinance 1.7.0\ndownload(), auto_adjust=True"])
     end
     subgraph rawcache["Raw cache (outside git)"]
-        rawfile[("Raw price snapshot<br/><small>$VOL_DATA_DIR/.../raw</small>")]
-        manifest[("Snapshot manifest<br/><small>sha256, rows, version</small>")]
+        rawfile[("Raw price snapshot\n#36;VOL_DATA_DIR/.../raw")]
+        manifest[("Snapshot manifest\nsha256, rows, version")]
     end
     subgraph core["Python core"]
-        config["config.py<br/><small>windows and data paths</small>"]
-        pipeline[["arima_forecasting<br/><small>EDA, tests, grid, fit, forecasts</small>"]]
-        contract["contract.py<br/><small>envelope, allow_nan=False</small>"]
-        provenance["provenance.py<br/><small>commit + SOURCE_DATE_EPOCH</small>"]
+        config["config.py\nwindows and data paths"]
+        pipeline[["arima_forecasting\nEDA, tests, grid, fit, forecasts"]]
+        contract["contract.py\nenvelope, allow_nan=False"]
+        provenance["provenance.py\ncommit + SOURCE_DATE_EPOCH"]
     end
     subgraph delivery["Delivery (in git)"]
-        exporter["export_app_data.py<br/><small>one file per artifact</small>"]
-        jsonfiles[/"app/public/data<br/><small>versioned JSON envelopes</small>"/]
-        notebooks[/"Notebooks<br/><small>built by build_notebooks.py</small>"/]
-        reports[/"Reports<br/><small>result tables (from M4)</small>"/]
-        pytests["pytest<br/><small>contract, sync, numbers</small>"]
+        exporter["export_app_data.py\none file per artifact"]
+        jsonfiles[/"app/public/data\nversioned JSON envelopes"/]
+        notebooks[/"Notebooks\nbuilt by build_notebooks.py"/]
+        reports[/"Reports\nresult tables (from M4)"/]
+        pytests["pytest\ncontract, sync, numbers"]
     end
     subgraph webapp["App"]
-        loader["loadArtifact<br/><small>refuses major ≠ 1</small>"]
-        views("React 19 views<br/><small>explorer, lab, 3D AIC, fan</small>")
-        vitest["vitest<br/><small>parses the real JSON files</small>"]
+        loader["loadArtifact\nrefuses major ≠ 1"]
+        views("React 19 views\nexplorer, lab, 3D AIC, fan")
+        vitest["vitest\nparses the real JSON files"]
     end
     yahoo -->|"HTTPS"| yfin
     yfin -->|"snapshot once"| rawfile
@@ -102,8 +102,8 @@ flowchart LR
     linkStyle 14 stroke:#94A3B8
 ```
 
-**How to read it.** Read left to right: data comes in from Yahoo on the left and ends up on
-screen on the right. Each rounded box is a *lane*, meaning where a thing lives. The **Raw
+**How to read it.** Read top to bottom: data comes in from Yahoo at the top and ends up on
+screen at the bottom. Each rounded box is a *lane*, meaning where a thing lives. The **Raw
 cache** lane is outside git: the price snapshot and its manifest sit in
 `$VOL_DATA_DIR/arima-stock-forecasting/raw/`. Everything in **Delivery** is committed. The only
 arrow into the app is `app/public/data → loadArtifact`: that is the contract, and it is
@@ -119,22 +119,22 @@ production parsers over the very JSON files in `app/public/data/` that the app w
 ---
 title: "Data flow from prices to metrics"
 ---
-flowchart LR
-    ohlcv(["Daily OHLCV<br/><small>yfinance, adjusted</small>"])
-    closepx["Adjusted close<br/><small>$, .ffill() if gaps</small>"]
-    logpx["Log price<br/><small>ln(close)</small>"]
-    diffs["Differences<br/><small>d = 1, 2 (pointwise, no leak)</small>"]
-    splitpos["Split by position<br/><small>90% train / 10% test + OOS</small>"]
-    unitroot[["ADF + KPSS<br/><small>train only → d</small>"]]
-    grid[["AIC grid<br/><small>p, q 0–5, trend, per d</small>"]]
-    autoarima[["auto_arima check<br/><small>train only</small>"]]
-    fitmodel[["Fit ARIMA<br/><small>statsmodels, order + trend</small>"]]
-    static[["Static multi-step<br/><small>one origin to horizon h</small>"]]
-    walkfwd[["Walk-forward one-step<br/><small>params frozen, filter updated</small>"]]
-    randwalk[["Random walk<br/><small>forecast = previous close</small>"]]
-    backtx["Back-transform<br/><small>exp(mean), exp(bounds)</small>"]
-    scoring["Metrics<br/><small>RMSE, MAE, MAPE; ratio to RW</small>"]
-    artifacts[/"JSON artifacts<br/><small>prices … metrics</small>"/]
+flowchart TB
+    ohlcv(["Daily OHLCV\nyfinance, adjusted"])
+    closepx["Adjusted close\n#36;, .ffill() if gaps"]
+    logpx["Log price\nln(close)"]
+    diffs["Differences\nd = 1, 2 (pointwise, no leak)"]
+    splitpos["Split by position\n90#37; train / 10#37; test + OOS"]
+    unitroot[["ADF + KPSS\ntrain only → d"]]
+    grid[["AIC grid\np, q 0–5, trend, per d"]]
+    autoarima[["auto_arima check\ntrain only"]]
+    fitmodel[["Fit ARIMA\nstatsmodels, order + trend"]]
+    static[["Static multi-step\none origin to horizon h"]]
+    walkfwd[["Walk-forward one-step\nparams frozen, filter updated"]]
+    randwalk[["Random walk\nforecast = previous close"]]
+    backtx["Back-transform\nexp(mean), exp(bounds)"]
+    scoring["Metrics\nRMSE, MAE, MAPE; ratio to RW"]
+    artifacts[/"JSON artifacts\nprices … metrics"/]
     ohlcv -->|"Close column"| closepx
     closepx --> logpx
     logpx --> diffs
@@ -150,7 +150,7 @@ flowchart LR
     static --> backtx
     walkfwd --> backtx
     randwalk --> backtx
-    backtx -->|"vs actual $"| scoring
+    backtx -->|"vs actual #36;"| scoring
     scoring -->|"metrics"| artifacts
     backtx -.->|"forecasts"| artifacts
     grid -.->|"aic_grid"| artifacts
@@ -189,27 +189,27 @@ title: "Milestone delivery loop"
 ---
 flowchart TB
     subgraph learner["Learner"]
-        kickoff("Start milestone<br/><small>learner says go</small>")
-        answer("Answer questions<br/><small>predict-first, explain-it-back</small>")
+        kickoff("Start milestone\nlearner says go")
+        answer("Answer questions\npredict-first, explain-it-back")
     end
     subgraph orchestrator["Orchestrator session"]
-        plan["Plan the milestone<br/><small>tasks + acceptance checks</small>"]
-        walkthrough[/"Walkthrough<br/><small>+ predict-first questions</small>"/]
-        pause["Pause<br/><small>hand over to the learner</small>"]
-        grade["Grade answers<br/><small>gaps become follow-ups</small>"]
-        advance[/"Next milestone<br/><small>meta.json status moves on</small>"/]
+        plan["Plan the milestone\ntasks + acceptance checks"]
+        walkthrough[/"Walkthrough\n+ predict-first questions"/]
+        pause["Pause\nhand over to the learner"]
+        grade["Grade answers\ngaps become follow-ups"]
+        advance[/"Next milestone\nmeta.json status moves on"/]
     end
     subgraph implementer["Implementer subagent"]
-        build["Build<br/><small>code, tests, notebooks, export</small>"]
+        build["Build\ncode, tests, notebooks, export"]
     end
     subgraph reviewer["Adversarial reviewer"]
-        review[["Adversarial review<br/><small>evidence-gated; default is broken</small>"]]
+        review[["Adversarial review\nevidence-gated; default is broken"]]
     end
     subgraph verifier["Verifier subagent"]
-        remeasure["Re-measure numbers<br/><small>every quoted figure</small>"]
+        remeasure["Re-measure numbers\nevery quoted figure"]
     end
     subgraph github["GitHub"]
-        push{{"Push<br/><small>commit + push to main</small>"}}
+        push{{"Push\ncommit + push to main"}}
     end
     kickoff --> plan
     plan -->|"task list"| build
@@ -452,8 +452,8 @@ relation is how the JSON nests (`envelope.data` holds the rows). Row tables are 
 the app looks them up: a forecast row by **method + segment + date**, an AIC cell by
 **d + p + q + trend**, an autocorrelation by **transform + lag**. `price_row.date` is the
 spine: decomposition rows, stationarity rows, residuals and forecast actuals all point at it.
-A column with the comment `"nullable"` can be `null` (the kit's SVG, which is not committed,
-draws the same columns as `type?`). Each one is null for a documented reason (the
+A column with the comment `"nullable"` can be `null` (the kit's SVG in
+[`out/erd.svg`](out/erd.svg) draws the same columns as `type?`). Each one is null for a documented reason (the
 moving-average edges of a decomposition, a failed fit, the random walk's missing interval).
 
 How the boxes map onto the JSON in [`contract.md`](contract.md):

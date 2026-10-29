@@ -1,19 +1,26 @@
 # Learning log
 
+Learning mode: queued
+
 How to use this repo to learn: work through one milestone at a time.
 1. Read its walkthrough.
 2. Answer the **predict before you look** questions *before* you read the results section.
 3. Read the concept notes it points to.
 4. Answer the **explain it back** questions without notes. The session grades your answers and fills the gaps.
 
-| # | Milestone | Walkthrough | Concepts | Status |
-|---|---|---|---|---|
-| 0 | Scaffold, data contract, design | [00-scaffold](docs/milestones/00-scaffold.md) | [00-background](docs/concepts/00-background.md), [01-reproducibility-and-contracts](docs/concepts/01-reproducibility-and-contracts.md) | current |
-| 1 | Data and EDA (course modules 2–4) | — | — | planned |
-| 2 | Stationarity and identification (modules 5–6, split moved earlier) | — | — | planned |
-| 3 | Fit and diagnostics (modules 7–8) | — | — | planned |
-| 4 | Forecast and evaluation (modules 9–10, plus walk-forward and random walk) | — | — | planned |
-| 5 | Where the sample goes wrong, and polish | — | — | planned |
+| # | Milestone | Walkthrough | Concepts | Status | Checkpoint |
+|---|---|---|---|---|---|
+| 0 | Scaffold, data contract, design | [00-scaffold](docs/milestones/00-scaffold.md) | [00-background](docs/concepts/00-background.md), [01-reproducibility-and-contracts](docs/concepts/01-reproducibility-and-contracts.md) | current | in progress, 0 of 17 answered |
+| 1 | Data and EDA (course modules 2–4) | — | — | planned | |
+| 2 | Stationarity and identification (modules 5–6, split moved earlier) | — | — | planned | |
+| 3 | Fit and diagnostics (modules 7–8) | — | — | planned | |
+| 4 | Forecast and evaluation (modules 9–10, plus walk-forward and random walk) | — | — | planned | |
+| 5 | Where the sample goes wrong, and polish | — | — | planned | |
+
+## Defaults taken (owner can override)
+
+- **Commit `prices.json`.** Default taken 2026-10-29, owner can override. This is ADR-0001's proposed option 1: the app runs from the repo. Risk: it redistributes Yahoo-derived adjusted closes.
+- **The 14-day package-age rule for Python.** Default taken 2026-10-29, owner can override. Keep the current `uv.lock` pins, because the docs cite their behaviour at `file:line`. Every Python pin added or upgraded from now on must be at least 14 days old when it is locked.
 
 ## Design documents
 

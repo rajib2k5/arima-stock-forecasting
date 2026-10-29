@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="vol-diagram-kit" agent="vol-diagram-kit">
+  <diagram id="architecture" name="ARIMA stock forecasting architecture">
+    <mxGraphModel dx="0" dy="0" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2114" pageHeight="1684" background="#F8FAFC" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="ARIMA stock forecasting architecture" style="rounded=0;fillColor=none;strokeColor=none;html=0;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=20;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="32" y="30" width="516.64" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Python computes every number; the static React app only draws versioned JSON" style="rounded=0;fillColor=none;strokeColor=none;html=0;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=13;fontColor=#64748B;" vertex="1" parent="1">
+          <mxGeometry x="32" y="59" width="516.64" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_source" value="Source" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#E2E8F0;fontColor=#64748B;fontSize=12;fontStyle=1;fontFamily=Helvetica;align=left;verticalAlign=top;spacingLeft=14;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="32" y="102" width="1134" height="288" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_rawcache" value="Raw cache (outside git)" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#EFF6FF;strokeColor=#DBEAFE;fontColor=#64748B;fontSize=12;fontStyle=1;fontFamily=Helvetica;align=left;verticalAlign=top;spacingLeft=14;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="32" y="468" width="1134" height="312" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_core" value="Python core" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F5F3FF;strokeColor=#E9E5FD;fontColor=#64748B;fontSize=12;fontStyle=1;fontFamily=Helvetica;align=left;verticalAlign=top;spacingLeft=14;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="1194" y="102" width="888" height="1494" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_delivery" value="Delivery (in git)" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#ECFDF5;strokeColor=#D1FAE5;fontColor=#64748B;fontSize=12;fontStyle=1;fontFamily=Helvetica;align=left;verticalAlign=top;spacingLeft=14;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="32" y="942" width="1134" height="288" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_webapp" value="App" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFF7ED;strokeColor=#FFEDD5;fontColor=#64748B;fontSize=12;fontStyle=1;fontFamily=Helvetica;align=left;verticalAlign=top;spacingLeft=14;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="32" y="1308" width="1134" height="288" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_yahoo" value="Yahoo Finance&#10;chart API" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#475569;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="776" y="152" width="184" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_yfin" value="yfinance 1.7.0&#10;download(), auto_adjust=True" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E0F2FE;strokeColor=#0284C7;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="743" y="300" width="250" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_rawfile" value="Raw price snapshot&#10;$VOL_DATA_DIR/.../raw" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FEF3C7;strokeColor=#D97706;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="758" y="518" width="220" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_manifest" value="Snapshot manifest&#10;sha256, rows, version" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FEF3C7;strokeColor=#D97706;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="762" y="690" width="212" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_config" value="config.py&#10;windows and data paths" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E0E7FF;strokeColor=#4F46E5;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1229" y="518" width="216" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_pipeline" value="arima_forecasting&#10;EDA, tests, grid, fit, forecasts" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#EDE9FE;strokeColor=#7C3AED;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1214" y="690" width="246" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_contract" value="contract.py&#10;envelope, allow_nan=False" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E0E7FF;strokeColor=#4F46E5;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1500" y="690" width="236" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_provenance" value="provenance.py&#10;commit + SOURCE_DATE_EPOCH" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E0E7FF;strokeColor=#4F46E5;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1776" y="690" width="286" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_exporter" value="export_app_data.py&#10;one file per artifact" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E0E7FF;strokeColor=#4F46E5;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="847" y="992" width="220" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_jsonfiles" value="app/public/data&#10;versioned JSON envelopes" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#D1FAE5;strokeColor=#059669;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="794" y="1140" width="234" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_notebooks" value="Notebooks&#10;built by build_notebooks.py" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#D1FAE5;strokeColor=#059669;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="69" y="992" width="234" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_reports" value="Reports&#10;result tables (from M4)" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#D1FAE5;strokeColor=#059669;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="343" y="992" width="208" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_pytests" value="pytest&#10;contract, sync, numbers" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E0E7FF;strokeColor=#4F46E5;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="591" y="992" width="216" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_loader" value="loadArtifact&#10;refuses major ≠ 1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E0E7FF;strokeColor=#4F46E5;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="702" y="1358" width="176" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_views" value="React 19 views&#10;explorer, lab, 3D AIC, fan" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FCE7F3;strokeColor=#DB2777;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="739" y="1506" width="224" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="node_vitest" value="vitest&#10;parses the real JSON files" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E0E7FF;strokeColor=#4F46E5;fontColor=#0F172A;fontSize=13;fontFamily=Helvetica;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="918" y="1358" width="228" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_0" value="HTTPS" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_yahoo" target="node_yfin">
+          <mxGeometry x="-0.0769" relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_1" value="snapshot once" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_yfin" target="node_rawfile">
+          <mxGeometry x="-0.2432" relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_2" value="described by" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#94A3B8;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;dashed=1;exitX=0.4;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_rawfile" target="node_manifest">
+          <mxGeometry x="-0.0645" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="846" y="604"/>
+              <mxPoint x="868" y="604"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_3" value="read" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.6;exitY=1;exitDx=0;exitDy=0;entryX=0.4106;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_rawfile" target="node_pipeline">
+          <mxGeometry x="0.7495" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="890" y="604"/>
+              <mxPoint x="1315" y="604"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_4" value="windows" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#6366F1;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5894;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_config" target="node_pipeline">
+          <mxGeometry x="0.3226" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1337" y="604"/>
+              <mxPoint x="1359" y="604"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_5" value="payloads" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.7683;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_pipeline" target="node_exporter">
+          <mxGeometry x="0.6835" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1403" y="832"/>
+              <mxPoint x="902" y="832"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_6" value="wrap + dumps" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_contract" target="node_exporter">
+          <mxGeometry x="0.794" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1618" y="844"/>
+              <mxPoint x="957" y="844"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_7" value="commit + time" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_provenance" target="node_exporter">
+          <mxGeometry x="0.7963" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1919" y="856"/>
+              <mxPoint x="1012" y="856"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_8" value="write" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_exporter" target="node_jsonfiles">
+          <mxGeometry x="0.3226" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="957" y="1078"/>
+              <mxPoint x="911" y="1078"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_9" value="imported by" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.2317;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_pipeline" target="node_notebooks">
+          <mxGeometry x="0.8238" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1271" y="796"/>
+              <mxPoint x="186" y="796"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_10" value="figures + tables" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.4106;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_pipeline" target="node_reports">
+          <mxGeometry x="0.7891" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1315" y="808"/>
+              <mxPoint x="447" y="808"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_11" value="checked by" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#94A3B8;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;dashed=1;exitX=0.5894;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_pipeline" target="node_pytests">
+          <mxGeometry x="0.7399" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1359" y="820"/>
+              <mxPoint x="699" y="820"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_12" value="fetch" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.406;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_jsonfiles" target="node_loader">
+          <mxGeometry x="0.2551" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="889" y="1246"/>
+              <mxPoint x="790" y="1246"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_13" value="typed data" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#64748B;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_loader" target="node_views">
+          <mxGeometry x="0.3957" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="790" y="1444"/>
+              <mxPoint x="851" y="1444"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_14" value="parsed by" style="edgeStyle=none;rounded=0;html=0;endArrow=classic;endFill=1;strokeColor=#94A3B8;strokeWidth=1.6;fontSize=11;fontColor=#475569;fontFamily=Helvetica;dashed=1;exitX=0.594;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="node_jsonfiles" target="node_vitest">
+          <mxGeometry x="0.2551" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="933" y="1246"/>
+              <mxPoint x="1032" y="1246"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
