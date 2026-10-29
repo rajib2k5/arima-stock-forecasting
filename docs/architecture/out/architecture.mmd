@@ -1,32 +1,32 @@
 ---
 title: "ARIMA stock forecasting architecture"
 ---
-flowchart LR
+flowchart TB
     subgraph source["Source"]
-        yahoo{{"Yahoo Finance<br/><small>chart API</small>"}}
-        yfin(["yfinance 1.7.0<br/><small>download(), auto_adjust=True</small>"])
+        yahoo{{"Yahoo Finance\nchart API"}}
+        yfin(["yfinance 1.7.0\ndownload(), auto_adjust=True"])
     end
     subgraph rawcache["Raw cache (outside git)"]
-        rawfile[("Raw price snapshot<br/><small>$VOL_DATA_DIR/.../raw</small>")]
-        manifest[("Snapshot manifest<br/><small>sha256, rows, version</small>")]
+        rawfile[("Raw price snapshot\n#36;VOL_DATA_DIR/.../raw")]
+        manifest[("Snapshot manifest\nsha256, rows, version")]
     end
     subgraph core["Python core"]
-        config["config.py<br/><small>windows and data paths</small>"]
-        pipeline[["arima_forecasting<br/><small>EDA, tests, grid, fit, forecasts</small>"]]
-        contract["contract.py<br/><small>envelope, allow_nan=False</small>"]
-        provenance["provenance.py<br/><small>commit + SOURCE_DATE_EPOCH</small>"]
+        config["config.py\nwindows and data paths"]
+        pipeline[["arima_forecasting\nEDA, tests, grid, fit, forecasts"]]
+        contract["contract.py\nenvelope, allow_nan=False"]
+        provenance["provenance.py\ncommit + SOURCE_DATE_EPOCH"]
     end
     subgraph delivery["Delivery (in git)"]
-        exporter["export_app_data.py<br/><small>one file per artifact</small>"]
-        jsonfiles[/"app/public/data<br/><small>versioned JSON envelopes</small>"/]
-        notebooks[/"Notebooks<br/><small>built by build_notebooks.py</small>"/]
-        reports[/"Reports<br/><small>result tables (from M4)</small>"/]
-        pytests["pytest<br/><small>contract, sync, numbers</small>"]
+        exporter["export_app_data.py\none file per artifact"]
+        jsonfiles[/"app/public/data\nversioned JSON envelopes"/]
+        notebooks[/"Notebooks\nbuilt by build_notebooks.py"/]
+        reports[/"Reports\nresult tables (from M4)"/]
+        pytests["pytest\ncontract, sync, numbers"]
     end
     subgraph webapp["App"]
-        loader["loadArtifact<br/><small>refuses major ≠ 1</small>"]
-        views("React 19 views<br/><small>explorer, lab, 3D AIC, fan</small>")
-        vitest["vitest<br/><small>parses the real JSON files</small>"]
+        loader["loadArtifact\nrefuses major ≠ 1"]
+        views("React 19 views\nexplorer, lab, 3D AIC, fan")
+        vitest["vitest\nparses the real JSON files"]
     end
     yahoo -->|"HTTPS"| yfin
     yfin -->|"snapshot once"| rawfile

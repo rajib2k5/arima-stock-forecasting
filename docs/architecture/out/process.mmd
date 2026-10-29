@@ -3,27 +3,27 @@ title: "Milestone delivery loop"
 ---
 flowchart TB
     subgraph learner["Learner"]
-        kickoff("Start milestone<br/><small>learner says go</small>")
-        answer("Answer questions<br/><small>predict-first, explain-it-back</small>")
+        kickoff("Start milestone\nlearner says go")
+        answer("Answer questions\npredict-first, explain-it-back")
     end
     subgraph orchestrator["Orchestrator session"]
-        plan["Plan the milestone<br/><small>tasks + acceptance checks</small>"]
-        walkthrough[/"Walkthrough<br/><small>+ predict-first questions</small>"/]
-        pause["Pause<br/><small>hand over to the learner</small>"]
-        grade["Grade answers<br/><small>gaps become follow-ups</small>"]
-        advance[/"Next milestone<br/><small>meta.json status moves on</small>"/]
+        plan["Plan the milestone\ntasks + acceptance checks"]
+        walkthrough[/"Walkthrough\n+ predict-first questions"/]
+        pause["Pause\nhand over to the learner"]
+        grade["Grade answers\ngaps become follow-ups"]
+        advance[/"Next milestone\nmeta.json status moves on"/]
     end
     subgraph implementer["Implementer subagent"]
-        build["Build<br/><small>code, tests, notebooks, export</small>"]
+        build["Build\ncode, tests, notebooks, export"]
     end
     subgraph reviewer["Adversarial reviewer"]
-        review[["Adversarial review<br/><small>evidence-gated; default is broken</small>"]]
+        review[["Adversarial review\nevidence-gated; default is broken"]]
     end
     subgraph verifier["Verifier subagent"]
-        remeasure["Re-measure numbers<br/><small>every quoted figure</small>"]
+        remeasure["Re-measure numbers\nevery quoted figure"]
     end
     subgraph github["GitHub"]
-        push{{"Push<br/><small>commit + push to main</small>"}}
+        push{{"Push\ncommit + push to main"}}
     end
     kickoff --> plan
     plan -->|"task list"| build

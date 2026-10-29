@@ -1,0 +1,28 @@
+{
+ "_comment": "Files written by vol-diagram-kit's build.py, with the sha256 of the bytes it wrote. A build deletes a listed file no spec produces any more only while it still has that hash, and nothing else. Do not edit.",
+ "files": {
+  "architecture.drawio": "a4eb586a6463fff4bcbe7df7f92a622beff4cb89a1323da67ee0b0ef94f0d080",
+  "architecture.lucid.xml": "639bdb79ed9838da1758ac3a94d372bfa23943edeef37716b755e9ac03cc04ed",
+  "architecture.mmd": "4c74d7b59589d30cd0476c747adaecf70f24d2c9d49dc274f1f99071542b88e7",
+  "architecture.png": "a44b8e48811e3570387ade41368fc493801cb4ba8960ff82cca0ba6a81728319",
+  "architecture.svg": "5e8d5aa5334b7aef21152c3ab2a771e8ea882869f972e3c52953d4edfc211ccd",
+  "contract_sequence.mmd": "f403555be73579630ac920850009cad5d34ebfb366ccd6e718cd666580d676fb",
+  "contract_sequence.png": "ca9101ae71b67c23b9bfb4337504dfcbf8f6a506ac5fec1b7a93a211584528ea",
+  "contract_sequence.svg": "71d1c8dff0102e5583f608e08c9ccae184a2029822a8bf52f159fa7662c39df0",
+  "data_flow.drawio": "30e844af5252c630d38ad46fd7bbe72fdcdb30692ab36fe0c0ae7b33308fef32",
+  "data_flow.lucid.xml": "e34205d397634681f00c0a7882a168849d410d9b4d05d034f0bc74ebf402014e",
+  "data_flow.mmd": "feb8ec18508b7d794c2d5de73ba8a73de66976a78d6fcbf4bbeaf8e9ecc5bdf6",
+  "data_flow.png": "af59eeab2d637573370529a1bfe9b3d159472c21d8fb1b5542918097f6c1b859",
+  "data_flow.svg": "3386fd4d1f38c5a5f3b9f7ec49419cdb45fc88d6af9d365a3696627a71652d7d",
+  "erd.drawio": "625c3c5279249ce6f4a5662825a3198dc66586deeb59b5c3cd40103f244a2287",
+  "erd.lucid.xml": "7f37fac00fa8afde6a139602e5f3ba9080713a4c9dbe45fb0ccb2efa67fac355",
+  "erd.mmd": "4b62a7fdf11335ac2732c7945e7293645fd313f158f593fb89eb1ba1aef65df0",
+  "erd.png": "8bbbe5a11e32aa618b740826384e80682521257b72d2680a011191dee1b00529",
+  "erd.svg": "7871f671fbcd29b95cd355a204fbe70bd8021658757553590fd4a9c93153c2cd",
+  "process.drawio": "d78903a7c3112648f4d8640afd215f5f86a9469f3f5282af10dbc1fd5a564684",
+  "process.lucid.xml": "e983427754adf1a9577dfae6cbca47c600ffad0a363d5bb0da89aecb711da555",
+  "process.mmd": "e195f4917cc5d999e4a5b9db0614fc84f69a59da981372be66ebb2fc2e823fac",
+  "process.png": "a66535ce680a9010a5379fb529b659d90821c11500dda0c0f729184796e56b49",
+  "process.svg": "31eeddfeef6ad9f73364c01614ac51a8ceae2d320c5d9dadcaa2908bf36c5dd7"
+ }
+}

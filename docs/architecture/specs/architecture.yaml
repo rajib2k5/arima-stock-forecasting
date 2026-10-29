@@ -1,7 +1,7 @@
 kind: flow
 title: ARIMA stock forecasting architecture
 subtitle: Python computes every number; the static React app only draws versioned JSON
-direction: LR
+direction: TB
 lanes:
   - {id: source,   label: Source}
   - {id: rawcache, label: Raw cache (outside git)}

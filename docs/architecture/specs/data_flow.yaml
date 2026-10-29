@@ -1,7 +1,7 @@
 kind: flow
 title: Data flow from prices to metrics
 subtitle: Every estimated quantity uses the training split only; test and OOS are scored, never seen
-direction: LR
+direction: TB
 nodes:
   - {id: ohlcv,     label: Daily OHLCV,            sublabel: "yfinance, adjusted",            type: source}
   - {id: closepx,   label: Adjusted close,         sublabel: "$, .ffill() if gaps",           type: process}
