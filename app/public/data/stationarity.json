@@ -1,0 +1,236 @@
+{
+  "artifact": "stationarity",
+  "data": {
+    "alpha": 0.05,
+    "decision": {
+      "d_selected": 1,
+      "pmdarima_ndiffs": {
+        "adf": 1,
+        "agrees": true,
+        "alpha": 0.05,
+        "kpss": 1,
+        "max_d": 2,
+        "pp": 1,
+        "reason": null,
+        "status": "ok",
+        "version": "2.1.1"
+      },
+      "rule": "d is the smallest of 0, 1 and 2 at which ADF rejects a unit root and KPSS does not reject stationarity, both with regression 'c' at the 5% level (p < 0.05). If no d passes both, d is the smallest at which KPSS does not reject (2 if it rejects at every d), and tests_conflict is true.",
+      "tests_conflict": false
+    },
+    "n_train": 2037,
+    "sample": "train",
+    "transforms": [
+      {
+        "adf": {
+          "autolag": "AIC",
+          "critical_values": {
+            "1%": -3.4335801926672382,
+            "10%": -2.567529637785797,
+            "5%": -2.8629669356419787
+          },
+          "maxlag": 26,
+          "nobs": 2027,
+          "p_value": 0.9088438297732985,
+          "regression": "c",
+          "reject_unit_root": false,
+          "statistic": -0.407471385559157,
+          "used_lag": 9
+        },
+        "d": 0,
+        "id": "log",
+        "kpss": {
+          "critical_values": {
+            "1%": 0.739,
+            "10%": 0.347,
+            "2.5%": 0.574,
+            "5%": 0.463
+          },
+          "nlags": 28,
+          "nlags_method": "auto",
+          "p_value": 0.01,
+          "p_value_bound": "smaller",
+          "regression": "c",
+          "reject_stationarity": true,
+          "statistic": 6.823546219915264
+        },
+        "n": 2037,
+        "verdict": "unit_root",
+        "with_trend": {
+          "adf": {
+            "autolag": "AIC",
+            "critical_values": {
+              "1%": -3.9632431905861925,
+              "10%": -3.1283265376448406,
+              "5%": -3.412658164214482
+            },
+            "maxlag": 26,
+            "nobs": 2027,
+            "p_value": 0.3940485785755903,
+            "regression": "ct",
+            "reject_unit_root": false,
+            "statistic": -2.3730358263661504,
+            "used_lag": 9
+          },
+          "kpss": {
+            "critical_values": {
+              "1%": 0.216,
+              "10%": 0.119,
+              "2.5%": 0.176,
+              "5%": 0.146
+            },
+            "nlags": 28,
+            "nlags_method": "auto",
+            "p_value": 0.01,
+            "p_value_bound": "smaller",
+            "regression": "ct",
+            "reject_stationarity": true,
+            "statistic": 0.7538315043335302
+          },
+          "verdict": "unit_root"
+        }
+      },
+      {
+        "adf": {
+          "autolag": "AIC",
+          "critical_values": {
+            "1%": -3.4335801926672382,
+            "10%": -2.567529637785797,
+            "5%": -2.8629669356419787
+          },
+          "maxlag": 26,
+          "nobs": 2027,
+          "p_value": 8.119719607890996e-26,
+          "regression": "c",
+          "reject_unit_root": true,
+          "statistic": -13.814388785797309,
+          "used_lag": 8
+        },
+        "d": 1,
+        "id": "diff1",
+        "kpss": {
+          "critical_values": {
+            "1%": 0.739,
+            "10%": 0.347,
+            "2.5%": 0.574,
+            "5%": 0.463
+          },
+          "nlags": 4,
+          "nlags_method": "auto",
+          "p_value": 0.1,
+          "p_value_bound": "greater",
+          "regression": "c",
+          "reject_stationarity": false,
+          "statistic": 0.0972072940759366
+        },
+        "n": 2036,
+        "verdict": "stationary",
+        "with_trend": {
+          "adf": {
+            "autolag": "AIC",
+            "critical_values": {
+              "1%": -3.9632431905861925,
+              "10%": -3.1283265376448406,
+              "5%": -3.412658164214482
+            },
+            "maxlag": 26,
+            "nobs": 2027,
+            "p_value": 1.6413932749584885e-21,
+            "regression": "ct",
+            "reject_unit_root": true,
+            "statistic": -13.813550461603446,
+            "used_lag": 8
+          },
+          "kpss": {
+            "critical_values": {
+              "1%": 0.216,
+              "10%": 0.119,
+              "2.5%": 0.176,
+              "5%": 0.146
+            },
+            "nlags": 3,
+            "nlags_method": "auto",
+            "p_value": 0.1,
+            "p_value_bound": "greater",
+            "regression": "ct",
+            "reject_stationarity": false,
+            "statistic": 0.0771656338537598
+          },
+          "verdict": "stationary"
+        }
+      },
+      {
+        "adf": {
+          "autolag": "AIC",
+          "critical_values": {
+            "1%": -3.433610796445261,
+            "10%": -2.5675368321236967,
+            "5%": -2.8629804474582348
+          },
+          "maxlag": 26,
+          "nobs": 2008,
+          "p_value": 4.1845547315452574e-26,
+          "regression": "c",
+          "reject_unit_root": true,
+          "statistic": -13.980586118764357,
+          "used_lag": 26
+        },
+        "d": 2,
+        "id": "diff2",
+        "kpss": {
+          "critical_values": {
+            "1%": 0.739,
+            "10%": 0.347,
+            "2.5%": 0.574,
+            "5%": 0.463
+          },
+          "nlags": 47,
+          "nlags_method": "auto",
+          "p_value": 0.1,
+          "p_value_bound": "greater",
+          "regression": "c",
+          "reject_stationarity": false,
+          "statistic": 0.018491696127212662
+        },
+        "n": 2035,
+        "verdict": "stationary",
+        "with_trend": {
+          "adf": {
+            "autolag": "AIC",
+            "critical_values": {
+              "1%": -3.963285582989322,
+              "10%": -3.1283386256134373,
+              "5%": -3.4126787008233532
+            },
+            "maxlag": 26,
+            "nobs": 2008,
+            "p_value": 1.13321593688896e-21,
+            "regression": "ct",
+            "reject_unit_root": true,
+            "statistic": -13.984553536014884,
+            "used_lag": 26
+          },
+          "kpss": {
+            "critical_values": {
+              "1%": 0.216,
+              "10%": 0.119,
+              "2.5%": 0.176,
+              "5%": 0.146
+            },
+            "nlags": 47,
+            "nlags_method": "auto",
+            "p_value": 0.1,
+            "p_value_bound": "greater",
+            "regression": "ct",
+            "reject_stationarity": false,
+            "statistic": 0.01820255712401243
+          },
+          "verdict": "stationary"
+        }
+      }
+    ]
+  },
+  "generated_at": "2026-10-29T20:51:41Z",
+  "schema_version": "1.3.0",
+  "source_commit": "64276a1d504cbfa1b7822f0fc3b64196974c5ced"
+}
