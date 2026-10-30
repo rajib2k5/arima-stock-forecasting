@@ -230,7 +230,7 @@
       }
     ]
   },
-  "generated_at": "2026-10-30T02:43:38Z",
-  "schema_version": "1.4.0",
-  "source_commit": "c6ad7905ffb83e59755ae02306f01d9c0dd910e1"
+  "generated_at": "2026-10-30T10:41:24Z",
+  "schema_version": "1.5.0",
+  "source_commit": "2dec79fb710178bbb21d437008a6b34411e30f9d"
 }

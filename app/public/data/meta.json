@@ -11,7 +11,15 @@
       "fit",
       "residuals_aic",
       "residuals_bic",
-      "residuals_course"
+      "residuals_course",
+      "forecast_aic_static",
+      "forecast_aic_walk_forward",
+      "forecast_aic_refit",
+      "forecast_bic_static",
+      "forecast_bic_walk_forward",
+      "forecast_course_static",
+      "forecast_course_walk_forward",
+      "evaluation"
     ],
     "held_artifacts": [],
     "milestones": [
@@ -36,13 +44,13 @@
       {
         "id": 3,
         "slug": "fit-diagnostics",
-        "status": "current",
+        "status": "done",
         "title": "Fit and diagnostics"
       },
       {
         "id": 4,
         "slug": "forecast-eval",
-        "status": "planned",
+        "status": "current",
         "title": "Forecast and evaluation"
       },
       {
@@ -66,7 +74,7 @@
       }
     }
   },
-  "generated_at": "2026-10-30T02:43:38Z",
-  "schema_version": "1.4.0",
-  "source_commit": "c6ad7905ffb83e59755ae02306f01d9c0dd910e1"
+  "generated_at": "2026-10-30T10:41:24Z",
+  "schema_version": "1.5.0",
+  "source_commit": "2dec79fb710178bbb21d437008a6b34411e30f9d"
 }
