@@ -1,0 +1,652 @@
+{
+  "artifact": "fit",
+  "data": {
+    "cancel_distance": 0.1,
+    "clustering_prediction": {
+      "acf_squared_expected_by_chance": 2.5,
+      "acf_squared_outside_count": 29,
+      "arch_lm_rejections": 2,
+      "confirmed": true,
+      "model_id": "aic"
+    },
+    "course_track": {
+      "drift_dropped": {
+        "aic_gap": 3.546044937789702,
+        "aic_with_drift": -10398.936731114682,
+        "aic_without_drift": -10395.390686176892,
+        "drift": 0.0008992935291032927,
+        "drift_p_value": 0.020626214220511165,
+        "drift_std_err": 0.0003885044460242766,
+        "refit_trend": "n",
+        "selected_trend": "t"
+      },
+      "full_series": {
+        "aic": -11693.89801005583,
+        "nobs": 2264,
+        "order": [
+          0,
+          1,
+          1
+        ],
+        "params": [
+          {
+            "name": "intercept",
+            "value": 0.0009096594884237003
+          },
+          {
+            "name": "ma.L1",
+            "value": -0.07611925438036903
+          },
+          {
+            "name": "sigma2",
+            "value": 0.0003328096722259158
+          }
+        ],
+        "trend": "t",
+        "warnings": [],
+        "with_intercept": true
+      },
+      "n_course": 2264,
+      "n_train": 2037,
+      "pmdarima_version": "2.1.1",
+      "refit_trend": "n",
+      "same_order": true,
+      "settings": {
+        "D": 0,
+        "d": null,
+        "error_action": "ignore",
+        "m": 1,
+        "max_p": 5,
+        "max_q": 5,
+        "seasonal": false,
+        "start_P": 0,
+        "start_p": 1,
+        "start_q": 1,
+        "stepwise": true,
+        "suppress_warnings": true,
+        "test": "adf",
+        "trace": false
+      },
+      "test_rows_seen": 227,
+      "train_only": {
+        "order": [
+          0,
+          1,
+          1
+        ],
+        "trend": "t",
+        "with_intercept": true
+      }
+    },
+    "diagnostic_settings": {
+      "alpha": 0.05,
+      "arch_lm_ddof": 0,
+      "arch_lm_lags": [
+        5,
+        10
+      ],
+      "ljung_box_lags": [
+        5,
+        10,
+        20
+      ],
+      "ljung_box_model_df": "p + q",
+      "nlags": 50,
+      "series": "standardized_forecasts_error after the burn-in"
+    },
+    "fit_settings": {
+      "concentrate_scale": false,
+      "cov_type": "opg",
+      "enforce_invertibility": true,
+      "enforce_stationarity": true,
+      "library": "statsmodels",
+      "maxiter": 200,
+      "method": "statespace",
+      "model": "ARIMA",
+      "optimizer": "lbfgs",
+      "version": "0.15.0"
+    },
+    "llf_tolerance": 1e-06,
+    "models": [
+      {
+        "cancelling_pairs": [
+          {
+            "ar": 0,
+            "distance": 0.06252431881237261,
+            "ma": 0
+          },
+          {
+            "ar": 1,
+            "distance": 0.06252431881237261,
+            "ma": 1
+          }
+        ],
+        "converged": true,
+        "diagnostics": {
+          "acf_outside_count": 2,
+          "acf_squared_outside_count": 29,
+          "arch_lm": [
+            {
+              "lags": 5,
+              "p_value": 2.362533897732377e-50,
+              "statistic": 242.38653606238813
+            },
+            {
+              "lags": 10,
+              "p_value": 2.5875447932782663e-53,
+              "statistic": 275.271936064541
+            }
+          ],
+          "burn_excluded": 1,
+          "burned": [
+            {
+              "date": "2015-01-02",
+              "resid": 3.1842828594658132,
+              "resid_std": 0.003184282858899791
+            }
+          ],
+          "jarque_bera": {
+            "kurtosis": 7.032439351928712,
+            "p_value": 5.181567497409661e-308,
+            "skew": -0.3241920171548887,
+            "statistic": 1415.102202051986
+          },
+          "ljung_box": [
+            {
+              "applied": false,
+              "df": null,
+              "lag": 5,
+              "model_df": 7,
+              "p_value": null,
+              "statistic": 0.4596318847144335
+            },
+            {
+              "applied": true,
+              "df": 3,
+              "lag": 10,
+              "model_df": 7,
+              "p_value": 0.18537563114170724,
+              "statistic": 4.821100603872889
+            },
+            {
+              "applied": true,
+              "df": 13,
+              "lag": 20,
+              "model_df": 7,
+              "p_value": 0.4887311918530781,
+              "statistic": 12.479989875288304
+            }
+          ],
+          "max_abs_resid_after_burn": 0.12271882678134016,
+          "n": 2036,
+          "verdicts": {
+            "arch": "found",
+            "normality": "rejected",
+            "serial_correlation": "not_found"
+          }
+        },
+        "grid_llf": 5229.12269287796,
+        "id": "aic",
+        "information": {
+          "aic": -10440.245385756925,
+          "aicc": -10440.156540742119,
+          "bic": -10389.676704357891,
+          "hqic": -10421.694382108937,
+          "llf": 5229.122692878463
+        },
+        "inv_roots_ar": [
+          {
+            "im": -0.39802904127259087,
+            "modulus": 0.9317233263222867,
+            "re": -0.8424258062979129
+          },
+          {
+            "im": 0.39802904127259087,
+            "modulus": 0.9317233263222867,
+            "re": -0.8424258062979129
+          },
+          {
+            "im": 0.0,
+            "modulus": 0.4651874132334056,
+            "re": -0.4651874132334056
+          }
+        ],
+        "inv_roots_ma": [
+          {
+            "im": -0.4143436350934174,
+            "modulus": 0.885048151882506,
+            "re": -0.7820675055314676
+          },
+          {
+            "im": 0.4143436350934174,
+            "modulus": 0.885048151882506,
+            "re": -0.7820675055314676
+          },
+          {
+            "im": 0.0,
+            "modulus": 0.6830673750668058,
+            "re": -0.6830673750668058
+          },
+          {
+            "im": 0.0,
+            "modulus": 0.15522763200201795,
+            "re": 0.15522763200201795
+          }
+        ],
+        "iterations": 1,
+        "label": "AIC choice (ADR-0002)",
+        "llf_gap": 5.029505700804293e-10,
+        "loglikelihood_burn": 1,
+        "nobs": 2037,
+        "nobs_effective": 2036,
+        "order": [
+          3,
+          1,
+          4
+        ],
+        "params": [
+          {
+            "ci_high": 0.0016739609221807826,
+            "ci_low": 0.00012975435355339602,
+            "library_name": "x1",
+            "name": "drift",
+            "p_value": 0.022059488288094318,
+            "std_err": 0.00039393748579256836,
+            "value": 0.0009018576378670893,
+            "z": 2.2893420159105426
+          },
+          {
+            "ci_high": -1.8246961375120583,
+            "ci_low": -2.475381914146405,
+            "library_name": "ar.L1",
+            "name": "ar.L1",
+            "p_value": 2.2746798803726038e-38,
+            "std_err": 0.16599431973415663,
+            "value": -2.1500390258292317,
+            "z": -12.952485538496523
+          },
+          {
+            "ci_high": -1.0776269834393988,
+            "ci_low": -2.2261332568779038,
+            "library_name": "ar.L2",
+            "name": "ar.L2",
+            "p_value": 1.7206023868492364e-08,
+            "std_err": 0.29299167803535575,
+            "value": -1.6518801201586513,
+            "z": -5.637976242995258
+          },
+          {
+            "ci_high": -0.10438238886816154,
+            "ci_low": -0.7032837729561842,
+            "library_name": "ar.L3",
+            "name": "ar.L3",
+            "p_value": 0.008213442669946577,
+            "std_err": 0.152783772766255,
+            "value": -0.40383308091217285,
+            "z": -2.6431673573737444
+          },
+          {
+            "ci_high": 2.4238029646751267,
+            "ci_low": 1.7601465435803176,
+            "library_name": "ma.L1",
+            "name": "ma.L1",
+            "p_value": 4.4997244691005876e-35,
+            "std_err": 0.16930321840851312,
+            "value": 2.091974754127722,
+            "z": 12.35637912730034
+          },
+          {
+            "ci_high": 2.079959418774223,
+            "ci_low": 0.9258244259843404,
+            "library_name": "ma.L2",
+            "name": "ma.L2",
+            "p_value": 3.3175232383637494e-07,
+            "std_err": 0.2944276022145182,
+            "value": 1.5028919223792816,
+            "z": 5.104453220674206
+          },
+          {
+            "ci_high": 0.554581233591426,
+            "ci_low": -0.05935007456064728,
+            "library_name": "ma.L3",
+            "name": "ma.L3",
+            "p_value": 0.11387437396507034,
+            "std_err": 0.15661800752327215,
+            "value": 0.24761557951538937,
+            "z": 1.5810160238349076
+          },
+          {
+            "ci_high": -0.0467869120884183,
+            "ci_low": -0.11932331425584235,
+            "library_name": "ma.L4",
+            "name": "ma.L4",
+            "p_value": 7.1770897030178325e-06,
+            "std_err": 0.018504524251359192,
+            "value": -0.08305511317213032,
+            "z": -4.4883679279692785
+          },
+          {
+            "ci_high": 0.0003576979468793158,
+            "ci_low": 0.00033044410003500404,
+            "library_name": "sigma2",
+            "name": "sigma2",
+            "p_value": null,
+            "std_err": 6.952639706465692e-06,
+            "value": 0.0003440710234571599,
+            "z": null
+          }
+        ],
+        "source": "grid cell (3, 1, 4) t, refitted from its recorded estimates",
+        "trend": "t",
+        "warnflag": 0,
+        "warnings": []
+      },
+      {
+        "cancelling_pairs": [
+          {
+            "ar": 0,
+            "distance": 0.03714137781015551,
+            "ma": 0
+          },
+          {
+            "ar": 1,
+            "distance": 0.03714137781015551,
+            "ma": 1
+          }
+        ],
+        "converged": true,
+        "diagnostics": {
+          "acf_outside_count": 3,
+          "acf_squared_outside_count": 28,
+          "arch_lm": [
+            {
+              "lags": 5,
+              "p_value": 6.743634058855572e-49,
+              "statistic": 235.59914183634066
+            },
+            {
+              "lags": 10,
+              "p_value": 4.66281843758333e-53,
+              "statistic": 274.0590487759923
+            }
+          ],
+          "burn_excluded": 1,
+          "burned": [
+            {
+              "date": "2015-01-02",
+              "resid": 3.1851847171036805,
+              "resid_std": 0.003185184716536415
+            }
+          ],
+          "jarque_bera": {
+            "kurtosis": 7.196920854815583,
+            "p_value": 0.0,
+            "skew": -0.2758728861700408,
+            "statistic": 1520.0918569950813
+          },
+          "ljung_box": [
+            {
+              "applied": true,
+              "df": 1,
+              "lag": 5,
+              "model_df": 4,
+              "p_value": 0.01817317076016588,
+              "statistic": 5.579378500447597
+            },
+            {
+              "applied": true,
+              "df": 6,
+              "lag": 10,
+              "model_df": 4,
+              "p_value": 0.039189106473483816,
+              "statistic": 13.253038055111807
+            },
+            {
+              "applied": true,
+              "df": 16,
+              "lag": 20,
+              "model_df": 4,
+              "p_value": 0.08368482694346832,
+              "statistic": 24.274178423796037
+            }
+          ],
+          "max_abs_resid_after_burn": 0.11882428737665762,
+          "n": 2036,
+          "verdicts": {
+            "arch": "found",
+            "normality": "rejected",
+            "serial_correlation": "found"
+          }
+        },
+        "grid_llf": 5221.904656823303,
+        "id": "bic",
+        "information": {
+          "aic": -10433.809313776128,
+          "aicc": -10433.779757125882,
+          "bic": -10405.715601887776,
+          "hqic": -10423.503200638357,
+          "llf": 5221.904656888064
+        },
+        "inv_roots_ar": [
+          {
+            "im": -0.34430887370698193,
+            "modulus": 0.9597316430533227,
+            "re": -0.8958438626035565
+          },
+          {
+            "im": 0.34430887370698193,
+            "modulus": 0.9597316430533227,
+            "re": -0.8958438626035565
+          }
+        ],
+        "inv_roots_ma": [
+          {
+            "im": -0.3133787072836385,
+            "modulus": 0.9296903188215703,
+            "re": -0.8752815973912559
+          },
+          {
+            "im": 0.3133787072836385,
+            "modulus": 0.9296903188215703,
+            "re": -0.8752815973912559
+          }
+        ],
+        "iterations": 1,
+        "label": "BIC choice",
+        "llf_gap": 6.476057023974136e-08,
+        "loglikelihood_burn": 1,
+        "nobs": 2037,
+        "nobs_effective": 2036,
+        "order": [
+          2,
+          1,
+          2
+        ],
+        "params": [
+          {
+            "ci_high": -1.7447288877903675,
+            "ci_low": -1.838646562623859,
+            "library_name": "ar.L1",
+            "name": "ar.L1",
+            "p_value": 0.0,
+            "std_err": 0.023959030771560638,
+            "value": -1.7916877252071133,
+            "z": -74.78131074207919
+          },
+          {
+            "ci_high": -0.8757146752878754,
+            "ci_low": -0.9664549780677859,
+            "library_name": "ar.L2",
+            "name": "ar.L2",
+            "p_value": 0.0,
+            "std_err": 0.023148461781863944,
+            "value": -0.9210848266778306,
+            "z": -39.790325394297696
+          },
+          {
+            "ci_high": 1.8097380777537502,
+            "ci_low": 1.691388311811273,
+            "library_name": "ma.L1",
+            "name": "ma.L1",
+            "p_value": 0.0,
+            "std_err": 0.03019182160386755,
+            "value": 1.7505631947825115,
+            "z": 57.98137050989549
+          },
+          {
+            "ci_high": 0.9212230563425039,
+            "ci_low": 0.8074251214786015,
+            "library_name": "ma.L2",
+            "name": "ma.L2",
+            "p_value": 8.779838629666754e-195,
+            "std_err": 0.02903061886889912,
+            "value": 0.8643240889105527,
+            "z": 29.77284407245325
+          },
+          {
+            "ci_high": 0.00035942774061700614,
+            "ci_low": 0.00033333105093507937,
+            "library_name": "sigma2",
+            "name": "sigma2",
+            "p_value": null,
+            "std_err": 6.657441128452899e-06,
+            "value": 0.00034637939577604276,
+            "z": null
+          }
+        ],
+        "source": "grid cell (2, 1, 2) n, refitted from its recorded estimates",
+        "trend": "n",
+        "warnflag": 0,
+        "warnings": []
+      },
+      {
+        "cancelling_pairs": [],
+        "converged": true,
+        "diagnostics": {
+          "acf_outside_count": 10,
+          "acf_squared_outside_count": 26,
+          "arch_lm": [
+            {
+              "lags": 5,
+              "p_value": 7.240202735586895e-54,
+              "statistic": 258.7619521434601
+            },
+            {
+              "lags": 10,
+              "p_value": 3.602642538049152e-60,
+              "statistic": 307.7317482015764
+            }
+          ],
+          "burn_excluded": 1,
+          "burned": [
+            {
+              "date": "2015-01-02",
+              "resid": 3.1851847171036805,
+              "resid_std": 0.0031851847165363504
+            }
+          ],
+          "jarque_bera": {
+            "kurtosis": 7.764263374492483,
+            "p_value": 0.0,
+            "skew": -0.2609865849434356,
+            "statistic": 1948.677783205106
+          },
+          "ljung_box": [
+            {
+              "applied": true,
+              "df": 4,
+              "lag": 5,
+              "model_df": 1,
+              "p_value": 0.2389042485494634,
+              "statistic": 5.509402261404351
+            },
+            {
+              "applied": true,
+              "df": 9,
+              "lag": 10,
+              "model_df": 1,
+              "p_value": 6.56301653044273e-08,
+              "statistic": 51.14264320595625
+            },
+            {
+              "applied": true,
+              "df": 19,
+              "lag": 20,
+              "model_df": 1,
+              "p_value": 1.5286148006141465e-08,
+              "statistic": 74.64527762161235
+            }
+          ],
+          "max_abs_resid_after_burn": 0.1294507865244965,
+          "n": 2036,
+          "verdicts": {
+            "arch": "found",
+            "normality": "rejected",
+            "serial_correlation": "found"
+          }
+        },
+        "grid_llf": null,
+        "id": "course",
+        "information": {
+          "aic": -10395.390686176892,
+          "aicc": -10395.384783569907,
+          "bic": -10384.153201421552,
+          "hqic": -10391.268240921783,
+          "llf": 5199.695343088446
+        },
+        "inv_roots_ar": [],
+        "inv_roots_ma": [
+          {
+            "im": 0.0,
+            "modulus": 0.07881106752308398,
+            "re": 0.07881106752308398
+          }
+        ],
+        "iterations": 2,
+        "label": "Course refit",
+        "llf_gap": null,
+        "loglikelihood_burn": 1,
+        "nobs": 2037,
+        "nobs_effective": 2036,
+        "order": [
+          0,
+          1,
+          1
+        ],
+        "params": [
+          {
+            "ci_high": -0.05031239509360944,
+            "ci_low": -0.10730973995255852,
+            "library_name": "ma.L1",
+            "name": "ma.L1",
+            "p_value": 5.9551684278856066e-08,
+            "std_err": 0.01454040617800553,
+            "value": -0.07881106752308398,
+            "z": -5.420142089448445
+          },
+          {
+            "ci_high": 0.00036660363730374104,
+            "ci_low": 0.00034145941210465613,
+            "library_name": "sigma2",
+            "name": "sigma2",
+            "p_value": null,
+            "std_err": 6.41446103025855e-06,
+            "value": 0.0003540315247041986,
+            "z": null
+          }
+        ],
+        "source": "auto_arima with the course's arguments on the full series chose (0, 1, 1); ARIMA(train, order=(0, 1, 1)).fit() with statsmodels' defaults",
+        "trend": "n",
+        "warnflag": 0,
+        "warnings": []
+      }
+    ],
+    "n_train": 2037,
+    "primary": "aic",
+    "sample": "train",
+    "z95": 1.959963984540054
+  },
+  "generated_at": "2026-10-30T02:43:38Z",
+  "schema_version": "1.4.0",
+  "source_commit": "c6ad7905ffb83e59755ae02306f01d9c0dd910e1"
+}
