@@ -23,6 +23,8 @@ from arima_forecasting.config import (
     StudyWindow,
 )
 from arima_forecasting.data import PROVIDER, Snapshot
+from arima_forecasting.diagnostics import residual_payloads
+from arima_forecasting.fitting import MODEL_IDS, fit_models
 from arima_forecasting.identification import acf_pacf_payload
 from arima_forecasting.prep import clean_close, price_table, segment_bounds
 from arima_forecasting.selection import aic_grid_payload
@@ -35,15 +37,17 @@ TITLE = "ARIMA stock forecasting, done carefully"
 _MILESTONES = (
     (0, "scaffold", "Scaffold, contract and design", "done"),
     (1, "data-eda", "Data and EDA", "done"),
-    (2, "stationarity", "Stationarity and identification", "current"),
-    (3, "fit-diagnostics", "Fit and diagnostics", "planned"),
+    (2, "stationarity", "Stationarity and identification", "done"),
+    (3, "fit-diagnostics", "Fit and diagnostics", "current"),
     (4, "forecast-eval", "Forecast and evaluation", "planned"),
     (5, "where-it-goes-wrong", "Where the sample goes wrong, and polish", "planned"),
 )
 
 # Every artifact one export writes, in the order the tool writes them. meta lists exactly these, so
 # the app knows which views it can switch on.
-ARTIFACTS = ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid")
+# The residual plot series are one file per fitted model (see diagnostics.residual_payloads).
+RESIDUAL_ARTIFACTS = tuple(f"residuals_{model_id}" for model_id in MODEL_IDS)
+ARTIFACTS = ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid", "fit", *RESIDUAL_ARTIFACTS)
 
 # Artifacts the export writes but the repository does not commit (meta.data.held_artifacts). Empty
 # since the owner's decision of 2026-10-29: every exported file is committed, prices.json and
@@ -165,6 +169,17 @@ def order_selection_payloads(table: pd.DataFrame) -> dict[str, dict[str, Any]]:
     }
 
 
+def fit_payloads(table: pd.DataFrame, aic_grid: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The milestone-3 payloads: the three fits with their residual tests (`fit`), and each model's
+    residual plot series (`residuals_<id>`). The fits use the training rows; the course's
+    auto_arima uses the training and test rows, as the course does (fitting.py)."""
+    train = table[table["segment"] == "train"]
+    course = table[table["segment"] != "oos"]
+    fit, results = fit_models(train["log_close"].to_numpy(), course["log_close"].to_numpy(), aic_grid)
+    series = residual_payloads(fit, results, train.index)
+    return {"fit": fit, **series}
+
+
 def price_payloads(snapshot: Snapshot) -> tuple[dict[str, dict[str, Any]], pd.DataFrame]:
     """The milestone-0 and milestone-1 payloads (meta, prices, eda) from one raw snapshot, and the
     price table they come from. No model is fitted, so this takes seconds (notebook 01 uses it)."""
@@ -178,10 +193,18 @@ def price_payloads(snapshot: Snapshot) -> tuple[dict[str, dict[str, Any]], pd.Da
     return payloads, table
 
 
-def build_payloads(snapshot: Snapshot) -> dict[str, dict[str, Any]]:
-    """Every payload one export writes, keyed by artifact name, from one raw snapshot."""
+def build_payloads(snapshot: Snapshot, aic_grid: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
+    """Every payload one export writes, keyed by artifact name, from one raw snapshot.
+
+    `aic_grid` (an existing aic_grid payload) skips the grid, which takes minutes, and is used in
+    its place; only `tools/export_app_data.py --only` passes it, to rebuild the later artifacts."""
     first, table = price_payloads(snapshot)
-    payloads = {**first, **order_selection_payloads(table)}
+    if aic_grid is None:
+        order = order_selection_payloads(table)
+    else:
+        train = table.loc[table["segment"] == "train", "log_close"].to_numpy()
+        order = {"stationarity": stationarity_payload(train), "acf_pacf": acf_pacf_payload(train), "aic_grid": aic_grid}
+    payloads = {**first, **order, **fit_payloads(table, order["aic_grid"])}
     if tuple(payloads) != ARTIFACTS:  # pragma: no cover - a guard for whoever edits this list
         raise RuntimeError(f"payloads {tuple(payloads)} do not match ARTIFACTS {ARTIFACTS}")
     return payloads

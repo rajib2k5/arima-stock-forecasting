@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EXPLORER_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './gate'
+import { EXPLORER_ARTIFACTS, FIT_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './gate'
 import type { Meta } from './contract'
 
 const meta = (artifacts: string[]): Meta => ({
@@ -21,6 +21,11 @@ describe('hasArtifacts', () => {
     expect(LANDSCAPE_ARTIFACTS).toEqual(['aic_grid'])
     expect(hasArtifacts(meta(['meta', 'stationarity', 'aic_grid']), STATIONARITY_ARTIFACTS)).toBe(false)
     expect(hasArtifacts(meta(['meta', 'stationarity', 'aic_grid']), LANDSCAPE_ARTIFACTS)).toBe(true)
+  })
+  it('needs fit and the three residual files for the fit page', () => {
+    expect(FIT_ARTIFACTS).toEqual(['fit', 'residuals_aic', 'residuals_bic', 'residuals_course'])
+    expect(hasArtifacts(meta(['meta', 'fit', 'residuals_aic', 'residuals_bic', 'residuals_course']), FIT_ARTIFACTS)).toBe(true)
+    expect(hasArtifacts(meta(['meta', 'fit', 'residuals_aic', 'residuals_bic']), FIT_ARTIFACTS)).toBe(false)
   })
   it('is true only when every needed artifact is listed', () => {
     expect(hasArtifacts(meta(['meta', 'prices', 'eda']), EXPLORER_ARTIFACTS)).toBe(true)

@@ -11,7 +11,9 @@ the snapshot:
   to the summary, the KDE or the decomposition code fails here until someone re-exports;
 - stationarity.json and acf_pacf.json are exactly what the current code builds from those rows, and
   in aic_grid.json a sample of cells (the choice, BIC's choice, the best of each d and one cell of
-  each status) refits to the same values. All 144 cells are refitted by `--check` (about a minute).
+  each status) refits to the same values. All 144 cells are refitted by `--check` (about 8 minutes);
+- fit.json and the three residuals_<id>.json files are exactly what the current code builds from
+  prices.json's rows and aic_grid.json's estimates.
 
 Every exported file is committed (the owner's decision of 2026-10-29, DATA.md), so all of these
 tests run in every copy, a fresh clone included. The held-artifact mechanism stays: a file that
@@ -34,7 +36,7 @@ import pytest
 from arima_forecasting import selection, stationarity
 from arima_forecasting.artifacts import read_artifact, table_from_prices
 from arima_forecasting.contract import SCHEMA_VERSION
-from arima_forecasting.export import ARTIFACTS, HELD_ARTIFACTS, eda_payload, meta_payload, prices_payload
+from arima_forecasting.export import ARTIFACTS, HELD_ARTIFACTS, RESIDUAL_ARTIFACTS, eda_payload, fit_payloads, meta_payload, prices_payload
 from arima_forecasting.identification import acf_pacf_payload
 from arima_forecasting.prep import price_table
 
@@ -221,3 +223,40 @@ def test_no_committed_cell_sits_at_the_optimum_of_a_model_it_nests():
     key = lambda c: (c["d"], c["p"], c["q"], c["trend"])  # noqa: E731
     ties = [(key(s), key(b)) for b in cells for s in cells if selection.nests(key(s), key(b)) and abs(b["llf"] - s["llf"]) <= selection.TIE]
     assert ties == []
+
+
+# --- milestone 3: fit and residuals_<id> -------------------------------------------------------
+
+
+def test_fit_and_residuals_are_what_the_current_code_builds_from_the_committed_rows_and_grid():
+    # The fits start from the committed grid's estimates, and the course's auto_arima runs on the
+    # committed training and test rows, so this rebuilds all four files exactly (a few seconds).
+    built = fit_payloads(table_from_prices(load("prices")["data"]), load("aic_grid")["data"])
+    assert list(built) == ["fit", *RESIDUAL_ARTIFACTS]
+    for name, payload in built.items():
+        assert payload == load(name)["data"], name
+
+
+def test_the_fit_names_the_grid_choices_and_describes_the_same_training_rows():
+    fit, grid = load("fit")["data"], load("aic_grid")["data"]
+    s = grid["selection"]
+    models = {m["id"]: m for m in fit["models"]}
+    assert (models["aic"]["order"], models["aic"]["trend"]) == (s["order"], s["trend"])
+    bic = s["bic_choice"]
+    assert (models["bic"]["order"], models["bic"]["trend"]) == ([bic["p"], s["d_selected"], bic["q"]], bic["trend"])
+    assert fit["n_train"] == grid["n_train"] == load("prices")["data"]["splits"]["train"]["n"]
+    run = next(r for r in grid["pmdarima_check"]["runs"] if r["label"] == "course")
+    assert fit["course_track"]["train_only"] == {k: run[k] for k in ("order", "with_intercept", "trend")}
+
+
+def test_each_residuals_file_matches_its_model_and_the_training_dates():
+    fit = load("fit")["data"]
+    train = [r["date"] for r in load("prices")["data"]["rows"] if r["segment"] == "train"]
+    for model in fit["models"]:
+        series, dg = load(f"residuals_{model['id']}")["data"], model["diagnostics"]
+        assert series["model_id"] == model["id"]
+        assert (series["n"], series["burn_excluded"]) == (dg["n"], dg["burn_excluded"])
+        assert [r["date"] for r in series["rows"]] == train[dg["burn_excluded"] :]
+        assert [r["date"] for r in dg["burned"]] == train[: dg["burn_excluded"]]
+        assert series["acf"]["outside_count"] == dg["acf_outside_count"]
+        assert series["acf_squared"]["outside_count"] == dg["acf_squared_outside_count"]

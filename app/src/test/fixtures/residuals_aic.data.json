@@ -1,0 +1,122 @@
+{
+  "sample": "train",
+  "model_id": "aic",
+  "n": 7,
+  "burn_excluded": 1,
+  "z": 1.959963984540054,
+  "nlags": 3,
+  "rows": [
+    {
+      "date": "2015-01-05",
+      "resid_std": -1.25
+    },
+    {
+      "date": "2015-01-06",
+      "resid_std": 0.4
+    },
+    {
+      "date": "2015-01-07",
+      "resid_std": 0.15
+    },
+    {
+      "date": "2015-01-08",
+      "resid_std": -0.6
+    },
+    {
+      "date": "2015-01-09",
+      "resid_std": 1.8
+    },
+    {
+      "date": "2015-01-12",
+      "resid_std": -0.3
+    },
+    {
+      "date": "2015-01-13",
+      "resid_std": 0.05
+    }
+  ],
+  "acf": {
+    "band": 0.7407967545337467,
+    "outside_count": 0,
+    "rows": [
+      {
+        "lag": 1,
+        "acf": 0.1,
+        "outside": false
+      },
+      {
+        "lag": 2,
+        "acf": -0.05,
+        "outside": false
+      },
+      {
+        "lag": 3,
+        "acf": 0.2,
+        "outside": false
+      }
+    ]
+  },
+  "acf_squared": {
+    "band": 0.7407967545337467,
+    "outside_count": 1,
+    "rows": [
+      {
+        "lag": 1,
+        "acf": 0.8,
+        "outside": true
+      },
+      {
+        "lag": 2,
+        "acf": 0.3,
+        "outside": false
+      },
+      {
+        "lag": 3,
+        "acf": -0.1,
+        "outside": false
+      }
+    ]
+  },
+  "qq": [
+    {
+      "theoretical": -1.314872752547375,
+      "t_theoretical": -1.3696013763759198,
+      "sample": -1.25
+    },
+    {
+      "theoretical": -0.7439764884519314,
+      "t_theoretical": -0.7253275144583999,
+      "sample": -0.6
+    },
+    {
+      "theoretical": -0.3471943041728483,
+      "t_theoretical": -0.33054904532872054,
+      "sample": -0.3
+    },
+    {
+      "theoretical": 0.0,
+      "t_theoretical": 0.0,
+      "sample": 0.05
+    },
+    {
+      "theoretical": 0.3471943041728483,
+      "t_theoretical": 0.33054904532872054,
+      "sample": 0.15
+    },
+    {
+      "theoretical": 0.7439764884519314,
+      "t_theoretical": 0.7253275144583999,
+      "sample": 0.4
+    },
+    {
+      "theoretical": 1.314872752547375,
+      "t_theoretical": 1.369601376375919,
+      "sample": 1.8
+    }
+  ],
+  "t_fit": {
+    "df": 5.0,
+    "loc": 0.0,
+    "scale": 0.9
+  }
+}

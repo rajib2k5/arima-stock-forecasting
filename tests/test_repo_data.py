@@ -184,7 +184,9 @@ def test_no_committed_data_file_is_over_10_mb():
 def test_the_exported_data_files_are_committed_not_ignored():
     # The other half of the rule: a fresh clone must get every exported file.
     paths = committable(REPO)
-    for name in ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid"):
+    from arima_forecasting.export import ARTIFACTS
+
+    for name in ARTIFACTS:
         assert f"{DATA_DIR}{name}.json" in paths, name
 
 

@@ -2,6 +2,7 @@
 
 Run:  uv run python tools/export_app_data.py [--out app/public/data]
       uv run python tools/export_app_data.py --check
+      uv run python tools/export_app_data.py --only fit,residuals_aic   (for iterating; see below)
 
 It reads the raw snapshot that tools/fetch_prices.py downloaded ($VOL_DATA_DIR/...); it never
 downloads anything itself. Without a snapshot it exits 2 and writes nothing.
@@ -14,6 +15,19 @@ the time, artifacts.py compares two exports. This file only wires them together.
 with the files in --out. `generated_at` and `source_commit` are not compared, because they
 legitimately differ between the export run and the check run. It exits 1 on any difference,
 missing file or extra file, and writes nothing.
+
+--only NAMES writes just the named artifacts, and takes the AIC grid from the aic_grid.json already
+in --out instead of refitting it (the grid is most of an export's 8 minutes). It is a shortcut for
+iterating on the later artifacts; a full export and --check are still what a commit needs, because
+only they rebuild the grid from the snapshot.
+
+fit.json and the three residuals_<id>.json files must describe the same fits (payloads.
+validate_fit_residuals). Before writing, the tool checks the set the folder would hold (the files
+it writes, and the ones --only leaves as they are) and refuses to write if they disagree, so
+`--only fit` after a code change fails instead of leaving fit.json beside stale residual files;
+after writing, it reads the four files back from disk and checks them again. Both checks run only
+when the run writes one of the four or the folder already holds one, so `--only meta` into a folder
+without them writes meta.json and nothing else is asked of it.
 """
 
 from __future__ import annotations
@@ -32,12 +46,13 @@ from collections.abc import Sequence  # noqa: E402
 from pathlib import Path  # noqa: E402
 from typing import Any  # noqa: E402
 
-from arima_forecasting.artifacts import compare_exports  # noqa: E402
+from arima_forecasting.artifacts import ArtifactError, compare_exports, read_artifact  # noqa: E402
 from arima_forecasting.config import raw_dir  # noqa: E402
 from arima_forecasting.contract import dumps, make_envelope, validate_envelope  # noqa: E402
 from arima_forecasting.data import SnapshotError, read_snapshot  # noqa: E402
-from arima_forecasting.export import build_payloads  # noqa: E402
-from arima_forecasting.payloads import PAYLOAD_VALIDATORS  # noqa: E402
+from arima_forecasting.export import ARTIFACTS, build_payloads  # noqa: E402
+from arima_forecasting.fitting import GridMismatch  # noqa: E402
+from arima_forecasting.payloads import PAYLOAD_VALIDATORS, validate_fit_residuals  # noqa: E402
 from arima_forecasting.prep import DataQualityError  # noqa: E402
 from arima_forecasting.provenance import build_time, source_commit  # noqa: E402
 from arima_forecasting.selection import ModelSearchError  # noqa: E402
@@ -62,7 +77,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="write nothing; exit 1 if the files in --out differ from a fresh export",
     )
+    parser.add_argument(
+        "--only",
+        type=lambda text: tuple(name for name in text.split(",") if name),
+        default=None,
+        help="comma-separated artifacts to write; reuses aic_grid.json from --out instead of refitting the grid",
+    )
     args = parser.parse_args(argv)
+    if args.only is not None:
+        unknown = [name for name in args.only if name not in ARTIFACTS]
+        if args.check or not args.only or unknown:
+            parser.error(f"--only takes artifact names from {', '.join(ARTIFACTS)}, and not with --check; unknown: {unknown}")
 
     try:
         snapshot = read_snapshot(raw_dir())
@@ -73,9 +98,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     # The commit and the time are read once, here, and handed to the pure code.
     generated_at = build_time()
     commit = source_commit(REPO_ROOT)
+    reused = None
+    if args.only is not None and "aic_grid" not in args.only:
+        try:
+            reused = read_artifact(args.out, "aic_grid")["data"]
+        except ArtifactError as error:
+            print(f"error: --only needs a valid aic_grid.json in {args.out}: {error}", file=sys.stderr)
+            return EXIT_INVALID
     try:
-        payloads = build_payloads(snapshot)
-    except (DataQualityError, ModelSearchError) as error:  # the data cannot give a valid export
+        payloads = build_payloads(snapshot, aic_grid=reused)
+    except (DataQualityError, ModelSearchError, GridMismatch) as error:  # the data cannot give a valid export
         print(f"error: {error}", file=sys.stderr)
         return EXIT_INVALID
     envelopes: dict[str, dict[str, Any]] = {
@@ -118,12 +150,53 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
 
+    writing = [name for name in texts if args.only is None or name in args.only]
+    # The cross-file check runs when this run writes a fit or residuals file, or the folder already
+    # holds one: `--only meta` into a folder that has none of them writes meta.json as before.
+    family = any(name in FIT_FAMILY for name in writing) or any((args.out / f"{name}.json").exists() for name in FIT_FAMILY)
+    if family:
+        # The fit and residual files the folder will hold: the new ones, and the old ones --only keeps.
+        planned = {name: envelopes[name]["data"] for name in writing if name in FIT_FAMILY}
+        try:
+            planned |= {name: read_artifact(args.out, name)["data"] for name in FIT_FAMILY if name not in planned}
+        except ArtifactError as error:
+            print(f"error: --only {','.join(writing)} keeps a fit or residuals file that is not valid: {error}", file=sys.stderr)
+            return EXIT_INVALID
+        mismatch = _fit_family_problems(planned)
+        if mismatch:
+            print("refusing to write: fit.json and the residuals files would disagree (add them to --only, or run a full export):", file=sys.stderr)
+            for problem in mismatch:
+                print(f"  - {problem}", file=sys.stderr)
+            return EXIT_INVALID
+
     args.out.mkdir(parents=True, exist_ok=True)
-    for name, text in texts.items():
+    for name in writing:
         path = args.out / f"{name}.json"
-        path.write_text(text, encoding="utf-8")
-        print(f"wrote {path} ({len(text.encode('utf-8')):,} bytes)")
+        path.write_text(texts[name], encoding="utf-8")
+        print(f"wrote {path} ({len(texts[name].encode('utf-8')):,} bytes)")
+
+    if not family:
+        return 0
+    # Read the whole set back from disk and check it again.
+    try:
+        written = {name: read_artifact(args.out, name)["data"] for name in FIT_FAMILY}
+    except ArtifactError as error:
+        print(f"error: after writing, {error}", file=sys.stderr)
+        return EXIT_INVALID
+    mismatch = _fit_family_problems(written)
+    if mismatch:
+        print(f"error: after writing, fit.json and the residuals files in {args.out} disagree:", file=sys.stderr)
+        for problem in mismatch:
+            print(f"  - {problem}", file=sys.stderr)
+        return EXIT_INVALID
     return 0
+
+
+FIT_FAMILY = tuple(name for name in ARTIFACTS if name == "fit" or name.startswith("residuals_"))
+
+
+def _fit_family_problems(files: dict[str, Any]) -> list[str]:
+    return validate_fit_residuals(files["fit"], {name: data for name, data in files.items() if name != "fit"})
 
 
 def _explain_snapshot_change(folder: Path, envelopes: dict[str, dict[str, Any]]) -> None:

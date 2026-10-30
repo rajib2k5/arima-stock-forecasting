@@ -418,7 +418,7 @@ the [milestone-2 walkthrough](../milestones/02-stationarity-and-identification.m
 ## Revised in the milestone-2 fix round (2026-10-29)
 
 The review of milestone 2 found that one optimiser run per cell, from statsmodels' default start,
-had left many cells at local optima: 86 pairs of `ok` cells at d = 1 in which a model scored a lower
+had left many cells at local optima: 94 pairs of `ok` cells at d = 1 in which a model scored a lower
 log-likelihood than a smaller model it nests, by up to 21.8. That is impossible at the maxima, so the
 landscape, many `delta_aic` values and the near ties rested on where the optimiser happened to stop.
 §5's "no retry" is replaced by the following. Every run still uses the settings of §5.
@@ -455,6 +455,40 @@ landscape, many `delta_aic` values and the near ties rested on where the optimis
   were not (3, 5, 4 and 6 others); Nelder-Mead from other cells' estimates then moved the choice
   itself. So the choice is the best this search found, and the near-tie list is a lower bound. The
   milestone-2 walkthrough has the measurements.
+
+## Measured in milestone 3 (2026-10-29)
+
+Milestone 3 fitted the §6 choice, BIC's choice and the course's own model, and tested their
+residuals. The rules above are unchanged. The commands and every value are in the
+[milestone-3 walkthrough](../milestones/03-fit-and-diagnostics.md#measured-results).
+
+- **The course's recipe on AAPL** ("What the course does"). Problem 1, the leak: `auto_arima` with the
+  course's arguments ran on 2,264 rows, 227 of them from the test period, and chose (0, 1, 1) with an
+  intercept; the same search on the 2,037 training rows (§7's `"course"` run) chose the same. So the
+  leak is real in the procedure and changed nothing measurable in the order here. Problem 2, the
+  dropped drift, holds on real data: the course's refit `ARIMA(train, order=(0, 1, 1)).fit()` has no
+  trend; with a drift the same order estimates 0.000899 log points per day (p 0.021 with OPG errors),
+  and its AIC is 3.546 lower.
+- **The §6 choice's residuals.** ARIMA(3, 1, 4) with a drift, refitted from the grid's recorded
+  estimates (llf within 5.0e-10 of the grid's). Ljung–Box with p + q = 7 degrees of freedom removed
+  cannot test lag 5; at lags 10 and 20 it finds no autocorrelation (p 0.185 and 0.489). Jarque–Bera
+  rejects normality (kurtosis 7.03), and ARCH-LM finds volatility clustering (p 2.4e-50 at 5 lags,
+  2.6e-53 at 10; 29 of 50 squared-residual ACF bars past the band). The course's model leaves clear
+  autocorrelation at lags 10 and 20 (p 6.6e-8 and 1.5e-8). BIC's choice is rejected at lags 5 and 10
+  (p 0.018 and 0.039), but only by the rule the project states, any applied lag below 0.05 with no
+  adjustment for testing three lags: Holm's adjustment across its three lags gives 0.0545 at the
+  smallest, and a Box–Pierce statistic made robust to volatility clustering gives p 0.117, 0.384
+  and 0.566 (it still rejects the course's model, p 0.0048 at lag 10). In-sample, the AIC choice
+  passes Ljung–Box, the course's model fails it, and BIC's choice fails it only narrowly; all three
+  fail the other two tests.
+- **The near-cancelling roots** (§7's ridge, in more dimensions). The choice's complex AR pair
+  −0.842 ± 0.398i lies 0.0625 from its MA pair −0.782 ± 0.414i; its real AR root −0.465 and MA root
+  −0.683 are 0.218 apart. Its AR and MA coefficients come out large, opposite in sign and imprecise
+  (`ar.L1` −2.150 with OPG error 0.166, against 0.024 for BIC's choice, whose pair is 0.037 apart but
+  nearer the unit circle). The project flags pairs within 0.1 as a display rule (contract §3.7); it
+  is not a test and does not change the selection.
+- **What it settles.** Nothing in §6 changes after seeing these results. Milestone 4's out-of-sample
+  test remains the arbiter between the AIC choice and its simpler rivals.
 
 ## Verified library behaviour (versions pinned in `pyproject.toml`)
 

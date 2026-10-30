@@ -4,7 +4,7 @@ import App from './App'
 import { resetMemoryFallback, safeStorage } from './lib/storage'
 import type { FetchLike } from './data/loadArtifact'
 import { validMetaEnvelope, withValue } from './test/fixtures/fixtures'
-import { edaEnvelope, orderEnvelope, pricesEnvelope } from './test/fixtures/payloads'
+import { edaEnvelope, fitEnvelope, orderEnvelope, pricesEnvelope } from './test/fixtures/payloads'
 
 const STORE = safeStorage()
 
@@ -144,6 +144,31 @@ describe('App (integration)', () => {
     fireEvent.click(within(nav).getByRole('link', { name: 'AIC landscape' }))
     expect(await screen.findByLabelText('Chosen model')).toHaveTextContent('ARIMA(0, 1, 1) with a drift')
     expect(fn.mock.calls.map(([url]) => url.replace(/^.*data\//, '')).sort()).toEqual(['acf_pacf.json', 'aic_grid.json', 'meta.json', 'stationarity.json'])
+  })
+
+  it('offers the fit page after the AIC landscape once meta lists its four files, and loads fit.json and the primary model’s residuals only when it opens', async () => {
+    const meta = withValue(['data', 'artifacts'], ['meta', 'aic_grid', 'fit', 'residuals_aic', 'residuals_bic', 'residuals_course'])
+    const fn = vi.fn<FetchLike>(async (url) => {
+      const name = url.replace(/^.*data\//, '').replace('.json', '')
+      return { ok: true, status: 200, statusText: 'OK', json: async () => (name === 'meta' ? meta : fitEnvelope(name as 'fit' | 'residuals_aic')) }
+    })
+    vi.stubGlobal('fetch', fn)
+    render(<App />)
+    await screen.findByText('AAPL')
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'AIC landscape', 'Fit and diagnostics', 'Architecture'])
+    expect(fn).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(nav).getByRole('link', { name: 'Fit and diagnostics' }))
+    expect(await screen.findByRole('img', { name: /^Standardised residuals of ARIMA\(3, 1, 2\)/ })).toBeInTheDocument()
+    expect(fn.mock.calls.map(([url]) => url.replace(/^.*data\//, '')).sort()).toEqual(['fit.json', 'meta.json', 'residuals_aic.json'])
+  })
+
+  it('does not offer the fit page when meta lacks one of its residual files', async () => {
+    stubFetch(withValue(['data', 'artifacts'], ['meta', 'fit', 'residuals_aic', 'residuals_bic']))
+    render(<App />)
+    await screen.findByText('AAPL')
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'Architecture'])
   })
 
   it('does not offer the stationarity page when meta lists only one of its two files', async () => {

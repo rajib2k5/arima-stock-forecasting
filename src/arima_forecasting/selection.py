@@ -13,7 +13,7 @@ values out, and nothing reads a file or the clock.
 
 **Several starts per cell.** An ARMA likelihood with near-cancelling roots has many local maxima,
 and one optimiser run from statsmodels' default start often stops at a poor one (the milestone-2
-review found 86 pairs of d = 1 cells in which a model scored below a model it nests). So each cell
+review found 94 pairs of d = 1 cells in which a model scored below a model it nests). So each cell
 is fitted from: statsmodels' default start; each fitted nested model one step smaller (one fewer AR
 or MA lag, or no drift), its estimates padded with zeros, which starts the optimiser exactly at that
 model's likelihood; and RANDOM_STARTS seeded random starts for cells with both AR and MA lags. The
