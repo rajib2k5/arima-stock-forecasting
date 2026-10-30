@@ -335,7 +335,9 @@ def test_two_exports_with_a_fixed_source_date_epoch_are_byte_identical(tmp_path)
         return {path.name: path.read_bytes() for path in sorted(folder.glob("*.json"))}
 
     first = export()
-    assert sorted(first) == ["acf_pacf.json", "aic_grid.json", "eda.json", "meta.json", "prices.json", "stationarity.json"]
+    from arima_forecasting.export import ARTIFACTS
+
+    assert sorted(first) == sorted(f"{name}.json" for name in ARTIFACTS)
     assert first["meta.json"] != b"{}\n"  # sanity-check: the first run really did rewrite the tracked file
     assert "meta.json" in git(repo, "status", "--porcelain")
     second = export()

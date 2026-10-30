@@ -6,8 +6,9 @@ the order-selection rules that the `stationarity` and `aic_grid` artifacts expos
 [ADR-0002](../adr/0002-order-selection.md).
 
 **Status by artifact:** `meta` (milestone 0), `prices` and `eda` (milestone 1, schema `1.1.0`),
-and `stationarity`, `acf_pacf` and `aic_grid` (milestone 2, schema `1.2.0`, extended in `1.3.0`) are implemented, and
-their sections describe the shipped fields. Every other section is the
+`stationarity`, `acf_pacf` and `aic_grid` (milestone 2, schema `1.2.0`, extended in `1.3.0`), and
+`fit`, `residuals_aic`, `residuals_bic` and `residuals_course` (milestone 3, schema `1.4.0`) are
+implemented, and their sections describe the shipped fields. Every other section is the
 **planned** shape. It is fixed enough to build against, and each milestone may refine it under
 the versioning policy below.
 
@@ -101,8 +102,10 @@ with new data or fixed code changes the numbers and `source_commit`, never the v
 Path: milestone 1 added `prices` and `eda` (1.1.0), M2 added `stationarity`, `acf_pacf`
 and `aic_grid` (1.2.0), and the milestone-2 fix round added fields inside `data` only (1.3.0: each
 grid cell's `start` and `starts_tried`, the multi-start `fit_settings`, the correlograms' outside
-flags and counts). M3 adds `fit` and `residuals` (1.4.0), and M4 adds `forecasts` and `metrics`
-(1.5.0). The 1.3.0 readers require the new fields: a 1.2.0 `aic_grid` or `acf_pacf` is refused, and
+flags and counts). M3 added `fit` and one residuals artifact per fitted model, `residuals_aic`,
+`residuals_bic` and `residuals_course` (1.4.0). In that export the five earlier data artifacts
+changed only their envelopes; `meta.data` lists the four new names and marks milestone 3 current.
+M4 adds `forecasts` and `metrics` (1.5.0). The 1.3.0 readers require the new fields: a 1.2.0 `aic_grid` or `acf_pacf` is refused, and
 the app ships with its data, so no older file reaches it. `meta.data.artifacts` always lists exactly the artifacts written by that
 export, so the app knows which views can be switched on.
 
@@ -114,19 +117,30 @@ file passes 2 MB, the fix is a columnar layout for that artifact, which is a maj
 1,000,000 bytes, and `tests/test_repo_data.py` fails if any file in `app/public/data/` passes
 10,000,000 bytes (the hard limit of the owner's data rule; see `DATA.md`).
 
-Measured on 2026-10-29 on the milestone-2 export (after the review's fix round, schema 1.3.0) of the 13:37 UTC snapshot (`wc -c`, and Python's
-`gzip.compress(data, 6)`; GNU `gzip -6` gives slightly different sizes). The export's
-`source_commit` ended in `-dirty`; a clean stamp is 6 bytes shorter per file. All six files are
-committed since the owner's decision of 2026-10-29 (ADR-0001, `DATA.md`).
+Measured on 2026-10-29 on the milestone-3 fix-round export (schema 1.4.0) of the 13:37 UTC snapshot (file
+sizes in bytes, the same as `wc -c`, and Python's `gzip.compress(data, 6)`; GNU `gzip -6` gives
+slightly different sizes; the script is `m3_probe.py` in the milestone-3 walkthrough). The export's
+`source_commit` ended in `-dirty`; a clean stamp is 6 bytes shorter per file. All ten files are
+committed since the owner's decision of 2026-10-29 (ADR-0001, `DATA.md`). Shares are rounded to one
+decimal.
 
 | File | Rows | Bytes | Share of 1 MB | gzip level 6 (Python) |
 |---|---|---|---|---|
-| `meta.json` | n/a | 1,531 | 0.2% | 565 |
-| `prices.json` | 2,953 price rows | 456,025 | 45.6% | 67,170 |
-| `eda.json` | 2,037 decomposition rows + 2 × 200 KDE points | 529,907 | 53.0% | 101,501 |
-| `stationarity.json` | 3 transforms, 12 test results | 6,685 | 0.7% | 1,355 |
-| `acf_pacf.json` | 3 × 51 lags | 44,899 | 4.5% | 6,624 |
-| `aic_grid.json` | 144 cells with their parameters, 2 pmdarima runs | 153,790 | 15.3% | 27,717 |
+| `meta.json` | n/a | 1,613 | 0.2% | 585 |
+| `prices.json` | 2,953 price rows | 456,025 | 45.6% | 67,176 |
+| `eda.json` | 2,037 decomposition rows + 2 × 200 KDE points | 529,907 | 53.0% | 101,505 |
+| `stationarity.json` | 3 transforms, 12 test results | 6,685 | 0.7% | 1,356 |
+| `acf_pacf.json` | 3 × 51 lags | 44,899 | 4.5% | 6,626 |
+| `aic_grid.json` | 144 cells with their parameters, 2 pmdarima runs | 153,790 | 15.4% | 27,719 |
+| `fit.json` | 3 models (9, 5 and 2 parameters) with roots and tests | 18,464 | 1.8% | 4,464 |
+| `residuals_aic.json` | 2,036 residual rows, 2 × 50 ACF rows, 2,036 QQ points | 483,331 | 48.3% | 93,437 |
+| `residuals_bic.json` | the same | 483,320 | 48.3% | 93,397 |
+| `residuals_course.json` | the same | 483,398 | 48.3% | 93,578 |
+
+The three residual series in one file would be 1,450,049 bytes, past the budget; that is why they
+are three artifacts (§3.8). On the milestone-2 export (schema 1.3.0) the first six files had the
+same byte counts except `meta.json` (1,531), and `aic_grid.json`'s share was listed as 15.3%, a
+truncation of 15.38%.
 
 `forecasts` (about 2,700 rows) is still an estimate; it is measured when it ships.
 
@@ -332,8 +346,8 @@ coefficients to zero gives the smaller model exactly. So its maximised log-likel
 lower. Both readers refuse a file in which any fitted cell's `llf` is below that of a cell it nests
 by more than 2e-3, whatever the two cells' statuses: a lower value is a local optimum. The bound is
 pinned in each reader (`NESTING_TOLERANCE`), not read from the file, and a file whose
-`fit_settings.nesting_tolerance` states another value is refused. The milestone-2 review found 86 such pairs among the `ok` cells of d = 1 in the 1.2.0
-file.
+`fit_settings.nesting_tolerance` states another value is refused. The milestone-2 review found 94 such pairs among the `ok` cells of d = 1 in the 1.2.0
+file (99 at zero tolerance; the largest shortfall 21.83).
 
 `selection` (both readers re-derive each part from `cells` and refuse a mismatch):
 
@@ -377,48 +391,136 @@ Readers: Python's `validate_aic_grid` and the app's `parseAicGrid`.
 
 ---
 
-### 3.7 `fit` [M3]
+### 3.7 `fit` [M3, implemented]
 
-The selected model fitted on the training split, and the course's refit for comparison.
-**View:** residual diagnostics header (parameter table) and the forecast view legend.
+Three models fitted on the training split, each with its parameter inference, inverse roots and
+residual tests, and the course's recipe with its two problems measured. Built by
+`src/arima_forecasting/fitting.py` and `src/arima_forecasting/diagnostics.py`. **View:** the "Fit and
+diagnostics" page (model picker, parameter table, unit circle, test table). Committed: estimates and
+test statistics. One value is about a price: the burned residual (`diagnostics.burned[].resid`) is
+about the first log price, 3.185 on AAPL, and it is exported so the page can show what the course's
+plots include. The only dates are those of the burned residuals.
 
 | Field | Type | Notes |
 |---|---|---|
 | `sample` | `"train"` | |
-| `models[]` | see below | open enum by `id`: `"selected"`, `"course_refit"` |
+| `n_train` | int ≥ 2 | |
+| `primary` | `"aic"` | a one-value enum: the AIC choice is the primary model (owner's default, LEARNING_LOG); both readers refuse any other id |
+| `fit_settings` | `{library, version, model: "ARIMA", method: "statespace", optimizer, maxiter, cov_type: "opg", enforce_stationarity, enforce_invertibility, concentrate_scale}` | the settings of the two grid refits; `cov_type` is statsmodels' default (outer product of gradients). The course model uses `ARIMA(train, order).fit()` defaults, which are the same here except `maxiter` (statsmodels' 50) |
+| `z95` | number | 1.959963984540054, the literal both readers hold |
+| `cancel_distance` | number, must be 0.1 | the near-cancelling rule's threshold (below), `fitting.CANCEL_DISTANCE` |
+| `llf_tolerance` | number, must be 1e-6 | how close a grid refit's llf must be to the grid's, `fitting.LLF_TOLERANCE` |
+| `diagnostic_settings` | `{alpha, series, ljung_box_lags[], ljung_box_model_df, arch_lm_lags[], arch_lm_ddof, nlags}` | `alpha` must be 0.05, `ljung_box_lags` [5, 10, 20], `arch_lm_lags` [5, 10], `arch_lm_ddof` 0 and `nlags` 50: each pinned in both readers (`ALPHA`, `LJUNG_BOX_LAGS`, `ARCH_LM_LAGS`, `ARCH_LM_DDOF`, `NLAGS`; a test ties the Python ones to `diagnostics.py`) and never taken from the file, because the lags decide which rows exist and so which verdict is reached, and any other stated value is refused; `series` and `ljung_box_model_df` in words; `arch_lm_ddof` 0, `het_arch`'s default (its docstring suggests p + q for ARMA residuals; ddof scales only the statistic, and the verdicts here do not change, milestone-3 walkthrough) |
+| `models[]` | see below | exactly three, ids `"aic"`, `"bic"`, `"course"` in that order |
+| `course_track` | see below | |
+| `clustering_prediction` | `{model_id, confirmed, arch_lm_rejections, acf_squared_outside_count, acf_squared_expected_by_chance}` | concept note 07's prediction, tested on the primary model: `confirmed` is true exactly when its ARCH verdict is `"found"`; `arch_lm_rejections` counts its ARCH-LM p-values below alpha; the count of squared-residual ACF bars past their band, beside alpha × nlags, the number expected by chance |
 
 `models[]`:
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | open enum | `"selected"` = ADR-0002's choice; `"course_refit"` = the course's order (from `auto_arima` on the full series) refitted with statsmodels' default trend, kept to show the dropped drift |
-| `order` | `[p, d, q]` | |
-| `trend` | closed enum `"n"`, `"c"`, `"t"` | |
-| `nobs`, `nobs_effective`, `loglikelihood_burn` | int | |
-| `params[]` | `{name, library_name, value, std_err, z, p_value, ci_low, ci_high}` | `name` is normalised (`"const"`, `"drift"`, `"ar.L1"`, `"ma.L1"`, `"sigma2"`); `library_name` is statsmodels' own label (its drift appears as `"x1"` in 0.15.0). `std_err`, `z`, `p_value`, `ci_low`, `ci_high` are **nullable** (null if the covariance matrix is singular). Values for `drift`/`const` are in log points per day; `sigma2` in log points squared. |
-| `information` | `{llf, aic, aicc, bic, hqic}` | |
-| `converged` | bool | |
-| `warnings[]` | `{category, message}[]` | |
-| `inv_roots_ar[]`, `inv_roots_ma[]` | `{re, im, modulus}[]` | empty when p (or q) is 0 |
+| `id` | closed enum `"aic"`, `"bic"`, `"course"` | `aic`: ADR-0002's choice; `bic`: the lowest-BIC ok cell of the same d (`aic_grid.selection.bic_choice`); `course`: the course's refit |
+| `label`, `source` | string | for display: the model's name, and where it came from in words |
+| `order` | `[p, d, q]` ints | p and q from 0 to 10, d from 0 to 2 (`MAX_PQ`, `MAX_D`; the grid's p and q stop at 5). Both readers check the bound before they build anything from the order, so a stated order of 10⁸ or 2³² gives one short problem, not a list of that many parameter names |
+| `trend` | closed enum `"n"`, `"c"`, `"t"` | as in `aic_grid`; the course refit's is statsmodels' default for its d: `"c"` at d = 0, `"n"` at d ≥ 1 (both readers) |
+| `nobs`, `nobs_effective`, `loglikelihood_burn` | int | `nobs` = `n_train`; `nobs_effective` = `nobs` − `loglikelihood_burn`; `loglikelihood_burn` from 0 to 2 (it is d for these models) |
+| `params[]` | `{name, library_name, value, std_err, z, p_value, ci_low, ci_high}` | one row per parameter, in statsmodels' order: the trend term (`"const"` or `"drift"`), `ar.L1`… , `ma.L1`… , `sigma2`. `library_name` is statsmodels' label (the drift is `"x1"` in 0.15.0). `z` = value / std_err; `p_value` = 2(1 − Φ(\|z\|)), the probability under the null (coefficient 0) of a z at least as far from 0 as the one observed; `ci_*` = value ± z95 × std_err. The five inference fields are **nullable**, all together (a singular covariance). **`sigma2`'s `z` and `p_value` are always null**, with its `std_err` and interval kept: its null value 0 is on the boundary of the parameter space (a variance cannot be negative), where z is not normal, so the z-test does not apply (it would also underflow to p = 0.0 here). `sigma2` > 0. Drift and constant in log points per day, `sigma2` in log points squared |
+| `information` | `{llf, aic, aicc, bic, hqic}` | statsmodels' values, with k the number of `params` and n = `nobs_effective` (statsmodels passes `nobs_effective`): aic = −2 llf + 2k, bic = −2 llf + k ln n, aicc = −2 llf + 2kn / (n − k − 1), which statsmodels sets to +∞ when n − k − 1 ≤ 0 (no file can hold that) |
+| `grid_llf`, `llf_gap` | number, **nullable** | the grid cell's llf, and llf − grid_llf, whose absolute value must be ≤ `llf_tolerance`; null exactly for `course` |
+| `converged`, `iterations`, `warnflag` | bool, int, int | the optimiser's `mle_retvals` |
+| `warnings[]` | `{category, message}[]` | every warning raised by the fit |
+| `inv_roots_ar[]`, `inv_roots_ma[]` | `{re, im, modulus}[]` | exactly p (or q) inverse roots, largest modulus first. A list of another length is one problem, and Python's pairing check is not run on it; nor on a list of more than `MAX_PQ` roots when the order itself is out of bounds (the check's matching doubles its work with each MA root) |
+| `cancelling_pairs[]` | `{ar, ma, distance}[]` | indices into the two root lists, listed by AR index; each index at most once. The rule: among the AR–MA pairs whose distance in the complex plane is ≤ `cancel_distance`, a one-to-one matching with as many pairs as possible, and among those the least total distance (a maximum matching). Closest first is not the rule: AR {0.5, 0.6} and MA {0.51, 0.41} give one pair that way and two by the rule |
+| `diagnostics` | see below | |
 
----
-
-### 3.8 `residuals` [M3]
-
-Is the selected model's error white noise? **View:** residual diagnostics (time plot, KDE vs
-normal, QQ, residual ACF, test table).
+`models[].diagnostics` (computed on the standardised one-step forecast errors after the burn-in):
 
 | Field | Type | Notes |
 |---|---|---|
-| `model_id` | `"selected"` | refers to `fit.models[].id` |
-| `burn_excluded` | int | the first `max(loglikelihood_burn, nobs_diffuse)` residuals are dropped, as statsmodels' own `plot_diagnostics` does (`statsmodels/tsa/statespace/mlemodel.py:5344-5345`); the burned residual is huge and meaningless |
-| `rows[]` | `{date, resid, resid_std}` | `resid` in log points; `resid_std` = standardised forecast error. Sorted by date. |
-| `kde.points[]` | `{x, density, normal_density}` | over `resid_std`; `normal_density` is the N(0,1) reference |
-| `qq[]` | `{theoretical, sample}` | every standardised residual, sorted; `theoretical` = normal quantiles |
-| `acf.rows[]` | `{lag, acf, band}` | lags 1…50, band as in `acf_pacf` |
-| `tests.ljung_box[]` | `{lag, statistic, p_value, model_df}` | lags 10 and 20; `model_df = p + q` |
-| `tests.jarque_bera` | `{statistic, p_value, skew, kurtosis}` | |
-| `tests.arch_lm` | `{lags, statistic, p_value}` | volatility clustering: why ARIMA intervals are too narrow in calm periods and too wide in stormy ones |
+| `n` | int | `nobs` − `burn_excluded` |
+| `burn_excluded` | int, 0 to 2 | = `loglikelihood_burn`: statsmodels drops max(`loglikelihood_burn`, `nobs_diffuse`) itself (`statsmodels/tsa/statespace/mlemodel.py:5345`), d for these models |
+| `burned[]` | `{date, resid, resid_std}` | the dropped residuals, one per burned observation, to show what the course's plots include; `resid` in log points |
+| `max_abs_resid_after_burn` | number ≥ 0 | the largest \|resid\| that remains, for comparison |
+| `ljung_box[]` | `{lag, model_df, df, statistic, p_value, applied}` | one per `ljung_box_lags`; `model_df` = p + q; `applied` exactly when lag > model_df; `df` = lag − model_df and `p_value` are **nullable**, null exactly when not applied; `statistic` ≥ 0, never below the previous row's (Q(h) = n(n + 2) Σ r_k² / (n − k) over k ≤ h is a running sum of terms ≥ 0), and `p_value` = the chi-squared tail of `statistic` on `df` |
+| `jarque_bera` | `{statistic, p_value, skew, kurtosis}` | Pearson kurtosis (a normal has 3), at least 1 + skew² (true of every sample); `statistic` = n / 6 (skew² + (kurtosis − 3)² / 4) with n = `diagnostics.n` (statsmodels' `jarque_bera`, to 1e-9 relative), and `p_value` = its chi-squared tail on 2 df |
+| `arch_lm[]` | `{lags, statistic, p_value}` | one per `arch_lm_lags`; Engle's LM statistic (n − m − ddof) R², with m = `lags` and n − m the rows of its regression, so from 0 to n − m − ddof (R² ≤ 1), and `p_value` its chi-squared tail on `lags` df (`het_arch`: ddof does not change the df) |
+| `verdicts` | `{serial_correlation, normality, arch}` | closed enums: `"found"`, `"not_found"`, `"not_tested"` (no applied Ljung–Box row); `"rejected"`, `"not_rejected"`; `"found"`, `"not_found"`. A verdict is the rejection at `alpha` of any row of its test, **unadjusted** for testing several lags (so a family of three lags rejects more often than alpha). The app keys fixed text by these |
+| `acf_outside_count`, `acf_squared_outside_count` | int | equal to the counts in that model's `residuals_<id>` file |
+
+`course_track`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `settings` | object | the course's `auto_arima` arguments, as passed |
+| `pmdarima_version` | string | |
+| `n_course`, `n_train`, `test_rows_seen` | int | the full 2015–2023 series the course searches, the training split, and the difference: test rows the search saw |
+| `full_series` | `{order, with_intercept, trend, aic, nobs, params[], warnings[]}` | `auto_arima` on the full series; `trend` is our code for its model (**nullable**, as in `aic_grid.pmdarima_check`); `params[]` = `{name, value}` in pmdarima's names; `nobs` = `n_course`. Its `order` is the course model's order |
+| `train_only` | `{order, with_intercept, trend}`, **nullable** | the same arguments on the training split alone (`aic_grid.pmdarima_check`, run `"course"`); null if that run is missing |
+| `same_order` | bool, **nullable** | the two searches chose the same order and intercept; null exactly when `train_only` is |
+| `refit_trend` | closed enum | the course model's trend |
+| `drift_dropped` | `{selected_trend, refit_trend, aic_without_drift, aic_with_drift, aic_gap, drift, drift_std_err, drift_p_value}` | the course order refitted with a drift (grid settings) beside the course's refit without one: `selected_trend` = `full_series.trend` (the search's choice; both nullable); `aic_gap` = without − with; `drift_std_err` and `drift_p_value` **nullable**, null together, `drift_std_err` > 0, and `drift_p_value` = 2(1 − Φ(\|drift / drift_std_err\|)) |
+
+Readers: Python's `validate_fit` and the app's `parseFit`.
+
+**What each reader checks (1.4.0).** The app's parsers check shapes, types, closed enums, nulls,
+bounds, array lengths and integer bookkeeping (the ids and their order, `primary` = `"aic"`, the
+order bounds (p, q ≤ 10, d ≤ 2) and the burn bound (≤ 2) before anything is built from them,
+`cancel_distance` = 0.1 and `llf_tolerance` = 1e-6, each pinned in the reader (`CANCEL_DISTANCE`,
+`LLF_TOLERANCE`) and never taken from the file, as `NESTING_TOLERANCE` is, and likewise the
+`diagnostic_settings` (alpha 0.05, the Ljung–Box and ARCH-LM lags, ddof 0, nlags 50), all compared
+exactly, so a value 1e-12 away is another value,
+parameter names for the order and trend, `sigma2`'s null z and p-value, the drift's error and
+p-value null together and the error positive, `selected_trend` = `full_series.trend`, the course
+model's trend = statsmodels' default for its d, root and pair counts and indices, lag lists, the burn
+and `n` arithmetic, `applied` against lag and model_df, counts of flagged rows,
+`clustering_prediction.confirmed` against the primary model's ARCH verdict, which is an enum). They
+never recompute a statistic or compare one with a threshold (ADR-0001). Python's validators also
+check those, and: z and the p-value from the estimate and standard error, the interval, aic, bic
+and aicc from llf, k and `nobs_effective`, each Ljung–Box, Jarque–Bera and ARCH-LM p-value from its
+statistic and df (chi-squared tails in closed form, to `P_REL` = 1e-9 relative, or within
+`P_FLOOR` = 1e-300; a p-value of exactly 0.0 only where the tail at its statistic and df is below
+`P_FLOOR`, so a 0 beside a moderate statistic is refused; the tail is computed only for a pinned lag
+with the df that lag gives, so a row off the pins is a problem and its p-value is not tied; a statistic
+of 0 or 5e-324 has a tail of 1), each statistic ≥ 0, the Jarque–Bera
+statistic from n, skew and kurtosis (the p-value tie alone sees nothing past a statistic of about
+1382, where every tail on 2 df is below `P_FLOOR`), the kurtosis ≥ 1 + skew², each Ljung–Box Q ≥
+the one before it, each ARCH-LM statistic ≤ n − lags − ddof, `sigma2` > 0, the
+drift's p-value from drift / its error, the root moduli and their order, the cancelling rule (the
+number of pairs and their total distance against a maximum matching, the listing order), the llf gap
+(llf − grid_llf, and against its tolerance), `drift_dropped.aic_gap`, each verdict and
+`arch_lm_rejections` against the p-values, alpha × nlags, each band (z / √n), every ACF `outside`
+flag against its band, and the order of the QQ columns. Those Python-only rules are tested in
+`tests/test_payloads_fit.py`, not in the shared corpus, whose cases both readers must decide alike.
+
+**Across files.** `fit` and the three `residuals_<id>` files must describe the same fits:
+`payloads.validate_fit_residuals` checks that each model's file exists and holds its id, `n`,
+`burn_excluded` (so `n` + `burn_excluded` = `nobs`), the fit's `nlags` and its two outside counts.
+`tools/export_app_data.py` runs it on the set the folder would hold before writing (so `--only fit`
+after a code change refuses to write beside stale residual files) and again on the files read back
+after writing.
+
+---
+
+### 3.8 `residuals_aic`, `residuals_bic`, `residuals_course` [M3, implemented]
+
+The residual plot series of one model each (the file name says which). One file per model because
+the three models' series are 1,450,049 bytes together (measured), over the 1 MB budget; the app fetches only
+the model it shows. **View:** the "Fit and diagnostics" page (standardised residuals over time,
+residual ACF and squared-residual ACF, QQ plot).
+
+| Field | Type | Notes |
+|---|---|---|
+| `sample` | `"train"` | |
+| `model_id` | closed enum | the file's model: `residuals_aic` holds `"aic"`, and so on |
+| `n`, `burn_excluded` | int; `burn_excluded` 0 to 2 | as in that model's `fit` diagnostics (checked across the two files by `validate_fit_residuals`, above) |
+| `z` | number | 1.959963984540054 |
+| `nlags` | int ≥ 1 | 50 |
+| `rows[]` | `{date, resid_std}` | the standardised residuals after the burn-in, one per training date from the (burn + 1)-th; dates strictly ascending; exactly `n` rows |
+| `acf`, `acf_squared` | `{band, outside_count, rows[]}` | the ACF of `resid_std` and of its square at lags 1…nlags; `band` = z / √n (the white-noise band, constant across lags); `rows[]` = `{lag, acf, outside}`, `outside` exactly when \|acf\| > band (decided in Python); `outside_count` = the flagged rows |
+| `qq[]` | `{theoretical, t_theoretical, sample}` | every standardised residual (`sample`, sorted ascending) against the normal quantile at its plotting position (scipy's `probplot`) and the quantile of the fitted Student-t at the same position; exactly `n` points, each column non-decreasing |
+| `t_fit` | `{df, loc, scale}` | the Student-t fitted by maximum likelihood (`scipy.stats.t.fit`); `df` and `scale` > 0 |
+
+Readers: Python's `validate_residuals(data, model_id)` and the app's `parseResiduals(data, modelId)`.
 
 ---
 
@@ -493,8 +595,9 @@ Forecast accuracy per method and segment. **View:** metrics table beside the for
 | Envelope valid before writing | `export_app_data.py` → `contract.validate_envelope` | malformed envelope |
 | Both readers agree on every envelope | pytest and vitest each run `app/src/test/fixtures/envelope_cases.json` (§1) | a rule changed in `contract.py` or `contract.ts` but not in the other |
 | No NaN/Infinity, no unsafe integers | `contract.dumps` (`allow_nan=False`, plus the ±(2^53 − 1) integer check) | failed calculations leaking into JSON; integers the browser would round |
-| Payload shape per artifact | `src/arima_forecasting/payloads.py` (`validate_meta`, `validate_prices`, `validate_eda`, `validate_stationarity`, `validate_acf_pacf`, `validate_aic_grid`), run by the exporter on every payload before writing, by `read_artifact` and `--check`, and by pytest | Python-side shape drift |
+| Payload shape per artifact | `src/arima_forecasting/payloads.py` (`validate_meta`, `validate_prices`, `validate_eda`, `validate_stationarity`, `validate_acf_pacf`, `validate_aic_grid`, `validate_fit`, and `validate_residuals` once per model id; for `fit` and the residuals also the statistical rules listed under §3.7, tested in `tests/test_payloads_fit.py`), run by the exporter on every payload before writing, by `read_artifact` and `--check`, and by pytest | Python-side shape drift |
+| `fit` against the residual files | `payloads.validate_fit_residuals`, run by `export_app_data.py` on the set it will leave in `--out` before writing (`--only` included) and on the files read back after writing (§3.7, "Across files") | a `fit.json` rebuilt alone that contradicts the residual files beside it |
 | Both readers agree on every payload | pytest and vitest each run `app/src/test/fixtures/payload_cases.json` (§1): integral floats such as `4.0` count as integers (JavaScript cannot tell them apart), integers beyond ±(2^53 − 1) and numbers too big for a double are refused, and "blank" is one explicit whitespace class on both sides | a payload rule changed in `payloads.py` or `contract.payloads.ts` but not in the other |
-| App parses the **real** files | vitest, `app/src/lib/contract.realdata.test.ts`: every file in `app/public/data/` through the production `parseEnvelope`, its `artifact` equal to the file stem, its payload through that artifact's parser (`parseMeta`, `parsePrices`, `parseEda`, `parseStationarity`, `parseAcfPacf`, `parseAicGrid`; an artifact with no registered parser fails), and the set of files equal to `meta.data.artifacts` less the held ones that are absent (each such file gets a skipped test that says why) | Python changed, app not updated |
-| Files are current | `tools/export_app_data.py --check`: regenerate from the raw snapshot, compare `schema_version`, `artifact`, `data`, and the set of files, and refuse a file the app would refuse (its envelope and payload are validated too); exit 1 on a difference, 2 without a snapshot. It refits all 144 grid cells, so it takes about a minute (59.2 s measured on 2026-10-29). Without the snapshot, `tests/test_committed_artifacts.py` checks every step after it: `meta.json` = `meta_payload()`; `prices.json` and `eda.json`, where present, equal what the current code builds from `prices.json`'s own closes; where `prices.json` is present, `stationarity.json` and `acf_pacf.json` equal a fresh computation and a sample of grid cells refits exactly; and in every copy the committed selection and d follow from the committed cells and tests | code changed, nobody re-exported |
-| Cross-artifact consistency | pytest (`tests/test_committed_artifacts.py`, in every copy): `aic_grid.selection.d_selected == stationarity.decision.d_selected`, and the three milestone-2 files describe the same training rows; planned: `forecasts` dates ⊂ `prices` dates, every `methods[].model_id` exists in `fit` | artifacts disagreeing with each other |
+| App parses the **real** files | vitest, `app/src/lib/contract.realdata.test.ts`: every file in `app/public/data/` through the production `parseEnvelope`, its `artifact` equal to the file stem, its payload through that artifact's parser (`parseMeta`, `parsePrices`, `parseEda`, `parseStationarity`, `parseAcfPacf`, `parseAicGrid`, `parseFit`, and `parseResiduals` with the model id the file name gives; an artifact with no registered parser fails), and the set of files equal to `meta.data.artifacts` less the held ones that are absent (each such file gets a skipped test that says why) | Python changed, app not updated |
+| Files are current | `tools/export_app_data.py --check`: regenerate from the raw snapshot, compare `schema_version`, `artifact`, `data`, and the set of files, and refuse a file the app would refuse (its envelope and payload are validated too); exit 1 on a difference, 2 without a snapshot. It reruns the whole export, the 144-cell grid fitted from several starts included, so it takes about as long as an export: 8 to 10 minutes (on 2026-10-29, on a machine loaded by other jobs, milestone 2's export took 491 s and milestone 3's 582 s; `--check`'s own time is in the milestone-3 walkthrough's gate results). Without the snapshot, `tests/test_committed_artifacts.py` checks every step after it: `meta.json` = `meta_payload()`; `prices.json` and `eda.json`, where present, equal what the current code builds from `prices.json`'s own closes; where `prices.json` is present, `stationarity.json` and `acf_pacf.json` equal a fresh computation and a sample of grid cells refits exactly; `fit.json` and the three `residuals_<id>.json` files equal what the current code builds from `prices.json`'s rows and `aic_grid.json`'s recorded estimates (about a second); and in every copy the committed selection and d follow from the committed cells and tests | code changed, nobody re-exported |
+| Cross-artifact consistency | pytest (`tests/test_committed_artifacts.py`, in every copy): `aic_grid.selection.d_selected == stationarity.decision.d_selected`, and the three milestone-2 files describe the same training rows. Milestone 3: `fit`'s `aic` and `bic` models have the order and trend of `aic_grid`'s choice and BIC choice; `fit.n_train` equals `aic_grid.n_train` and the training count in `prices`; `course_track.train_only` equals `aic_grid`'s `"course"` pmdarima run; each `residuals_<id>` file holds its model's id, `n` and `burn_excluded`, its rows' dates are the training dates after the burn-in, the burned rows' dates are the ones before it, and its two outside counts equal that model's counts in `fit`. Planned: `forecasts` dates ⊂ `prices` dates, every `methods[].model_id` exists in `fit` | artifacts disagreeing with each other |

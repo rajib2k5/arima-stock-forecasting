@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { AppShell } from './lib/shell'
 import { useMeta } from './data/useMeta'
-import { EXPLORER_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './lib/gate'
+import { EXPLORER_ARTIFACTS, FIT_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './lib/gate'
 import { AboutView } from './views/AboutView'
 import { ArchitectureView } from './views/ArchitectureView'
 
@@ -11,6 +11,7 @@ const APP_SLUG = 'arima-stock-forecasting'
 const PriceExplorerView = lazy(() => import('./views/PriceExplorerView'))
 const StationarityView = lazy(() => import('./views/StationarityView'))
 const AicLandscapeView = lazy(() => import('./views/AicLandscapeView'))
+const FitView = lazy(() => import('./views/FitView'))
 
 function loading(what: string) {
   return (
@@ -26,6 +27,7 @@ export default function App() {
   const explorer = meta.status === 'ready' && hasArtifacts(meta.meta, EXPLORER_ARTIFACTS)
   const stationarity = meta.status === 'ready' && hasArtifacts(meta.meta, STATIONARITY_ARTIFACTS)
   const landscape = meta.status === 'ready' && hasArtifacts(meta.meta, LANDSCAPE_ARTIFACTS)
+  const fit = meta.status === 'ready' && hasArtifacts(meta.meta, FIT_ARTIFACTS)
   return (
     <AppShell
       slug={APP_SLUG}
@@ -67,6 +69,19 @@ export default function App() {
                 render: () => (
                   <Suspense fallback={loading('AIC landscape')}>
                     <AicLandscapeView />
+                  </Suspense>
+                ),
+              },
+            ]
+          : []),
+        ...(fit
+          ? [
+              {
+                id: 'fit',
+                label: 'Fit and diagnostics',
+                render: () => (
+                  <Suspense fallback={loading('fit and diagnostics page')}>
+                    <FitView />
                   </Suspense>
                 ),
               },

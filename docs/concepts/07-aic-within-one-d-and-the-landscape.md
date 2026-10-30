@@ -52,7 +52,8 @@ statsmodels refuses it with a `ValueError`.
 
 The ARMA likelihood can have several local maxima, and an optimiser run stops at whichever one it
 reaches. The milestone-2 review found that one run per cell from statsmodels' default start had left
-86 pairs of d = 1 cells in which a model scored a lower log-likelihood than a smaller model it nests.
+94 pairs of `ok` d = 1 cells in which a model scored a lower log-likelihood than a smaller model it
+nests by more than the readers' tolerance of 2e-3 (99 at zero tolerance; the largest shortfall 21.83).
 That cannot happen at the true maxima: setting the bigger model's extra coefficients to zero gives the
 smaller model exactly, so the bigger model's maximum is at least as high.
 

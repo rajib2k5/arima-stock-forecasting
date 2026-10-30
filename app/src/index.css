@@ -202,3 +202,21 @@ details.card[open] > summary { margin-bottom: .6rem; }
   .aic-table td { font-size: .72rem; min-width: 2.9rem; }
   .decision-d { font-size: 1.1rem; }
 }
+
+/* ---- milestone 3: fit and diagnostics ---- */
+caption { caption-side: top; text-align: left; font-size: .82rem; color: var(--muted); padding: 0 0 .5rem; }
+.plot-legend .swatch.line-secondary { border-color: var(--line-secondary); }
+.unit-circle svg { max-width: 300px; margin: 0 auto; }
+.unit-circle .circle { fill: none; stroke: var(--muted); stroke-width: 1; }
+.root-ar { fill: var(--teal); stroke: none; }
+.root-ma { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+.pair-ring { fill: none; stroke: var(--down); stroke-width: 1.2; stroke-dasharray: 3 2; }
+.unit-circle .pair-line { stroke: var(--down); stroke-width: 1; }
+/* `.plot svg` and `.unit-circle svg` would stretch these icons to 300 px: a more specific rule, and width/height on the element. */
+.plot svg.legend-mark { display: inline-block; width: 12px; height: 12px; max-width: none; margin: 0 .35rem 0 0; vertical-align: -1px; }
+/* A 480-unit drawing at most this wide, so its 10-unit text is about the page's size, not scaled up to the card. */
+.qq-plot { max-width: 560px; }
+.verdict-flag { color: var(--down); border-color: var(--down); }
+.verdict-plain { color: var(--teal); border-color: var(--teal); }
+tr.reading > td { font-size: .8rem; padding-bottom: .7rem; }
+.test-table th .sub { text-transform: none; letter-spacing: 0; }

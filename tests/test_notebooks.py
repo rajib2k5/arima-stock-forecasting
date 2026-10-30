@@ -36,7 +36,7 @@ NAMES = sorted(builder.NOTEBOOKS)
 
 
 def test_the_builder_knows_the_project_tour_and_the_milestone_notebooks():
-    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb", "02_stationarity_and_identification.ipynb"]
+    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb", "02_stationarity_and_identification.ipynb", "03_fit_and_diagnostics.ipynb"]
 
 
 # --- (a) committed notebooks equal the in-memory build -----------------------------------
@@ -350,5 +350,35 @@ def test_stationarity_notebook_prints_the_values_in_the_committed_files(kernel_n
         assert "stationarity.json matches a fresh computation: True" in printed
         assert "acf_pacf.json matches a fresh computation: True" in printed
         assert "the selected cell's log-likelihood, " in printed and ", matches: True" in printed
+    else:
+        assert "prices.json is not in this copy - skipped" in printed
+
+
+def test_fit_notebook_prints_the_values_in_the_committed_files(kernel_name):
+    # Notebook 03 reads committed files only. The expected lines are built here from the same files,
+    # read independently with json.
+    notebook = execute(NOTEBOOK_DIR / "03_fit_and_diagnostics.ipynb", kernel_name)
+    printed = "".join(
+        output.get("text", "")
+        for cell in notebook.cells
+        if cell.cell_type == "code"
+        for output in cell.outputs
+        if output.output_type == "stream" and output.name == "stdout"
+    )
+    app_data = REPO / "app" / "public" / "data"
+    fit = json.loads((app_data / "fit.json").read_text())["data"]
+    for m in fit["models"]:
+        info = m["information"]
+        assert f"{m['id']:>6}: ARIMA{tuple(m['order'])} trend {m['trend']!r}, {len(m['params'])} parameters, llf {info['llf']:.3f}, AIC {info['aic']:.3f}" in printed
+        dg = m["diagnostics"]
+        assert f"{m['id']}: dropped {dg['burn_excluded']} residual(s): {dg['burned'][0]['date']} resid {dg['burned'][0]['resid']:.4f}" in printed
+        assert f"   verdicts: {dg['verdicts']}" in printed
+        assert f"cancelling pairs {len(m['cancelling_pairs'])}" in printed
+    cp = fit["clustering_prediction"]
+    assert f"clustering predicted for {cp['model_id']!r}: confirmed {cp['confirmed']}; ARCH-LM rejections {cp['arch_lm_rejections']}" in printed
+    assert f"test rows the search saw: {fit['course_track']['test_rows_seen']} of {fit['course_track']['n_course']}" in printed
+    if (app_data / "prices.json").is_file():
+        for name in ("fit", "residuals_aic", "residuals_bic", "residuals_course"):
+            assert f"{name}.json matches a fresh computation: True" in printed, name
     else:
         assert "prices.json is not in this copy - skipped" in printed

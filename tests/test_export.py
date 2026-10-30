@@ -63,8 +63,8 @@ EXPECTED_META = {
     "milestones": [
         {"id": 0, "slug": "scaffold", "title": "Scaffold, contract and design", "status": "done"},
         {"id": 1, "slug": "data-eda", "title": "Data and EDA", "status": "done"},
-        {"id": 2, "slug": "stationarity", "title": "Stationarity and identification", "status": "current"},
-        {"id": 3, "slug": "fit-diagnostics", "title": "Fit and diagnostics", "status": "planned"},
+        {"id": 2, "slug": "stationarity", "title": "Stationarity and identification", "status": "done"},
+        {"id": 3, "slug": "fit-diagnostics", "title": "Fit and diagnostics", "status": "current"},
         {"id": 4, "slug": "forecast-eval", "title": "Forecast and evaluation", "status": "planned"},
         {
             "id": 5,
@@ -73,7 +73,7 @@ EXPECTED_META = {
             "status": "planned",
         },
     ],
-    "artifacts": ["meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid"],
+    "artifacts": ["meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid", "fit", "residuals_aic", "residuals_bic", "residuals_course"],
     "held_artifacts": [],  # none since the owner's decision of 2026-10-29: every export is committed
 }
 
@@ -144,7 +144,7 @@ def payloads(snapshot_root):
 
 
 def test_build_payloads_returns_every_artifact_in_order(payloads):
-    assert tuple(payloads) == ARTIFACTS == ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid")
+    assert tuple(payloads) == ARTIFACTS == ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid", "fit", "residuals_aic", "residuals_bic", "residuals_course")
     assert payloads["meta"]["artifacts"] == list(ARTIFACTS)
 
 
@@ -286,7 +286,7 @@ def test_tool_writes_every_artifact_as_a_valid_envelope(tmp_path, snapshot_root)
         envelope = json.loads(text)
         assert validate_envelope(envelope) == []
         assert envelope["artifact"] == name
-        assert envelope["schema_version"] == "1.3.0" == SCHEMA_VERSION
+        assert envelope["schema_version"] == "1.4.0" == SCHEMA_VERSION
         # SOURCE_DATE_EPOCH=0 must reach every file as the Unix epoch.
         assert envelope["generated_at"] == "1970-01-01T00:00:00Z"
         # The file is in the canonical text form: sorted keys, indent 2, one trailing newline.
@@ -358,7 +358,7 @@ def test_check_passes_on_a_fresh_export_and_writes_nothing(exported, snapshot_ro
     before = {p.name: p.read_bytes() for p in exported.iterdir()}
     done = run_tool(exported, "--check", data_root=snapshot_root)
     assert done.returncode == 0, done.stdout + done.stderr
-    assert "app data is current: meta, prices, eda, stationarity, acf_pacf, aic_grid (" in done.stdout
+    assert "app data is current: meta, prices, eda, stationarity, acf_pacf, aic_grid, fit, residuals_aic, residuals_bic, residuals_course (" in done.stdout
     assert {p.name: p.read_bytes() for p in exported.iterdir()} == before
 
 
@@ -388,7 +388,7 @@ def test_check_fails_on_a_changed_schema_version(exported, snapshot_root):
     (exported / "eda.json").write_text(json.dumps(eda))
     done = run_tool(exported, "--check", data_root=snapshot_root)
     assert done.returncode == 1
-    assert 'stale: eda: schema_version: "1.0.0" != "1.3.0"' in done.stdout
+    assert 'stale: eda: schema_version: "1.0.0" != "1.4.0"' in done.stdout
 
 
 def test_check_says_when_the_snapshot_itself_changed(exported, tmp_path):
@@ -451,6 +451,99 @@ def test_check_without_a_snapshot_exits_2_instead_of_passing(exported, tmp_path)
     assert run_tool(exported, "--check", data_root=tmp_path / "nothing-here").returncode == 2
 
 
+def test_only_rewrites_the_named_files_from_the_committed_grid(exported, snapshot_root, tmp_path):
+    out = tmp_path / "only"
+    out.mkdir()
+    for p in exported.iterdir():
+        (out / p.name).write_bytes(p.read_bytes())
+    (out / "fit.json").unlink()
+    before = {p.name: p.read_bytes() for p in out.iterdir()}
+    done = run_tool(out, "--only", "fit", data_root=snapshot_root)
+    assert done.returncode == 0, done.stderr
+    assert json.loads((out / "fit.json").read_text())["data"] == json.loads((exported / "fit.json").read_text())["data"]
+    assert {p.name: p.read_bytes() for p in out.iterdir() if p.name != "fit.json"} == before
+    assert "aic_grid.json" not in done.stdout
+    # It takes the grid from the folder: without aic_grid.json there it refuses to run.
+    (out / "aic_grid.json").unlink()
+    done = run_tool(out, "--only", "fit", data_root=snapshot_root)
+    assert done.returncode == 1 and "--only needs a valid aic_grid.json" in done.stderr
+
+
+def test_only_fit_refuses_to_write_beside_residual_files_that_contradict_it(exported, snapshot_root, tmp_path):
+    # As after a code change: a residuals file on disk from other settings (nlags 40, each file
+    # valid on its own). --only fit must not write a fit.json that contradicts it.
+    out = tmp_path / "only"
+    out.mkdir()
+    for p in exported.iterdir():
+        (out / p.name).write_bytes(p.read_bytes())
+    stale = json.loads((out / "residuals_bic.json").read_text())
+    for name in ("acf", "acf_squared"):
+        g = stale["data"][name]
+        g["rows"] = g["rows"][:40]
+        g["outside_count"] = sum(r["outside"] for r in g["rows"])
+    stale["data"]["nlags"] = 40
+    (out / "residuals_bic.json").write_text(dumps(stale))
+    assert PAYLOAD_VALIDATORS["residuals_bic"](stale["data"]) == []
+    (out / "fit.json").unlink()
+    done = run_tool(out, "--only", "fit", data_root=snapshot_root)
+    assert done.returncode == 1
+    assert "refusing to write: fit.json and the residuals files would disagree" in done.stderr
+    assert "residuals_bic: nlags is 40, but fit.json says 50" in done.stderr
+    assert not (out / "fit.json").exists()
+    # With the residual files in --only too, the set agrees again.
+    done = run_tool(out, "--only", "fit,residuals_aic,residuals_bic,residuals_course", data_root=snapshot_root)
+    assert done.returncode == 0, done.stderr
+    assert json.loads((out / "residuals_bic.json").read_text())["data"] == json.loads((exported / "residuals_bic.json").read_text())["data"]
+
+
+def test_only_meta_into_a_folder_without_fit_files_writes_meta_as_before(exported, snapshot_root, tmp_path):
+    # The cross-file check is for a folder that holds, or will hold, fit or residual files. One with
+    # only the grid (which --only needs) gets meta.json and nothing else; the first fix round refused
+    # it ("fit.json does not exist").
+    out = tmp_path / "only_meta"
+    out.mkdir()
+    (out / "aic_grid.json").write_bytes((exported / "aic_grid.json").read_bytes())
+    done = run_tool(out, "--only", "meta", data_root=snapshot_root)
+    assert done.returncode == 0, done.stderr
+    assert sorted(p.name for p in out.iterdir()) == ["aic_grid.json", "meta.json"]
+    assert json.loads((out / "meta.json").read_text())["data"] == EXPECTED_META
+    # A folder that already holds one of them is still checked: fit.json without its residual files.
+    (out / "fit.json").write_bytes((exported / "fit.json").read_bytes())
+    done = run_tool(out, "--only", "meta", data_root=snapshot_root)
+    assert done.returncode == 1
+    assert "keeps a fit or residuals file that is not valid" in done.stderr and "residuals_aic.json" in done.stderr
+
+
+def test_only_meta_into_a_folder_holding_only_a_residuals_file_still_runs_the_cross_file_check(exported, snapshot_root, tmp_path):
+    # Any one of the four fit-family files makes the folder one to check, not just fit.json: here
+    # residuals_aic.json sits beside the grid with no fit.json, so the check runs, finds the set
+    # incomplete and refuses, and meta.json is not written.
+    out = tmp_path / "only_meta_residuals"
+    out.mkdir()
+    (out / "aic_grid.json").write_bytes((exported / "aic_grid.json").read_bytes())
+    (out / "residuals_aic.json").write_bytes((exported / "residuals_aic.json").read_bytes())
+    done = run_tool(out, "--only", "meta", data_root=snapshot_root)
+    assert done.returncode == 1
+    assert "keeps a fit or residuals file that is not valid" in done.stderr
+    assert not (out / "meta.json").exists()
+
+
+def test_the_tool_checks_the_fit_and_residual_files_again_after_writing(tmp_path, monkeypatch, capsys, snapshot_env):
+    # The check before writing passes; the one on the files read back from disk is made to fail.
+    tool = load_tool()
+    calls = []
+    monkeypatch.setattr(tool, "validate_fit_residuals", lambda fit, residuals: calls.append(sorted(residuals)) or ([] if len(calls) == 1 else ["disagree on purpose"]))
+    assert tool.main(["--out", str(tmp_path / "out")]) == 1
+    assert calls == [["residuals_aic", "residuals_bic", "residuals_course"]] * 2
+    assert "after writing, fit.json and the residuals files" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("args", [("--only", "nope"), ("--only", ""), ("--only", "fit", "--check")])
+def test_only_refuses_unknown_names_and_check(exported, snapshot_root, args):
+    done = run_tool(exported, *args, data_root=snapshot_root)
+    assert done.returncode == 2 and "--only takes artifact names" in done.stderr
+
+
 # --- 5. The export tool: wiring (in-process, with the clock and git replaced) ------------
 
 @pytest.fixture
@@ -495,13 +588,13 @@ def test_tool_never_writes_nan_to_disk_and_writes_no_file_at_all(tmp_path, monke
     tool = load_tool()
     real = tool.build_payloads
 
-    def with_nan(snapshot):
-        payloads = real(snapshot)
-        payloads["eda"]["summary"]["log_return"]["skew"] = float("nan")
+    def with_nan(snapshot, **kwargs):
+        payloads = real(snapshot, **kwargs)
+        payloads[ARTIFACTS[-1]]["t_fit"]["df"] = float("nan")
         return payloads
 
     monkeypatch.setattr(tool, "build_payloads", with_nan)
-    monkeypatch.setitem(tool.PAYLOAD_VALIDATORS, "eda", lambda data: [])  # let the NaN reach dumps
+    monkeypatch.setitem(tool.PAYLOAD_VALIDATORS, ARTIFACTS[-1], lambda data: [])  # let the NaN reach dumps
     with pytest.raises(ValueError, match="not JSON compliant"):
         tool.main(["--out", str(tmp_path / "out")])
     assert not (tmp_path / "out").exists()

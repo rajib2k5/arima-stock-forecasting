@@ -164,7 +164,7 @@ Read in this order. Each step names one file and line.
     status (`:859`); `:873` checks the start labels and `:906` the nesting rule; `:754` is the table
     that ties z to alpha; `:1114` type-checks each small object before comparing, so `true` cannot
     pass for 1. `src/arima_forecasting/artifacts.py:33` is `loads_strict`, which every file reader uses.
-13. `tools/export_app_data.py:26` sets one BLAS thread before numpy loads; `:77` builds the payloads
+13. `tools/export_app_data.py:26` sets one BLAS thread before numpy loads; `:79` builds the payloads
     and turns a `ModelSearchError` into exit 1 with a message. `app/src/lib/contract.order.ts` mirrors
     every rule; the shared corpus runs both readers on 273 cases, 187 of them added in this milestone.
 14. `app/src/App.tsx` offers **Stationarity** and **AIC landscape** only when `meta.json` lists their
@@ -299,6 +299,7 @@ Node v22.23.1; no dependency was added or upgraded. The machine has 20 cores.
 | Q6. pmdarima | `aic_grid.json`, `pmdarima_check` | course: (0, 1, 1) with an intercept, AIC −10398.937, converged after 2 iterations, 8 fits kept, gap +0.0003. defaults: (2, 1, 2) without an intercept, AIC −10426.231, **not converged after 50**, 22 fits kept, gap +7.578 | 2026-10-29 |
 | Q6. Why the gap | the probe script below | statsmodels with `maxiter=50`: AIC −10426.230863341112, 50 iterations, not converged; with 200, from the same default start: −10433.793237719332 at iteration 62. The grid's cell is 0.016 lower again (−10433.809), from a random start. Separately, pmdarima's default run visited (2, 1, 2) with an intercept, which converged (41 iterations) at −10402.059: 34.806 above our (2, 1, 2) with a drift, the same model | 2026-10-29 |
 | Q7. Time | `/usr/bin/time -v env VOL_DATA_DIR=$PWD/data uv run python tools/export_app_data.py` (and `--check`) | After the second fix round: the export **6 min 50.2 s** (3,890 runs on 16 worker processes, with a load average of about 21 from other jobs on the 20 cores; a run at a load of 44 to 69 took 9 min 7.0 s); `--check`: see Gate results. After the first fix round (2,827 runs) it was 3 min 17.6 s; with 2 random starts 1 min 9.4 s. The first export, one start per cell: 1 min 0.7 s; the 144 single-start fits alone took 84.2 s with `OPENBLAS_NUM_THREADS=1` and 352.3 s with OpenBLAS's default. A serial fit of the 2-start grid (268.4 s) and the pooled one gave identical cells, as did the 24-start grid on 8 and on 16 workers | 2026-10-29 |
+| Q7. Time, re-measured | `time (OPENBLAS_NUM_THREADS=1 VOL_DATA_DIR=$PWD/data uv run python tools/export_app_data.py)` | **491 s** (8 min 11 s) wall clock, on a machine loaded by other agents (the coordinator's measurement). The milestone-3 export (ten files, the same grid) took 582 s the same day; see the [milestone-3 walkthrough](03-fit-and-diagnostics.md#measured-results) | 2026-10-29 |
 | Q7. Determinism | two exports with `SOURCE_DATE_EPOCH=1793318400`, then `cmp` | all six files identical | 2026-10-29 |
 | Q8. Sizes and chunks | `wc -c app/public/data/*.json`; `cd app && npm run build` | `stationarity.json` 6,685 bytes (0.7% of 1,000,000), `acf_pacf.json` 44,899 (4.5%), `aic_grid.json` 153,790 (15.3%, now with each cell's parameters); Python `gzip.compress(…, 6)`: 1,355, 6,624 and 27,717. `meta.json` 1,531; `prices.json` 456,025 and `eda.json` 529,907, unchanged. Main chunk `index` 226.77 kB (gzip 72.78 kB): **+1.14 kB** over 225.63 kB. `StationarityView` 11.47 kB, `AicLandscapeView` 12.06 kB, their shared readers 27.55 kB, `AicLandscapeScene` 3.02 kB plus the three.js chunk 1,081.29 kB (gzip 303.65 kB), which the Architecture page's `AicAxesScene` (now 1.31 kB) shares. Each export's `source_commit` ends in `-dirty`; a clean stamp is 6 bytes shorter | 2026-10-29 |
 
@@ -597,7 +598,8 @@ Answer out loud or on paper, without notes. Name files, lines and functions.
    both too narrow for daily returns, and what do the 2015–2019 and 2020+ halves show?
 5. **A failure case: pmdarima's 7.56.** Trace the second cross-check row from `auto_arima`'s defaults
    to the gap in the artifact. Which two settings explain it, and which fields in the file prove it?
-6. **A trade-off: what the tests run.** A full export now takes about three minutes. Explain how the
+6. **A trade-off: what the tests run.** A full export now takes about eight minutes (491 s measured
+   on a loaded machine; Measured results, Q7). Explain how the
    suite stays fast (the small grid, `SMALL_GRID`, the sample refits through `refit_cell`, which
    needs only each cell's recorded start) and what is then checked only by `--check`. What would you
    lose by fitting only the chosen d, or by going back to one start per cell?
@@ -607,7 +609,7 @@ Answer out loud or on paper, without notes. Name files, lines and functions.
    Use the per-day split to explain why the gain is probably spring 2020, and why the selection rule
    is still not changed.
 8. **What breaks first as it grows.** Twenty tickers, re-selected every month: which breaks first,
-   the export time (about three minutes per ticker on 16 processes), the 1 MB budget of
+   the export time (about eight minutes per ticker on 16 processes, measured on a loaded machine), the 1 MB budget of
    `aic_grid.json`, the 3D scene, or the corpus? Use the measured sizes and times to estimate.
 9. **A local optimum.** A bigger model scores below a model it nests. Why is that impossible at the
    maxima, how do padded starts rule it out, and why do the readers check it anyway? Why does keeping

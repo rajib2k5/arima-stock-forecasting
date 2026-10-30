@@ -1,5 +1,5 @@
 {
- "about": "Shared payload corpus. Each case applies its edits to a base payload (meta.data.json, prices.data.json, eda.data.json, stationarity.data.json, acf_pacf.data.json or aic_grid.data.json in this folder) and states whether the result is valid. tests/test_payload_corpus.py runs every case through Python's validate_meta, validate_prices, validate_eda, validate_stationarity, validate_acf_pacf and validate_aic_grid, and src/lib/contract.payloads.corpus.test.ts runs the same cases through parseMeta, parsePrices, parseEda, parseStationarity, parseAcfPacf and parseAicGrid, so the two readers cannot disagree on any of them. An edit is {path, value} or {path, delete: true}; value is written as JSON, so 4.0 stays a float for Python while JavaScript reads the number 4.",
+ "about": "Shared payload corpus. Each case applies its edits to a base payload (meta.data.json, prices.data.json, eda.data.json, stationarity.data.json, acf_pacf.data.json, aic_grid.data.json, fit.data.json or residuals_aic.data.json in this folder) and states whether the result is valid. tests/test_payload_corpus.py runs every case through Python's validate_meta, validate_prices, validate_eda, validate_stationarity, validate_acf_pacf, validate_aic_grid, validate_fit and validate_residuals (model aic), and src/lib/contract.payloads.corpus.test.ts runs the same cases through parseMeta, parsePrices, parseEda, parseStationarity, parseAcfPacf, parseAicGrid, parseFit and parseResiduals, so the two readers cannot disagree on any of them. An edit is {path, value} or {path, delete: true}; value is written as JSON, so 4.0 stays a float for Python while JavaScript reads the number 4.",
  "cases": [
   {
    "name": "prices: the base fixture",
@@ -5234,6 +5234,3000 @@
     }
    ],
    "valid": false
+  },
+  {
+   "name": "fit: the base fixture",
+   "base": "fit",
+   "edits": [],
+   "valid": true
+  },
+  {
+   "name": "fit: an unknown key in data is ignored (open payload)",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "extra"
+     ],
+     "value": {
+      "anything": 1
+     }
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: an unknown key in a model is ignored",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "notes"
+     ],
+     "value": "made up"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: the five inference fields null together (a singular covariance)",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "std_err"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "z"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "p_value"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "ci_low"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "ci_high"
+     ],
+     "value": null
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: a constant instead of a drift, labelled const by statsmodels",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "trend"
+     ],
+     "value": "c"
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      0,
+      "name"
+     ],
+     "value": "const"
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      0,
+      "library_name"
+     ],
+     "value": "const"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: train_only and same_order both null (the run is missing)",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "train_only"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "course_track",
+      "same_order"
+     ],
+     "value": null
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: same_order false when the train-only search chose another order",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "train_only",
+      "order"
+     ],
+     "value": [
+      1,
+      1,
+      0
+     ]
+    },
+    {
+     "path": [
+      "course_track",
+      "same_order"
+     ],
+     "value": false
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: same_order false when only the intercept differs",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "train_only",
+      "with_intercept"
+     ],
+     "value": false
+    },
+    {
+     "path": [
+      "course_track",
+      "train_only",
+      "trend"
+     ],
+     "value": "n"
+    },
+    {
+     "path": [
+      "course_track",
+      "same_order"
+     ],
+     "value": false
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: the drift's standard error and p-value null",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "drift_std_err"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "drift_p_value"
+     ],
+     "value": null
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: full_series trend null",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "full_series",
+      "trend"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "selected_trend"
+     ],
+     "value": null
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: sample is not train",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "sample"
+     ],
+     "value": "oos"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: n_train below 2",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "n_train"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: primary is not a model id",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "primary"
+     ],
+     "value": "arima"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: z95 rounded to 1.96",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "z95"
+     ],
+     "value": 1.96
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: cancel_distance zero",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "cancel_distance"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: llf_tolerance negative",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "llf_tolerance"
+     ],
+     "value": -1e-06
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: cov_type is not opg",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "cov_type"
+     ],
+     "value": "robust"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: maxiter zero",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "maxiter"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: enforce_stationarity is 1, not a boolean",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "fit_settings",
+      "enforce_stationarity"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: alpha not in the readers' z table",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "alpha"
+     ],
+     "value": 0.1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: ljung_box_lags not ascending",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "ljung_box_lags"
+     ],
+     "value": [
+      4,
+      2,
+      6
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: ljung_box_lags empty",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "ljung_box_lags"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: nlags zero",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "nlags"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: model ids out of order",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "id"
+     ],
+     "value": "bic"
+    },
+    {
+     "path": [
+      "models",
+      1,
+      "id"
+     ],
+     "value": "aic"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: only two models",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      2
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a model id that is not in the enum",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "id"
+     ],
+     "value": "hqic"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a trend outside the enum",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "trend"
+     ],
+     "value": "ct"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an order with two entries",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "order"
+     ],
+     "value": [
+      1,
+      1
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: nobs differs from n_train",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "nobs"
+     ],
+     "value": 39
+    },
+    {
+     "path": [
+      "models",
+      1,
+      "nobs_effective"
+     ],
+     "value": 38
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: nobs_effective is not nobs - loglikelihood_burn",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "nobs_effective"
+     ],
+     "value": 38
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: converged is a string",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "converged"
+     ],
+     "value": "yes"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a warning without a message",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "warnings"
+     ],
+     "value": [
+      {
+       "category": "ConvergenceWarning"
+      }
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: parameter names in the wrong order",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1
+     ],
+     "value": {
+      "name": "ar.L2",
+      "library_name": "ar.L2",
+      "value": -0.25,
+      "std_err": 0.2,
+      "z": -1.25,
+      "p_value": 0.21129954733371056,
+      "ci_low": -0.6419927969080108,
+      "ci_high": 0.1419927969080108
+     }
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      2
+     ],
+     "value": {
+      "name": "ar.L1",
+      "library_name": "ar.L1",
+      "value": 0.6,
+      "std_err": 0.25,
+      "z": 2.4,
+      "p_value": 0.016395071849192276,
+      "ci_low": 0.11000900386498647,
+      "ci_high": 1.0899909961350134
+     }
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: the sigma2 row missing",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      6
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a drift where the trend has none",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "params"
+     ],
+     "value": [
+      {
+       "name": "drift",
+       "library_name": "x1",
+       "value": 0.0009,
+       "std_err": 0.0004,
+       "z": 2.25,
+       "p_value": 0.02444894531008941,
+       "ci_low": 0.00011601440618397827,
+       "ci_high": 0.0016839855938160218
+      },
+      {
+       "name": "ar.L1",
+       "library_name": "ar.L1",
+       "value": -0.2,
+       "std_err": 0.11,
+       "z": -1.8181818181818183,
+       "p_value": 0.06903634799441527,
+       "ci_low": -0.41559603829940595,
+       "ci_high": 0.015596038299405923
+      },
+      {
+       "name": "sigma2",
+       "library_name": "sigma2",
+       "value": 0.00033,
+       "std_err": 6e-05,
+       "z": 5.5,
+       "p_value": 3.7979124931775475e-08,
+       "ci_low": 0.00021240216092759676,
+       "ci_high": 0.00044759783907240324
+      }
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: the drift labelled drift, not statsmodels' x1",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      0,
+      "library_name"
+     ],
+     "value": "drift"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an AR library_name that is not its name",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "library_name"
+     ],
+     "value": "ar.L2"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: std_err null but not the other inference fields",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "std_err"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a p_value above 1",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "p_value"
+     ],
+     "value": 1.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a std_err of zero",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "std_err"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a std_err that is a string",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      1,
+      "std_err"
+     ],
+     "value": "0.25"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: grid_llf null on a grid model",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "grid_llf"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "llf_gap"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: grid_llf and llf_gap numbers on the course model",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      2,
+      "grid_llf"
+     ],
+     "value": 19.8
+    },
+    {
+     "path": [
+      "models",
+      2,
+      "llf_gap"
+     ],
+     "value": 0.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an AR root missing",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "inv_roots_ar",
+      0
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an MA root too many",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      2,
+      "inv_roots_ma",
+      1
+     ],
+     "value": {
+      "re": 0.05,
+      "im": 0.0,
+      "modulus": 0.05
+     }
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a pair index out of range",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "cancelling_pairs",
+      1,
+      "ar"
+     ],
+     "value": 5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a root in two pairs",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "cancelling_pairs",
+      1,
+      "ar"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a negative pair index",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "cancelling_pairs",
+      0,
+      "ma"
+     ],
+     "value": -1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: diagnostics n is not nobs - burn_excluded",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "n"
+     ],
+     "value": 38
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: burn_excluded is not loglikelihood_burn",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "burn_excluded"
+     ],
+     "value": 0
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "n"
+     ],
+     "value": 40
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "burned"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a burned row missing",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "burned"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a burned date that is not a calendar date",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "burned",
+      0,
+      "date"
+     ],
+     "value": "2015-02-30"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: max_abs_resid_after_burn negative",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "max_abs_resid_after_burn"
+     ],
+     "value": -0.1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a Ljung-Box row missing",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      2
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a Ljung-Box lag that is not the listed one",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      0,
+      "lag"
+     ],
+     "value": 3
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: Ljung-Box model_df that is not p + q",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      0,
+      "model_df"
+     ],
+     "value": 3
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      1,
+      "model_df"
+     ],
+     "value": 3
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: Ljung-Box applied at a lag <= p + q",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      0,
+      "applied"
+     ],
+     "value": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: Ljung-Box not applied at a lag > p + q",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      2,
+      "applied"
+     ],
+     "value": false
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      2,
+      "df"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      2,
+      "p_value"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: Ljung-Box df that is not lag - model_df",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      2,
+      "df"
+     ],
+     "value": 3
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a Ljung-Box p_value on a row not applied",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      0,
+      "p_value"
+     ],
+     "value": 0.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a Ljung-Box p_value null where applied",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box",
+      2,
+      "p_value"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an ARCH-LM row missing",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "arch_lm",
+      1
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: ARCH-LM lags that are not the listed ones",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "arch_lm",
+      0,
+      "lags"
+     ],
+     "value": 3
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a Jarque-Bera p_value below 0",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "jarque_bera",
+      "p_value"
+     ],
+     "value": -0.01
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a serial-correlation verdict outside its enum",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "verdicts",
+      "serial_correlation"
+     ],
+     "value": "maybe"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a normality verdict from another enum",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "verdicts",
+      "normality"
+     ],
+     "value": "found"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an ARCH verdict of not_tested",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "verdicts",
+      "arch"
+     ],
+     "value": "not_tested"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: course_track settings not an object",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "settings"
+     ],
+     "value": "auto_arima"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: test_rows_seen is not n_course - n_train",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "test_rows_seen"
+     ],
+     "value": 3
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: course_track n_train differs from data.n_train",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "n_train"
+     ],
+     "value": 37
+    },
+    {
+     "path": [
+      "course_track",
+      "test_rows_seen"
+     ],
+     "value": 5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: full_series nobs differs from n_course",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "full_series",
+      "nobs"
+     ],
+     "value": 41
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: full_series order differs from the course model's",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "full_series",
+      "order"
+     ],
+     "value": [
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "path": [
+      "course_track",
+      "train_only",
+      "order"
+     ],
+     "value": [
+      1,
+      1,
+      1
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: same_order null while train_only is present",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "same_order"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: same_order true while train_only is null",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "train_only"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: same_order true when the train-only search chose another order",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "train_only",
+      "order"
+     ],
+     "value": [
+      1,
+      1,
+      0
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: refit_trend differs from the course model's trend",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "refit_trend"
+     ],
+     "value": "t"
+    },
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "refit_trend"
+     ],
+     "value": "t"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: drift_dropped refit_trend differs from refit_trend",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "refit_trend"
+     ],
+     "value": "t"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a drift p-value above 1",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "drift_p_value"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: the clustering prediction on a model that is not the primary",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "clustering_prediction",
+      "model_id"
+     ],
+     "value": "bic"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: clustering confirmed false when the ARCH verdict is found",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "clustering_prediction",
+      "confirmed"
+     ],
+     "value": false
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: clustering outside count that differs from the model's",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "clustering_prediction",
+      "acf_squared_outside_count"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: the base fixture",
+   "base": "residuals_aic",
+   "edits": [],
+   "valid": true
+  },
+  {
+   "name": "residuals_aic: an unknown key in data is ignored (open payload)",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "extra"
+     ],
+     "value": [
+      1,
+      2
+     ]
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "residuals_aic: a negative t location is fine",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "t_fit",
+      "loc"
+     ],
+     "value": -0.2
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "residuals_aic: the model_id of another model",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "model_id"
+     ],
+     "value": "bic"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: sample is not train",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "sample"
+     ],
+     "value": "test"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: z rounded to 1.96",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "z"
+     ],
+     "value": 1.96
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: nlags zero",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "nlags"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: a residual row missing",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      6
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: dates not ascending",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      1,
+      "date"
+     ],
+     "value": "2015-01-05"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: a date that is not a calendar date",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "rows",
+      2,
+      "date"
+     ],
+     "value": "2015-13-01"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: an acf row missing",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "acf",
+      "rows",
+      2
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: an acf lag out of order",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "acf",
+      "rows",
+      0,
+      "lag"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: an acf above 1",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "acf_squared",
+      "rows",
+      0,
+      "acf"
+     ],
+     "value": 1.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: outside_count that is not the flagged rows",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "acf_squared",
+      "outside_count"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: an outside flag that is not a boolean",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "acf",
+      "rows",
+      0,
+      "outside"
+     ],
+     "value": "no"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: a band of zero",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "acf",
+      "band"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: a qq point missing",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "qq",
+      6
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: a qq value that is not a number",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "qq",
+      0,
+      "sample"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: a t_fit df of zero",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "t_fit",
+      "df"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: a t_fit scale below zero",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "t_fit",
+      "scale"
+     ],
+     "value": -0.9
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: t_fit missing",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "t_fit"
+     ],
+     "delete": true
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an AR order of 4294967296 (one short problem, never an array of that length)",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "order"
+     ],
+     "value": [
+      4294967296,
+      1,
+      2
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an AR order of 1e8 written 100000000.0",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "order"
+     ],
+     "value": [
+      100000000.0,
+      1,
+      2
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an AR order of 2^53 - 1",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "order"
+     ],
+     "value": [
+      9007199254740991,
+      1,
+      2
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: an MA order of 11, one past the bound of 10",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "order"
+     ],
+     "value": [
+      1,
+      1,
+      11
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: d of 3, one past the bound of 2",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "order"
+     ],
+     "value": [
+      1,
+      3,
+      0
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: d of 2 is within the bound",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "order"
+     ],
+     "value": [
+      1,
+      2,
+      0
+     ]
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: the full series order past the bound",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "full_series",
+      "order"
+     ],
+     "value": [
+      11,
+      1,
+      1
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: loglikelihood_burn 3, past the bound of 2",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "loglikelihood_burn"
+     ],
+     "value": 3
+    },
+    {
+     "path": [
+      "models",
+      1,
+      "nobs_effective"
+     ],
+     "value": 37
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a diagnostics burn_excluded of 3, past the bound of 2",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      1,
+      "diagnostics",
+      "burn_excluded"
+     ],
+     "value": 3
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: primary bic, a model id but not the AIC choice",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "primary"
+     ],
+     "value": "bic"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: sigma2 with a z and a p-value (its z-test is a boundary null; both are null)",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      6,
+      "z"
+     ],
+     "value": 6.2
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      6,
+      "p_value"
+     ],
+     "value": 5.646316074086582e-10
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: sigma2 with a z and no p-value",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      6,
+      "z"
+     ],
+     "value": 6.2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: sigma2 with all five inference fields null (a singular covariance)",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      6,
+      "std_err"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      6,
+      "ci_low"
+     ],
+     "value": null
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "params",
+      6,
+      "ci_high"
+     ],
+     "value": null
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: drift_std_err null while drift_p_value is a number",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "drift_std_err"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: drift_p_value null while drift_std_err is a number",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "drift_p_value"
+     ],
+     "value": null
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a drift_std_err of zero",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "drift_std_err"
+     ],
+     "value": 0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: a negative drift_std_err",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "drift_std_err"
+     ],
+     "value": -0.0004
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: selected_trend differs from full_series.trend, the trend the search selected",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "selected_trend"
+     ],
+     "value": "n"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: the course model at d = 0 with statsmodels' default trend c",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      2,
+      "order"
+     ],
+     "value": [
+      0,
+      0,
+      1
+     ]
+    },
+    {
+     "path": [
+      "course_track",
+      "full_series",
+      "order"
+     ],
+     "value": [
+      0,
+      0,
+      1
+     ]
+    },
+    {
+     "path": [
+      "course_track",
+      "train_only",
+      "order"
+     ],
+     "value": [
+      0,
+      0,
+      1
+     ]
+    },
+    {
+     "path": [
+      "models",
+      2,
+      "trend"
+     ],
+     "value": "c"
+    },
+    {
+     "path": [
+      "models",
+      2,
+      "params"
+     ],
+     "value": [
+      {
+       "name": "const",
+       "library_name": "const",
+       "value": 0.0009,
+       "std_err": 0.0004,
+       "z": 2.25,
+       "p_value": 0.02444894531008941,
+       "ci_low": 0.00011601440618397827,
+       "ci_high": 0.0016839855938160218
+      },
+      {
+       "name": "ma.L1",
+       "library_name": "ma.L1",
+       "value": -0.1,
+       "std_err": 0.12,
+       "z": -0.8333333333333334,
+       "p_value": 0.40465676192728606,
+       "ci_low": -0.33519567814480644,
+       "ci_high": 0.13519567814480646
+      },
+      {
+       "name": "sigma2",
+       "library_name": "sigma2",
+       "value": 0.00034,
+       "std_err": 6e-05,
+       "z": null,
+       "p_value": null,
+       "ci_low": 0.00022240216092759679,
+       "ci_high": 0.00045759783907240326
+      }
+     ]
+    },
+    {
+     "path": [
+      "models",
+      2,
+      "information"
+     ],
+     "value": {
+      "llf": 19.8,
+      "aic": -33.6,
+      "aicc": -32.91428571428572,
+      "bic": -28.609315061611063,
+      "hqic": -31.80938519046224
+     }
+    },
+    {
+     "path": [
+      "course_track",
+      "refit_trend"
+     ],
+     "value": "c"
+    },
+    {
+     "path": [
+      "course_track",
+      "drift_dropped",
+      "refit_trend"
+     ],
+     "value": "c"
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "fit: the course model at d = 0 without statsmodels' default trend c",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      2,
+      "order"
+     ],
+     "value": [
+      0,
+      0,
+      1
+     ]
+    },
+    {
+     "path": [
+      "course_track",
+      "full_series",
+      "order"
+     ],
+     "value": [
+      0,
+      0,
+      1
+     ]
+    },
+    {
+     "path": [
+      "course_track",
+      "train_only",
+      "order"
+     ],
+     "value": [
+      0,
+      0,
+      1
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: burn_excluded 2 is within the bound",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "burn_excluded"
+     ],
+     "value": 2
+    }
+   ],
+   "valid": true
+  },
+  {
+   "name": "residuals_aic: burn_excluded 3, past the bound of 2 (d is at most 2)",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "burn_excluded"
+     ],
+     "value": 3
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "residuals_aic: burn_excluded 999 with n 7",
+   "base": "residuals_aic",
+   "edits": [
+    {
+     "path": [
+      "burn_excluded"
+     ],
+     "value": 999
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: 30 AR and 30 MA inverse roots, close together, for an order of (2, 1, 2)",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "models",
+      0,
+      "inv_roots_ar"
+     ],
+     "value": [
+      {
+       "re": 0.5,
+       "im": 0.0,
+       "modulus": 0.5
+      },
+      {
+       "re": 0.499,
+       "im": 0.0,
+       "modulus": 0.499
+      },
+      {
+       "re": 0.498,
+       "im": 0.0,
+       "modulus": 0.498
+      },
+      {
+       "re": 0.497,
+       "im": 0.0,
+       "modulus": 0.497
+      },
+      {
+       "re": 0.496,
+       "im": 0.0,
+       "modulus": 0.496
+      },
+      {
+       "re": 0.495,
+       "im": 0.0,
+       "modulus": 0.495
+      },
+      {
+       "re": 0.494,
+       "im": 0.0,
+       "modulus": 0.494
+      },
+      {
+       "re": 0.493,
+       "im": 0.0,
+       "modulus": 0.493
+      },
+      {
+       "re": 0.492,
+       "im": 0.0,
+       "modulus": 0.492
+      },
+      {
+       "re": 0.491,
+       "im": 0.0,
+       "modulus": 0.491
+      },
+      {
+       "re": 0.49,
+       "im": 0.0,
+       "modulus": 0.49
+      },
+      {
+       "re": 0.489,
+       "im": 0.0,
+       "modulus": 0.489
+      },
+      {
+       "re": 0.488,
+       "im": 0.0,
+       "modulus": 0.488
+      },
+      {
+       "re": 0.487,
+       "im": 0.0,
+       "modulus": 0.487
+      },
+      {
+       "re": 0.486,
+       "im": 0.0,
+       "modulus": 0.486
+      },
+      {
+       "re": 0.485,
+       "im": 0.0,
+       "modulus": 0.485
+      },
+      {
+       "re": 0.484,
+       "im": 0.0,
+       "modulus": 0.484
+      },
+      {
+       "re": 0.483,
+       "im": 0.0,
+       "modulus": 0.483
+      },
+      {
+       "re": 0.482,
+       "im": 0.0,
+       "modulus": 0.482
+      },
+      {
+       "re": 0.481,
+       "im": 0.0,
+       "modulus": 0.481
+      },
+      {
+       "re": 0.48,
+       "im": 0.0,
+       "modulus": 0.48
+      },
+      {
+       "re": 0.479,
+       "im": 0.0,
+       "modulus": 0.479
+      },
+      {
+       "re": 0.478,
+       "im": 0.0,
+       "modulus": 0.478
+      },
+      {
+       "re": 0.477,
+       "im": 0.0,
+       "modulus": 0.477
+      },
+      {
+       "re": 0.476,
+       "im": 0.0,
+       "modulus": 0.476
+      },
+      {
+       "re": 0.475,
+       "im": 0.0,
+       "modulus": 0.475
+      },
+      {
+       "re": 0.474,
+       "im": 0.0,
+       "modulus": 0.474
+      },
+      {
+       "re": 0.473,
+       "im": 0.0,
+       "modulus": 0.473
+      },
+      {
+       "re": 0.472,
+       "im": 0.0,
+       "modulus": 0.472
+      },
+      {
+       "re": 0.471,
+       "im": 0.0,
+       "modulus": 0.471
+      }
+     ]
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "inv_roots_ma"
+     ],
+     "value": [
+      {
+       "re": 0.4995,
+       "im": 0.0,
+       "modulus": 0.4995
+      },
+      {
+       "re": 0.4985,
+       "im": 0.0,
+       "modulus": 0.4985
+      },
+      {
+       "re": 0.4975,
+       "im": 0.0,
+       "modulus": 0.4975
+      },
+      {
+       "re": 0.4965,
+       "im": 0.0,
+       "modulus": 0.4965
+      },
+      {
+       "re": 0.4955,
+       "im": 0.0,
+       "modulus": 0.4955
+      },
+      {
+       "re": 0.4945,
+       "im": 0.0,
+       "modulus": 0.4945
+      },
+      {
+       "re": 0.4935,
+       "im": 0.0,
+       "modulus": 0.4935
+      },
+      {
+       "re": 0.4925,
+       "im": 0.0,
+       "modulus": 0.4925
+      },
+      {
+       "re": 0.4915,
+       "im": 0.0,
+       "modulus": 0.4915
+      },
+      {
+       "re": 0.4905,
+       "im": 0.0,
+       "modulus": 0.4905
+      },
+      {
+       "re": 0.4895,
+       "im": 0.0,
+       "modulus": 0.4895
+      },
+      {
+       "re": 0.4885,
+       "im": 0.0,
+       "modulus": 0.4885
+      },
+      {
+       "re": 0.4875,
+       "im": 0.0,
+       "modulus": 0.4875
+      },
+      {
+       "re": 0.4865,
+       "im": 0.0,
+       "modulus": 0.4865
+      },
+      {
+       "re": 0.4855,
+       "im": 0.0,
+       "modulus": 0.4855
+      },
+      {
+       "re": 0.4845,
+       "im": 0.0,
+       "modulus": 0.4845
+      },
+      {
+       "re": 0.4835,
+       "im": 0.0,
+       "modulus": 0.4835
+      },
+      {
+       "re": 0.4825,
+       "im": 0.0,
+       "modulus": 0.4825
+      },
+      {
+       "re": 0.4815,
+       "im": 0.0,
+       "modulus": 0.4815
+      },
+      {
+       "re": 0.4805,
+       "im": 0.0,
+       "modulus": 0.4805
+      },
+      {
+       "re": 0.4795,
+       "im": 0.0,
+       "modulus": 0.4795
+      },
+      {
+       "re": 0.4785,
+       "im": 0.0,
+       "modulus": 0.4785
+      },
+      {
+       "re": 0.4775,
+       "im": 0.0,
+       "modulus": 0.4775
+      },
+      {
+       "re": 0.4765,
+       "im": 0.0,
+       "modulus": 0.4765
+      },
+      {
+       "re": 0.4755,
+       "im": 0.0,
+       "modulus": 0.4755
+      },
+      {
+       "re": 0.4745,
+       "im": 0.0,
+       "modulus": 0.4745
+      },
+      {
+       "re": 0.4735,
+       "im": 0.0,
+       "modulus": 0.4735
+      },
+      {
+       "re": 0.4725,
+       "im": 0.0,
+       "modulus": 0.4725
+      },
+      {
+       "re": 0.4715,
+       "im": 0.0,
+       "modulus": 0.4715
+      },
+      {
+       "re": 0.4705,
+       "im": 0.0,
+       "modulus": 0.4705
+      }
+     ]
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "cancelling_pairs"
+     ],
+     "value": []
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: llf_tolerance 1.0, which the readers do not take from the file",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "llf_tolerance"
+     ],
+     "value": 1.0
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: llf_tolerance 1.0 beside a refit 0.5 from the grid's llf",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "llf_tolerance"
+     ],
+     "value": 1.0
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "grid_llf"
+     ],
+     "value": 21.0
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "llf_gap"
+     ],
+     "value": 0.5
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: cancel_distance 0.2, which the readers do not take from the file",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "cancel_distance"
+     ],
+     "value": 0.2
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: ljung_box_lags [5] with every model's rows and verdicts cut to match, which flips the course verdict",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "ljung_box_lags"
+     ],
+     "value": [
+      5
+     ]
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "ljung_box"
+     ],
+     "value": [
+      {
+       "lag": 5,
+       "model_df": 5,
+       "df": null,
+       "statistic": 3.2,
+       "p_value": null,
+       "applied": false
+      }
+     ]
+    },
+    {
+     "path": [
+      "models",
+      1,
+      "diagnostics",
+      "ljung_box"
+     ],
+     "value": [
+      {
+       "lag": 5,
+       "model_df": 1,
+       "df": 4,
+       "statistic": 11.2,
+       "p_value": 0.024405900528787352,
+       "applied": true
+      }
+     ]
+    },
+    {
+     "path": [
+      "models",
+      2,
+      "diagnostics",
+      "ljung_box"
+     ],
+     "value": [
+      {
+       "lag": 5,
+       "model_df": 1,
+       "df": 4,
+       "statistic": 7.8,
+       "p_value": 0.09918536608444149,
+       "applied": true
+      }
+     ]
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "verdicts",
+      "serial_correlation"
+     ],
+     "value": "not_tested"
+    },
+    {
+     "path": [
+      "models",
+      2,
+      "diagnostics",
+      "verdicts",
+      "serial_correlation"
+     ],
+     "value": "not_found"
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: ljung_box_lags [5, 10, 21], a lag the exporter does not use",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "ljung_box_lags"
+     ],
+     "value": [
+      5,
+      10,
+      21
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: arch_lm_lags [5] with every model's rows cut to match",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "arch_lm_lags"
+     ],
+     "value": [
+      5
+     ]
+    },
+    {
+     "path": [
+      "models",
+      0,
+      "diagnostics",
+      "arch_lm"
+     ],
+     "value": [
+      {
+       "lags": 5,
+       "statistic": 14.2,
+       "p_value": 0.014387678176921315
+      }
+     ]
+    },
+    {
+     "path": [
+      "models",
+      1,
+      "diagnostics",
+      "arch_lm"
+     ],
+     "value": [
+      {
+       "lags": 5,
+       "statistic": 12.1,
+       "p_value": 0.03344294621141445
+      }
+     ]
+    },
+    {
+     "path": [
+      "models",
+      2,
+      "diagnostics",
+      "arch_lm"
+     ],
+     "value": [
+      {
+       "lags": 5,
+       "statistic": 6.0,
+       "p_value": 0.30621891841327825
+      }
+     ]
+    },
+    {
+     "path": [
+      "clustering_prediction",
+      "arch_lm_rejections"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: arch_lm_lags [5, 11], a lag the exporter does not use",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "arch_lm_lags"
+     ],
+     "value": [
+      5,
+      11
+     ]
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: nlags 49, which the readers do not take from the file",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "nlags"
+     ],
+     "value": 49
+    },
+    {
+     "path": [
+      "clustering_prediction",
+      "acf_squared_expected_by_chance"
+     ],
+     "value": 2.45
+    }
+   ],
+   "valid": false
+  },
+  {
+   "name": "fit: arch_lm_ddof 1, which the readers do not take from the file",
+   "base": "fit",
+   "edits": [
+    {
+     "path": [
+      "diagnostic_settings",
+      "arch_lm_ddof"
+     ],
+     "value": 1
+    }
+   ],
+   "valid": false
   }
  ],
  "token_cases": [
@@ -5297,6 +8291,28 @@
     "acf"
    ],
    "token": "Infinity"
+  },
+  {
+   "name": "fit: NaN token in a parameter estimate",
+   "base": "fit",
+   "path": [
+    "models",
+    0,
+    "params",
+    1,
+    "value"
+   ],
+   "token": "NaN"
+  },
+  {
+   "name": "residuals_aic: -Infinity token in a qq sample",
+   "base": "residuals_aic",
+   "path": [
+    "qq",
+    0,
+    "sample"
+   ],
+   "token": "-Infinity"
   }
  ]
 }

@@ -1217,6 +1217,812 @@ def _check_run(c: _Checker, item: object, at: str, cells: list[dict[str, Any]] |
             c.add(aat, f"same_order_status {_show(status)} and aic_gap_same_order {_show(gap)} must be {_show(want_status)} and {_show(want_gap)}")
 
 
+# --- milestone 3: fit and residuals_<id> (contract.md 3.7 and 3.8) -----------------------------------
+# The app's parsers (contract.fit.ts) check the same shapes, enums, nulls, lengths, bounds and integer
+# bookkeeping. The checks below that compare a statistic with a threshold or recompute one (z, each
+# p-value from its statistic, the verdicts, |acf| > band, the root moduli, the cancelling rule, the
+# information criteria from llf) are Python's alone, by ADR-0001: the export and --check run them, so
+# a file that fails them is never written.
+
+MODEL_IDS = ("aic", "bic", "course")
+PRIMARY = "aic"  # the owner's default (LEARNING_LOG): the AIC choice is the primary model
+SERIAL_VERDICTS = ("found", "not_found", "not_tested")
+NORMALITY_VERDICTS = ("rejected", "not_rejected")
+ARCH_VERDICTS = ("found", "not_found")
+_FIT_FLAGS = ("enforce_stationarity", "enforce_invertibility", "concentrate_scale")
+_INFERENCE = ("std_err", "z", "p_value", "ci_low", "ci_high")
+_REL = 1e-9  # relative tolerance for a value Python recomputes from other exported doubles
+# The largest orders a fit file may state, checked before anything is built from them (the grid's
+# p and q stop at 5 and pmdarima's at 5; d is 0, 1 or 2): a stated order of 1e8 must give one short
+# problem, not a list of 1e8 parameter names. The burn-in is d for these models, so at most MAX_D.
+MAX_PQ = 10
+MAX_D = 2
+# The refit's log-likelihood tolerance and the cancelling distance (fitting.LLF_TOLERANCE and
+# fitting.CANCEL_DISTANCE). Pinned here, not read from the file being checked, as NESTING_TOLERANCE
+# is: a file that states another value is refused, so it cannot loosen its own checks.
+LLF_TOLERANCE = 1e-6
+CANCEL_DISTANCE = 0.1
+# The residual tests' settings (diagnostics.ALPHA, LJUNG_BOX_LAGS, ARCH_LM_LAGS, NLAGS, and the ddof the
+# exporter gives het_arch). Pinned the same way: the lags decide which rows exist, hence the verdicts, so
+# a file that stated others (a Ljung-Box at lag 5 alone) could change a verdict and still be consistent
+# with itself. tests/test_diagnostics.py asserts these equal diagnostics.py's.
+ALPHA = 0.05
+LJUNG_BOX_LAGS = (5, 10, 20)
+ARCH_LM_LAGS = (5, 10)
+ARCH_LM_DDOF = 0
+NLAGS = 50
+# A p-value Python recomputes from its statistic must agree to P_REL relative, or within P_FLOOR
+# when both are that small (a p-value below about 1e-308 underflows to 0.0, or loses digits).
+P_REL = 1e-9
+P_FLOOR = 1e-300
+
+
+def _close(a: float, b: float, rel: float = _REL) -> bool:
+    return abs(a - b) <= rel * max(1.0, abs(a), abs(b))
+
+
+def _p_close(p: float, want: float) -> bool:
+    return abs(p - want) <= P_REL * max(p, want) + P_FLOOR
+
+
+def _chi2_sf(x: float, k: int) -> float:
+    """P(a chi-squared on k degrees of freedom exceeds x), k an integer >= 1: the closed forms
+    e^-h (1 + h + ... + h^(m-1) / (m-1)!) for k = 2m, and erfc(sqrt h) plus e^-h times the sum of
+    h^(j + 1/2) / Gamma(j + 3/2) over j < m for k = 2m + 1, with h = x / 2 (scipy's chi2.sf to about
+    1e-14 relative; no scipy in the readers). Each term is computed in logs, so none overflows. The loop
+    runs k / 2 times, so a caller passes only a df the pinned settings can give (a Ljung-Box lag at one
+    of LJUNG_BOX_LAGS minus p + q, or one of ARCH_LM_LAGS: at most 20), never a number read from a file."""
+    h = x / 2.0
+    if h <= 0.0:  # x is 0, or the smallest subnormal, whose half rounds to 0.0 (and has no logarithm): the tail is 1
+        return 1.0
+    if k % 2 == 0:
+        total = sum(math.exp(-h + j * math.log(h) - math.lgamma(j + 1)) for j in range(k // 2))
+    else:
+        total = math.erfc(math.sqrt(h)) + sum(math.exp(-h + (j + 0.5) * math.log(h) - math.lgamma(j + 1.5)) for j in range(k // 2))
+    return min(1.0, total)
+
+
+def expected_param_names(p: int, q: int, trend: str) -> list[str]:
+    """Our parameter names in statsmodels' order: the trend term, the AR lags, the MA lags, sigma2."""
+    lead = {"n": [], "c": ["const"], "t": ["drift"]}[trend]
+    return [*lead, *(f"ar.L{i}" for i in range(1, p + 1)), *(f"ma.L{i}" for i in range(1, q + 1)), "sigma2"]
+
+
+LIBRARY_NAMES = {"drift": "x1"}  # statsmodels 0.15.0 labels ARIMA's drift as an exogenous "x1"
+
+
+def _int_list(c: _Checker, value: object, path: str) -> list[int] | None:
+    items = c.array(value, path)
+    if items is None:
+        return None
+    out = [c.integer(v, f"{path}[{i}]", minimum=1) for i, v in enumerate(items)]
+    if None in out:
+        return None
+    if not out or any(b <= a for a, b in zip(out, out[1:])):  # type: ignore[operator]
+        c.add(path, f"must be a non-empty, strictly ascending list, got {_show(out)}")
+        return None
+    return out  # type: ignore[return-value]
+
+
+def _warnings(c: _Checker, value: object, path: str) -> None:
+    items = c.array(value, path)
+    for i, item in enumerate(items or []):
+        w = c.obj(item, f"{path}[{i}]")
+        if w is not None:
+            for name in ("category", "message"):
+                c.string(c.key(w, name, f"{path}[{i}]"), f"{path}[{i}].{name}")
+
+
+def _p_value(c: _Checker, value: object, path: str, *, nullable: bool = False) -> float | None:
+    v = c.number(value, path, nullable=nullable)
+    if v is not None and not 0 <= v <= 1:
+        c.add(path, f"must be between 0 and 1, got {v}")
+        return None
+    return v
+
+
+def _bounded(c: _Checker, value: object, path: str, most: int) -> int | None:
+    """An integer from 0 to `most`, or one short problem (both readers)."""
+    v = c.integer(value, path)
+    if v is not None and v > most:
+        c.add(path, f"expected an integer from 0 to {most}, got {v}")
+        return None
+    return v
+
+
+def _pinned(c: _Checker, stated: object, path: str, pin: object, rule: str) -> None:
+    """A setting this reader holds itself, never takes from the file: one problem when the file states another value."""
+    if stated is not None and stated != pin:
+        c.add(path, f"is {_show(stated)}, but this reader {rule} {_show(pin)}")
+
+
+def _check_order(c: _Checker, value: object, path: str) -> list[int] | None:
+    """[p, d, q] with p and q at most MAX_PQ and d at most MAX_D, checked before anything is built from it."""
+    triple = c.array(value, path)
+    if triple is None:
+        return None
+    if len(triple) != 3:
+        c.add(path, f"expected [p, d, q], got {_show(triple)}")
+        return None
+    out = [_bounded(c, v, f"{path}[{i}]", most) for i, (v, most) in enumerate(zip(triple, (MAX_PQ, MAX_D, MAX_PQ), strict=True))]
+    return None if None in out else out  # type: ignore[return-value]
+
+
+def _burn(c: _Checker, value: object, path: str) -> int | None:
+    return _bounded(c, value, path, MAX_D)
+
+
+def _statistic(c: _Checker, value: object, path: str) -> float | None:
+    """A test statistic: a chi-squared value, so >= 0 (Python only)."""
+    v = c.number(value, path)
+    if v is not None and v < 0:
+        c.add(path, f"must be >= 0, got {v}")
+        return None
+    return v
+
+
+def _check_chi2_p(c: _Checker, p: float | None, statistic: float | None, df: int | None, path: str, test: str) -> None:
+    """Python only: the exported p-value is the chi-squared tail of the exported statistic.
+
+    A p of exactly 0.0 is what scipy writes for a tail too small for a double, so it is taken only
+    where the tail at that statistic and df is below P_FLOOR (1e-300): Jarque-Bera on 2 df past a
+    statistic of about 1382, say. Beside a moderate statistic a 0 is refused, whatever the floor."""
+    if p is None or statistic is None or df is None:
+        return
+    want = _chi2_sf(statistic, df)
+    if p == 0.0:
+        if want > P_FLOOR:
+            c.add(path, f"is 0, but the {test} statistic {statistic} on {df} df gives p = {want}, above the underflow floor {P_FLOOR}: only a smaller tail may be written as 0")
+    elif not _p_close(p, want):
+        c.add(path, f"is {p}, but the {test} statistic {statistic} on {df} df gives p = {want}")
+
+
+_NO_TEST = ("z", "p_value")  # sigma2's: null always, a boundary null (contract.md 3.7)
+
+
+def _check_params(c: _Checker, value: object, at: str, names: list[str] | None) -> None:
+    rows = c.array(value, at)
+    if rows is None:
+        return
+    if names is not None and len(rows) != len(names):
+        c.add(at, f"has {len(rows)} rows, but the order and trend have {len(names)} parameters: {', '.join(names)}")
+    for i, item in enumerate(rows):
+        rat = f"{at}[{i}]"
+        row = c.obj(item, rat)
+        if row is None:
+            continue
+        name = c.string(c.key(row, "name", rat), f"{rat}.name")
+        if name is not None and names is not None and i < len(names) and name != names[i]:
+            c.add(f"{rat}.name", f"is {name!r}, expected {names[i]!r}")
+        library = c.string(c.key(row, "library_name", rat), f"{rat}.library_name")
+        if name is not None and library is not None and library != LIBRARY_NAMES.get(name, name):
+            c.add(f"{rat}.library_name", f"is {library!r}; statsmodels labels {name!r} as {LIBRARY_NAMES.get(name, name)!r}")
+        val = c.number(c.key(row, "value", rat), f"{rat}.value")
+        if name == "sigma2" and val is not None and val <= 0:  # Python only
+            c.add(f"{rat}.value", f"must be positive, got {val}: sigma2 is a variance")
+        raw = {k: c.key(row, k, rat) for k in _INFERENCE}
+        nulls = [k for k in _INFERENCE if raw[k] is None]
+        if len(nulls) == len(_INFERENCE):
+            continue  # a singular covariance
+        if name == "sigma2":
+            if tuple(nulls) != _NO_TEST:
+                c.add(rat, f"sigma2 has std_err and its interval, and z and p_value null (its null value 0 is on the boundary, where the z-test does not apply); got {', '.join(nulls) or 'no'} null")
+                continue
+        elif nulls:
+            c.add(rat, f"{', '.join(nulls)} null but not all of {', '.join(_INFERENCE)}; they are null together")
+            continue
+        se = c.number(raw["std_err"], f"{rat}.std_err")
+        lo, hi = c.number(raw["ci_low"], f"{rat}.ci_low"), c.number(raw["ci_high"], f"{rat}.ci_high")
+        z = p = None
+        if name != "sigma2":
+            z = c.number(raw["z"], f"{rat}.z")
+            p = _p_value(c, raw["p_value"], f"{rat}.p_value")
+        if se is not None and se <= 0:
+            c.add(f"{rat}.std_err", f"must be positive, got {se}")
+        elif None not in (val, se, lo, hi):
+            if name != "sigma2" and z is not None and p is not None:
+                if z != val / se:  # type: ignore[operator]
+                    c.add(f"{rat}.z", f"is {z}, but value / std_err is {val / se}")  # type: ignore[operator]
+                elif not _close(p, 2.0 * _normal_sf(abs(z))):
+                    c.add(f"{rat}.p_value", f"is {p}, but 2 * (1 - Phi(|z|)) is {2.0 * _normal_sf(abs(z))}")
+            if not (lo <= val <= hi) or not _close(hi - val, Z_FOR_ALPHA[0.05] * se) or not _close(val - lo, Z_FOR_ALPHA[0.05] * se):  # type: ignore[operator]
+                c.add(rat, f"ci_low {lo} and ci_high {hi} are not value +- z * std_err")
+
+
+def _normal_sf(x: float) -> float:
+    """1 - Phi(x) for the standard normal, by math.erfc (no scipy in the readers)."""
+    return 0.5 * math.erfc(x / math.sqrt(2.0))
+
+
+def _check_roots(c: _Checker, value: object, at: str, count: int | None) -> list[complex] | None:
+    """The roots, or None when they cannot be used: a list of another length than the order says is
+    one problem and nothing else, and no matching is run on it (`_best_matching` is exponential in
+    the number of MA roots, so it must only ever see a count the bounded order allows)."""
+    rows = c.array(value, at)
+    if rows is None:
+        return None
+    if count is not None and len(rows) != count:
+        c.add(at, f"has {len(rows)} roots, expected {count}")
+        return None
+    out: list[complex] = []
+    for i, item in enumerate(rows):
+        rat = f"{at}[{i}]"
+        row = c.obj(item, rat)
+        if row is None:
+            return None
+        re_, im, mod = (c.number(c.key(row, k, rat), f"{rat}.{k}") for k in ("re", "im", "modulus"))
+        if None in (re_, im, mod):
+            return None
+        if not _close(mod, math.hypot(re_, im), 1e-12):  # type: ignore[arg-type]
+            c.add(f"{rat}.modulus", f"is {mod}, but |re + i im| is {math.hypot(re_, im)}")  # type: ignore[arg-type]
+        if out and mod > abs(out[-1]) + 1e-12:  # type: ignore[operator]
+            c.add(f"{rat}.modulus", "roots are sorted by modulus, largest first")
+        out.append(complex(re_, im))  # type: ignore[arg-type]
+    return out
+
+
+def _best_matching(ar: list[complex], ma: list[complex], distance: float) -> tuple[int, float]:
+    """fitting.cancelling_pairs's rule, restated by another method: the number of pairs and the total
+    distance of a one-to-one matching of the AR-MA pairs within `distance` that has the most pairs,
+    then the least total. Dynamic programming over the subsets of MA roots already used: 2^len(ma)
+    of them, so the caller runs it only on lists of at most MAX_PQ roots (`_check_pairs`), which
+    `_check_roots` returns only when their count is the bounded order's."""
+    best: dict[int, tuple[int, float]] = {0: (0, 0.0)}  # used MA roots (a bit mask) -> (pairs, total)
+    for a in ar:
+        step = dict(best)
+        for mask, (count, total) in best.items():
+            for j, m in enumerate(ma):
+                gap = abs(a - m)
+                if mask >> j & 1 or gap > distance:
+                    continue
+                key, cand = mask | 1 << j, (count + 1, total + gap)
+                old = step.get(key)
+                if old is None or (cand[0], -cand[1]) > (old[0], -old[1]):
+                    step[key] = cand
+        best = step
+    return max(best.values(), key=lambda v: (v[0], -v[1]))
+
+
+def _check_pairs(c: _Checker, value: object, at: str, ar: list[complex] | None, ma: list[complex] | None, distance: float | None) -> None:
+    rows = c.array(value, at)
+    if rows is None:
+        return
+    got: list[tuple[int, int]] = []
+    gaps: list[float] = []
+    for k, item in enumerate(rows):
+        rat = f"{at}[{k}]"
+        row = c.obj(item, rat)
+        if row is None:
+            return
+        i, j = c.integer(c.key(row, "ar", rat), f"{rat}.ar"), c.integer(c.key(row, "ma", rat), f"{rat}.ma")
+        gap = c.number(c.key(row, "distance", rat), f"{rat}.distance")
+        if i is None or j is None or gap is None:
+            return
+        if ar is not None and ma is not None:
+            if i >= len(ar) or j >= len(ma):
+                c.add(rat, f"indices ({i}, {j}) are out of range for {len(ar)} AR and {len(ma)} MA roots")
+                return
+            if not _close(gap, abs(ar[i] - ma[j]), 1e-12):
+                c.add(f"{rat}.distance", f"is {gap}, but the roots are {abs(ar[i] - ma[j])} apart")
+            elif distance is not None and gap > distance:
+                c.add(f"{rat}.distance", f"{gap} is above cancel_distance {distance}: the stated rule does not pair these roots")
+        got.append((i, j))
+        gaps.append(gap)
+    if len({i for i, _ in got}) != len(got) or len({j for _, j in got}) != len(got):
+        c.add(at, "a root appears in more than one pair")
+    elif got != sorted(got):
+        c.add(at, f"pairs are listed by AR index, got {got}")
+    elif ar is not None and ma is not None and distance is not None and max(len(ar), len(ma)) <= MAX_PQ:
+        # Never past MAX_PQ roots a side: the matching doubles its work with each MA root.
+        count, total = _best_matching(ar, ma, distance)
+        if len(got) != count or not _close(sum(gaps), total, 1e-12):
+            c.add(at, f"is {got} (total distance {sum(gaps)}), but the stated rule (as many pairs within {distance} as possible, one to one, then the least total distance) gives {count} pairs with total distance {total}")
+
+
+def _check_diagnostics(c: _Checker, value: object, at: str, model: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any] | None:
+    dg = c.obj(value, at) if value is not _MISSING else None
+    if dg is None:
+        return None
+    alpha = settings.get("alpha")
+    n = c.integer(c.key(dg, "n", at), f"{at}.n", minimum=2)
+    burn = _burn(c, c.key(dg, "burn_excluded", at), f"{at}.burn_excluded")
+    if burn is not None and model.get("burn") is not None and burn != model["burn"]:
+        c.add(f"{at}.burn_excluded", f"is {burn}, but the fit's loglikelihood_burn is {model['burn']}")
+    if n is not None and burn is not None and model.get("nobs") is not None and n != model["nobs"] - burn:
+        c.add(f"{at}.n", f"is {n}, but nobs - burn_excluded is {model['nobs'] - burn}")
+    burned = c.array(c.key(dg, "burned", at), f"{at}.burned")
+    if burned is not None:
+        if burn is not None and len(burned) != burn:
+            c.add(f"{at}.burned", f"has {len(burned)} rows, but burn_excluded is {burn}")
+        for i, item in enumerate(burned):
+            row = c.obj(item, f"{at}.burned[{i}]")
+            if row is not None:
+                c.date(c.key(row, "date", f"{at}.burned[{i}]"), f"{at}.burned[{i}].date")
+                for k in ("resid", "resid_std"):
+                    c.number(c.key(row, k, f"{at}.burned[{i}]"), f"{at}.burned[{i}].{k}")
+    m = c.number(c.key(dg, "max_abs_resid_after_burn", at), f"{at}.max_abs_resid_after_burn")
+    if m is not None and m < 0:
+        c.add(f"{at}.max_abs_resid_after_burn", f"must be >= 0, got {m}")
+    lb = c.array(c.key(dg, "ljung_box", at), f"{at}.ljung_box")
+    lb_rows: list[tuple[bool, float | None]] = []
+    previous: tuple[int, float] | None = None  # the last row's lag and Q
+    if lb is not None:
+        lags = settings.get("ljung_box_lags")
+        if lags is not None and len(lb) != len(lags):
+            c.add(f"{at}.ljung_box", f"has {len(lb)} rows, but ljung_box_lags has {len(lags)}")
+        for i, item in enumerate(lb):
+            rat = f"{at}.ljung_box[{i}]"
+            row = c.obj(item, rat)
+            if row is None:
+                continue
+            lag = c.integer(c.key(row, "lag", rat), f"{rat}.lag", minimum=1)
+            if lag is not None and lags is not None and i < len(lags) and lag != lags[i]:
+                c.add(f"{rat}.lag", f"is {lag}, expected {lags[i]}")
+            pinned_lag = lag is not None and i < len(LJUNG_BOX_LAGS) and lag == LJUNG_BOX_LAGS[i]
+            mdf = c.integer(c.key(row, "model_df", rat), f"{rat}.model_df")
+            if mdf is not None and model.get("pq") is not None and mdf != model["pq"]:
+                c.add(f"{rat}.model_df", f"is {mdf}, but p + q is {model['pq']}")
+            applied = _boolean(c, c.key(row, "applied", rat), f"{rat}.applied")
+            stat = _statistic(c, c.key(row, "statistic", rat), f"{rat}.statistic")
+            # Q(h) = n (n + 2) sum_{k <= h} r_k^2 / (n - k) is a running sum of terms >= 0, so it
+            # cannot fall from one lag to a later one (each row's Q, applied or not).
+            if lag is not None and stat is not None:
+                if previous is not None and lag > previous[0] and stat < previous[1]:
+                    c.add(f"{rat}.statistic", f"is {stat}, below {previous[1]} at lag {previous[0]}: Ljung-Box Q is a running sum of non-negative terms, so it cannot fall as the lag grows")
+                previous = (lag, stat)
+            df_raw, p_raw = c.key(row, "df", rat), c.key(row, "p_value", rat)
+            if applied is None or lag is None or mdf is None:
+                continue
+            if applied != (lag > mdf):
+                c.add(f"{rat}.applied", f"is {applied}, but the test applies exactly when lag {lag} > model_df {mdf}")
+            elif applied:
+                df = c.integer(df_raw, f"{rat}.df", minimum=1)
+                if df is not None and df != lag - mdf:
+                    c.add(f"{rat}.df", f"is {df}, but lag - model_df is {lag - mdf}")
+                    df = None
+                p = _p_value(c, p_raw, f"{rat}.p_value")
+                # The chi-squared runs only on a df the pinned lags give: lag - p - q at a pinned lag.
+                # A row off the pins is already a problem (lag, model_df or df above), and the tail
+                # of a lag of 1e9 is never computed.
+                if pinned_lag and mdf == model.get("pq"):
+                    _check_chi2_p(c, p, stat, df, f"{rat}.p_value", "Ljung-Box")
+                lb_rows.append((True, p))
+            elif df_raw is not None or p_raw is not None:
+                c.add(rat, "df and p_value must be null where the test is not applied")
+    jb = c.key(dg, "jarque_bera", at)
+    jb_p = None
+    if jb is not _MISSING and (j := c.obj(jb, f"{at}.jarque_bera")) is not None:
+        jat = f"{at}.jarque_bera"
+        stat = _statistic(c, c.key(j, "statistic", jat), f"{jat}.statistic")
+        jb_p = _p_value(c, c.key(j, "p_value", jat), f"{jat}.p_value")
+        _check_chi2_p(c, jb_p, stat, 2, f"{jat}.p_value", "Jarque-Bera")
+        skew = c.number(c.key(j, "skew", jat), f"{jat}.skew")
+        kurtosis = c.number(c.key(j, "kurtosis", jat), f"{jat}.kurtosis")
+        # Pearson's kurtosis is at least 1 + skew^2 for any sample (the equality is a two-point
+        # sample); to _REL relative. Products, not powers: a huge skew gives inf, not OverflowError.
+        least = 1.0 if skew is None else 1.0 + skew * skew
+        if kurtosis is not None and kurtosis < least * (1.0 - _REL):
+            c.add(f"{jat}.kurtosis", f"is {kurtosis}, but Pearson's kurtosis is at least 1 + skew^2 = {least}")
+        elif None not in (stat, skew, kurtosis, n):
+            # statsmodels' jarque_bera: JB = n / 6 (S^2 + (K - 3)^2 / 4) from the same skew, kurtosis
+            # and n, so the exported statistic must be that to _REL relative (floor _REL). The p-value
+            # tie above cannot see a wrong statistic past about 1382, where every tail is below P_FLOOR.
+            want = n / 6.0 * (skew * skew + 0.25 * (kurtosis - 3.0) * (kurtosis - 3.0))  # type: ignore[operator]
+            if not (math.isfinite(want) and _close(stat, want)):  # type: ignore[arg-type]
+                c.add(f"{jat}.statistic", f"is {stat}, but n / 6 (skew^2 + (kurtosis - 3)^2 / 4) with n {n}, skew {skew} and kurtosis {kurtosis} is {want}")
+    arch = c.array(c.key(dg, "arch_lm", at), f"{at}.arch_lm")
+    arch_p: list[float | None] = []
+    if arch is not None:
+        lags = settings.get("arch_lm_lags")
+        if lags is not None and len(arch) != len(lags):
+            c.add(f"{at}.arch_lm", f"has {len(arch)} rows, but arch_lm_lags has {len(lags)}")
+        for i, item in enumerate(arch):
+            rat = f"{at}.arch_lm[{i}]"
+            row = c.obj(item, rat)
+            if row is None:
+                continue
+            nl = c.integer(c.key(row, "lags", rat), f"{rat}.lags", minimum=1)
+            if nl is not None and lags is not None and i < len(lags) and nl != lags[i]:
+                c.add(f"{rat}.lags", f"is {nl}, expected {lags[i]}")
+            pinned_lags = nl is not None and i < len(ARCH_LM_LAGS) and nl == ARCH_LM_LAGS[i]
+            stat = _statistic(c, c.key(row, "statistic", rat), f"{rat}.statistic")
+            p = _p_value(c, c.key(row, "p_value", rat), f"{rat}.p_value")
+            # het_arch (acorr_lm): the LM statistic is (n - m - ddof) R^2, with n - m the rows left
+            # once m lags are taken, so at most n - m - ddof as R^2 <= 1; its p-value is chi-squared
+            # on the m lags.
+            if None not in (stat, nl, n):
+                most = n - nl - ARCH_LM_DDOF  # type: ignore[operator]
+                if stat > most:  # type: ignore[operator]
+                    c.add(f"{rat}.statistic", f"is {stat}, but (n - lags - ddof) R^2 is at most n - lags - ddof = {most} (n {n}, lags {nl}, ddof {ARCH_LM_DDOF}), as R^2 <= 1")
+            if pinned_lags:  # the chi-squared runs on one of the pinned lags only
+                _check_chi2_p(c, p, stat, nl, f"{rat}.p_value", "ARCH-LM")
+            arch_p.append(p)
+    v = c.key(dg, "verdicts", at)
+    verdict: dict[str, str | None] = {}
+    if v is not _MISSING and (vd := c.obj(v, f"{at}.verdicts")) is not None:
+        for name, options in (("serial_correlation", SERIAL_VERDICTS), ("normality", NORMALITY_VERDICTS), ("arch", ARCH_VERDICTS)):
+            verdict[name] = _choice(c, c.key(vd, name, f"{at}.verdicts"), options, f"{at}.verdicts.{name}")
+    counts = {k: c.integer(c.key(dg, k, at), f"{at}.{k}") for k in ("acf_outside_count", "acf_squared_outside_count")}
+    # Python only: each verdict follows from its p-values and alpha (diagnostics.verdicts).
+    if isinstance(alpha, float) and verdict:
+        ps = [p for _, p in lb_rows]
+        if lb is not None and None not in ps and verdict.get("serial_correlation") is not None:
+            want = "found" if any(p < alpha for p in ps) else ("not_found" if ps else "not_tested")  # type: ignore[operator]
+            if verdict["serial_correlation"] != want:
+                c.add(f"{at}.verdicts.serial_correlation", f"is {verdict['serial_correlation']!r}, but the Ljung-Box p-values give {want!r}")
+        if jb_p is not None and verdict.get("normality") is not None and verdict["normality"] != ("rejected" if jb_p < alpha else "not_rejected"):
+            c.add(f"{at}.verdicts.normality", f"is {verdict['normality']!r}, but Jarque-Bera's p-value is {jb_p}")
+        if arch is not None and arch_p and None not in arch_p and verdict.get("arch") is not None:
+            want = "found" if any(p < alpha for p in arch_p) else "not_found"  # type: ignore[operator]
+            if verdict["arch"] != want:
+                c.add(f"{at}.verdicts.arch", f"is {verdict['arch']!r}, but the ARCH-LM p-values give {want!r}")
+    return {"verdicts": verdict, "arch_p": arch_p, "counts": counts}
+
+
+def _default_trend(d: int) -> str:
+    """statsmodels' ARIMA default trend: 'c' without differencing, 'n' with it (arima/model.py:156-160).
+    The course refits with that default, so its model's trend is this (both readers)."""
+    return "c" if d == 0 else "n"
+
+
+def _check_information(c: _Checker, vals: dict[str, float | None], llf: float, k: int, n: int | None, at: str) -> None:
+    """Python only: statsmodels' criteria from llf, k parameters and n = nobs_effective
+    (statsmodels/tools/eval_measures.py, called by mlemodel.py with nobs_effective)."""
+    want: dict[str, float | None] = {"aic": -2 * llf + 2 * k}
+    if n is not None:
+        want["bic"] = -2 * llf + math.log(n) * k
+        # statsmodels returns +inf when n - k - 1 <= 0, which no JSON file can hold.
+        want["aicc"] = -2 * llf + 2 * k * n / (n - k - 1) if n - k - 1 > 0 else None
+    labels = {"aic": "-2 llf + 2 k", "bic": "-2 llf + ln(n) k", "aicc": "-2 llf + 2 k n / (n - k - 1)"}
+    for name, expected in want.items():
+        got = vals.get(name)
+        if got is None:
+            continue
+        if expected is None:
+            c.add(f"{at}.{name}", f"is {got}, but n - k - 1 = {n} - {k} - 1 <= 0, where AICc is undefined (statsmodels gives inf)")
+        elif not _close(got, expected):
+            c.add(f"{at}.{name}", f"is {got}, but {labels[name]} is {expected}{'' if name == 'aic' else ' (n = nobs_effective)'}")
+
+
+def validate_fit(data: object) -> list[str]:
+    """Every problem in a `fit` payload (contract.md section 3.7)."""
+    c = _Checker()
+    root = c.obj(data, "data")
+    if root is None:
+        return c.problems
+    c.equals(c.key(root, "sample", "data"), "train", "data.sample")
+    n_train = c.integer(c.key(root, "n_train", "data"), "data.n_train", minimum=2)
+    primary_raw = c.key(root, "primary", "data")
+    c.equals(primary_raw, PRIMARY, "data.primary")  # a one-value enum: the AIC choice
+    primary = PRIMARY if primary_raw == PRIMARY else None
+    fs = c.key(root, "fit_settings", "data")
+    if fs is not _MISSING and (f := c.obj(fs, "data.fit_settings")) is not None:
+        for name in ("library", "version", "optimizer"):
+            c.string(c.key(f, name, "data.fit_settings"), f"data.fit_settings.{name}")
+        c.equals(c.key(f, "model", "data.fit_settings"), "ARIMA", "data.fit_settings.model")
+        c.equals(c.key(f, "method", "data.fit_settings"), "statespace", "data.fit_settings.method")
+        c.equals(c.key(f, "cov_type", "data.fit_settings"), "opg", "data.fit_settings.cov_type")
+        c.integer(c.key(f, "maxiter", "data.fit_settings"), "data.fit_settings.maxiter", minimum=1)
+        for name in _FIT_FLAGS:
+            _boolean(c, c.key(f, name, "data.fit_settings"), f"data.fit_settings.{name}")
+    z95 = c.number(c.key(root, "z95", "data"), "data.z95")
+    if z95 is not None and z95 != Z_FOR_ALPHA[0.05]:
+        c.add("data.z95", f"is {z95}, expected {Z_FOR_ALPHA[0.05]}")
+    distance = c.number(c.key(root, "cancel_distance", "data"), "data.cancel_distance")
+    if distance is not None and distance != CANCEL_DISTANCE:
+        c.add("data.cancel_distance", f"is {distance}, but this reader pairs roots within {CANCEL_DISTANCE}")
+    distance = CANCEL_DISTANCE  # the reader's own rule, whatever the file says
+    tolerance = c.number(c.key(root, "llf_tolerance", "data"), "data.llf_tolerance")
+    if tolerance is not None and tolerance != LLF_TOLERANCE:
+        c.add("data.llf_tolerance", f"is {tolerance}, but this reader checks the refit's llf at {LLF_TOLERANCE}")
+    tolerance = LLF_TOLERANCE  # the reader's own bound, whatever the file says
+    # The reader's own settings, whatever the file says: a stated value other than the pin is refused below.
+    settings: dict[str, Any] = {"alpha": ALPHA, "ljung_box_lags": list(LJUNG_BOX_LAGS), "arch_lm_lags": list(ARCH_LM_LAGS), "arch_lm_ddof": ARCH_LM_DDOF, "nlags": NLAGS}
+    ds = c.key(root, "diagnostic_settings", "data")
+    if ds is not _MISSING and (s := c.obj(ds, "data.diagnostic_settings")) is not None:
+        sat = "data.diagnostic_settings"
+        _pinned(c, c.number(c.key(s, "alpha", sat), f"{sat}.alpha"), f"{sat}.alpha", ALPHA, "tests at alpha")
+        for name in ("series", "ljung_box_model_df"):
+            c.string(c.key(s, name, sat), f"{sat}.{name}")
+        _pinned(c, _int_list(c, c.key(s, "ljung_box_lags", sat), f"{sat}.ljung_box_lags"), f"{sat}.ljung_box_lags", list(LJUNG_BOX_LAGS), "checks Ljung-Box at lags")
+        _pinned(c, _int_list(c, c.key(s, "arch_lm_lags", sat), f"{sat}.arch_lm_lags"), f"{sat}.arch_lm_lags", list(ARCH_LM_LAGS), "checks ARCH-LM at lags")
+        _pinned(c, c.integer(c.key(s, "arch_lm_ddof", sat), f"{sat}.arch_lm_ddof"), f"{sat}.arch_lm_ddof", ARCH_LM_DDOF, "checks ARCH-LM with ddof")
+        _pinned(c, c.integer(c.key(s, "nlags", sat), f"{sat}.nlags", minimum=1), f"{sat}.nlags", NLAGS, "checks the correlograms at nlags")
+    models = c.array(c.key(root, "models", "data"), "data.models")
+    parsed: dict[str, dict[str, Any]] = {}
+    if models is not None:
+        ids = [m.get("id") if isinstance(m, dict) else None for m in models]
+        if ids != list(MODEL_IDS):
+            c.add("data.models", f"ids are {_show(ids)}, expected {list(MODEL_IDS)} in that order")
+        for index, item in enumerate(models):
+            at = f"data.models[{index}]"
+            m = c.obj(item, at)
+            if m is None:
+                continue
+            ident = _choice(c, c.key(m, "id", at), MODEL_IDS, f"{at}.id")
+            c.string(c.key(m, "label", at), f"{at}.label")
+            c.string(c.key(m, "source", at), f"{at}.source")
+            order = _check_order(c, c.key(m, "order", at), f"{at}.order")
+            trend = _choice(c, c.key(m, "trend", at), TREND_CODES, f"{at}.trend")
+            if ident == "course" and order is not None and trend is not None and trend != _default_trend(order[1]):
+                c.add(f"{at}.trend", f"is {trend!r}, but ARIMA(train, order).fit() at d = {order[1]} has statsmodels' default trend {_default_trend(order[1])!r}")
+            nobs = c.integer(c.key(m, "nobs", at), f"{at}.nobs", minimum=2)
+            eff = c.integer(c.key(m, "nobs_effective", at), f"{at}.nobs_effective", minimum=1)
+            burn = _burn(c, c.key(m, "loglikelihood_burn", at), f"{at}.loglikelihood_burn")
+            if nobs is not None and n_train is not None and nobs != n_train:
+                c.add(f"{at}.nobs", f"is {nobs}, but n_train is {n_train}")
+            if None not in (nobs, eff, burn) and eff != nobs - burn:  # type: ignore[operator]
+                c.add(f"{at}.nobs_effective", f"is {eff}, but nobs - loglikelihood_burn is {nobs - burn}")  # type: ignore[operator]
+            # Only from a bounded order: p and q of 1e8 must not build 1e8 names.
+            names = expected_param_names(order[0], order[2], trend) if order is not None and trend is not None else None
+            _check_params(c, c.key(m, "params", at), f"{at}.params", names)
+            info = c.key(m, "information", at)
+            llf = None
+            if info is not _MISSING and (inf := c.obj(info, f"{at}.information")) is not None:
+                vals = {k: c.number(c.key(inf, k, f"{at}.information"), f"{at}.information.{k}") for k in ("llf", "aic", "aicc", "bic", "hqic")}
+                llf = vals["llf"]
+                if names is not None and llf is not None:
+                    _check_information(c, vals, llf, len(names), eff, f"{at}.information")
+            grid_raw, gap_raw = c.key(m, "grid_llf", at), c.key(m, "llf_gap", at)
+            grid = c.number(grid_raw, f"{at}.grid_llf", nullable=True)
+            gap = c.number(gap_raw, f"{at}.llf_gap", nullable=True)
+            if ident is not None and grid_raw is not _MISSING and gap_raw is not _MISSING:
+                if (grid_raw is None) != (ident == "course") or (gap_raw is None) != (ident == "course"):
+                    c.add(at, "grid_llf and llf_gap are null exactly for the course model, which is not a grid cell")
+                elif grid is not None and gap is not None and llf is not None:
+                    if gap != llf - grid:
+                        c.add(f"{at}.llf_gap", f"is {gap}, but llf - grid_llf is {llf - grid}")
+                    elif tolerance is not None and abs(gap) > tolerance:
+                        c.add(f"{at}.llf_gap", f"{gap} is outside llf_tolerance {tolerance}: the refit does not reproduce the grid's point")
+            _boolean(c, c.key(m, "converged", at), f"{at}.converged")
+            c.integer(c.key(m, "iterations", at), f"{at}.iterations")
+            c.integer(c.key(m, "warnflag", at), f"{at}.warnflag")
+            _warnings(c, c.key(m, "warnings", at), f"{at}.warnings")
+            ar = _check_roots(c, c.key(m, "inv_roots_ar", at), f"{at}.inv_roots_ar", None if order is None else order[0])
+            ma = _check_roots(c, c.key(m, "inv_roots_ma", at), f"{at}.inv_roots_ma", None if order is None else order[2])
+            _check_pairs(c, c.key(m, "cancelling_pairs", at), f"{at}.cancelling_pairs", ar, ma, distance)
+            facts = {"burn": burn, "nobs": nobs, "pq": None if order is None else order[0] + order[2]}
+            diag = _check_diagnostics(c, c.key(m, "diagnostics", at), f"{at}.diagnostics", facts, settings)
+            if ident is not None:
+                parsed[ident] = {"order": order, "trend": trend, "diag": diag}
+    _check_course_track(c, c.key(root, "course_track", "data"), n_train, parsed.get("course"))
+    cp = c.key(root, "clustering_prediction", "data")
+    if cp is not _MISSING and (p := c.obj(cp, "data.clustering_prediction")) is not None:
+        at = "data.clustering_prediction"
+        mid = _choice(c, c.key(p, "model_id", at), MODEL_IDS, f"{at}.model_id")
+        if mid is not None and primary is not None and mid != primary:
+            c.add(f"{at}.model_id", f"is {mid!r}, but the primary model is {primary!r}")
+        confirmed = _boolean(c, c.key(p, "confirmed", at), f"{at}.confirmed")
+        rejections = c.integer(c.key(p, "arch_lm_rejections", at), f"{at}.arch_lm_rejections")
+        outside = c.integer(c.key(p, "acf_squared_outside_count", at), f"{at}.acf_squared_outside_count")
+        expected = c.number(c.key(p, "acf_squared_expected_by_chance", at), f"{at}.acf_squared_expected_by_chance")
+        diag = (parsed.get(mid) or {}).get("diag") if mid is not None else None
+        if diag is not None:
+            if confirmed is not None and diag["verdicts"].get("arch") is not None and confirmed != (diag["verdicts"]["arch"] == "found"):
+                c.add(f"{at}.confirmed", f"is {confirmed}, but the model's ARCH verdict is {diag['verdicts']['arch']!r}")
+            if outside is not None and diag["counts"].get("acf_squared_outside_count") is not None and outside != diag["counts"]["acf_squared_outside_count"]:
+                c.add(f"{at}.acf_squared_outside_count", f"is {outside}, but the model's diagnostics say {diag['counts']['acf_squared_outside_count']}")
+            alpha = settings.get("alpha")
+            if rejections is not None and isinstance(alpha, float) and diag["arch_p"] and None not in diag["arch_p"] and rejections != sum(q < alpha for q in diag["arch_p"]):
+                c.add(f"{at}.arch_lm_rejections", f"is {rejections}, but {sum(q < alpha for q in diag['arch_p'])} ARCH-LM p-values are below {alpha}")
+        if expected is not None and isinstance(settings.get("alpha"), float) and settings.get("nlags") is not None and expected != settings["alpha"] * settings["nlags"]:
+            c.add(f"{at}.acf_squared_expected_by_chance", f"is {expected}, but alpha * nlags is {settings['alpha'] * settings['nlags']}")
+    return c.problems
+
+
+def _check_course_track(c: _Checker, value: object, n_train: int | None, course: dict[str, Any] | None) -> None:
+    at = "data.course_track"
+    if value is _MISSING:
+        return
+    t = c.obj(value, at)
+    if t is None:
+        return
+    c.obj(c.key(t, "settings", at), f"{at}.settings")
+    c.string(c.key(t, "pmdarima_version", at), f"{at}.pmdarima_version")
+    n_course = c.integer(c.key(t, "n_course", at), f"{at}.n_course", minimum=2)
+    nt = c.integer(c.key(t, "n_train", at), f"{at}.n_train", minimum=2)
+    seen = c.integer(c.key(t, "test_rows_seen", at), f"{at}.test_rows_seen")
+    if nt is not None and n_train is not None and nt != n_train:
+        c.add(f"{at}.n_train", f"is {nt}, but data.n_train is {n_train}")
+    if None not in (n_course, nt, seen) and seen != n_course - nt:  # type: ignore[operator]
+        c.add(f"{at}.test_rows_seen", f"is {seen}, but n_course - n_train is {n_course - nt}")  # type: ignore[operator]
+    full_order = None
+    full_trend: object = _MISSING
+    fs = c.key(t, "full_series", at)
+    if fs is not _MISSING and (f := c.obj(fs, f"{at}.full_series")) is not None:
+        fat = f"{at}.full_series"
+        full_order = _check_order(c, c.key(f, "order", fat), f"{fat}.order")
+        _boolean(c, c.key(f, "with_intercept", fat), f"{fat}.with_intercept")
+        trend_raw = c.key(f, "trend", fat)
+        if trend_raw is None or _choice(c, trend_raw, TREND_CODES, f"{fat}.trend", nullable=True) is not None:
+            full_trend = trend_raw
+        c.number(c.key(f, "aic", fat), f"{fat}.aic")
+        nobs = c.integer(c.key(f, "nobs", fat), f"{fat}.nobs", minimum=2)
+        if nobs is not None and n_course is not None and nobs != n_course:
+            c.add(f"{fat}.nobs", f"is {nobs}, but n_course is {n_course}")
+        for i, item in enumerate(c.array(c.key(f, "params", fat), f"{fat}.params") or []):
+            row = c.obj(item, f"{fat}.params[{i}]")
+            if row is not None:
+                c.string(c.key(row, "name", f"{fat}.params[{i}]"), f"{fat}.params[{i}].name")
+                c.number(c.key(row, "value", f"{fat}.params[{i}]"), f"{fat}.params[{i}].value")
+        _warnings(c, c.key(f, "warnings", fat), f"{fat}.warnings")
+    if course is not None and full_order is not None and course["order"] is not None and course["order"] != full_order:
+        c.add(f"{at}.full_series.order", f"is {full_order}, but the course model's order is {course['order']}")
+    tr_raw = c.key(t, "train_only", at)
+    train_only = None
+    if tr_raw is not None and tr_raw is not _MISSING and (tr := c.obj(tr_raw, f"{at}.train_only")) is not None:
+        train_only = (_check_order(c, c.key(tr, "order", f"{at}.train_only"), f"{at}.train_only.order"), _boolean(c, c.key(tr, "with_intercept", f"{at}.train_only"), f"{at}.train_only.with_intercept"))
+        _choice(c, c.key(tr, "trend", f"{at}.train_only"), TREND_CODES, f"{at}.train_only.trend", nullable=True)
+    same_raw = c.key(t, "same_order", at)
+    if same_raw is not _MISSING:
+        if (same_raw is None) != (tr_raw is None):
+            c.add(f"{at}.same_order", "is null exactly when train_only is null")
+        elif same_raw is not None:
+            same = _boolean(c, same_raw, f"{at}.same_order")
+            wi = fs.get("with_intercept") if isinstance(fs, dict) else None
+            if same is not None and train_only is not None and None not in train_only and full_order is not None and isinstance(wi, bool) and same != (train_only[0] == full_order and train_only[1] == wi):
+                c.add(f"{at}.same_order", f"is {same}, but the two searches chose {train_only} and {(full_order, wi)}")
+    refit = _choice(c, c.key(t, "refit_trend", at), TREND_CODES, f"{at}.refit_trend")
+    if refit is not None and course is not None and course["trend"] is not None and refit != course["trend"]:
+        c.add(f"{at}.refit_trend", f"is {refit!r}, but the course model's trend is {course['trend']!r}")
+    dd = c.key(t, "drift_dropped", at)
+    if dd is not _MISSING and (d := c.obj(dd, f"{at}.drift_dropped")) is not None:
+        dat = f"{at}.drift_dropped"
+        selected_raw = c.key(d, "selected_trend", dat)
+        selected_ok = selected_raw is None or _choice(c, selected_raw, TREND_CODES, f"{dat}.selected_trend", nullable=True) is not None
+        if selected_ok and full_trend is not _MISSING and selected_raw is not _MISSING and selected_raw != full_trend:
+            c.add(f"{dat}.selected_trend", f"is {_show(selected_raw)}, but full_series.trend, the trend the search selected, is {_show(full_trend)}")
+        r2 = _choice(c, c.key(d, "refit_trend", dat), TREND_CODES, f"{dat}.refit_trend")
+        if r2 is not None and refit is not None and r2 != refit:
+            c.add(f"{dat}.refit_trend", f"is {r2!r}, but refit_trend is {refit!r}")
+        without = c.number(c.key(d, "aic_without_drift", dat), f"{dat}.aic_without_drift")
+        with_ = c.number(c.key(d, "aic_with_drift", dat), f"{dat}.aic_with_drift")
+        gap = c.number(c.key(d, "aic_gap", dat), f"{dat}.aic_gap")
+        if None not in (without, with_, gap) and gap != without - with_:  # type: ignore[operator]
+            c.add(f"{dat}.aic_gap", f"is {gap}, but aic_without_drift - aic_with_drift is {without - with_}")  # type: ignore[operator]
+        drift = c.number(c.key(d, "drift", dat), f"{dat}.drift")
+        se_raw, p_raw = c.key(d, "drift_std_err", dat), c.key(d, "drift_p_value", dat)
+        se = c.number(se_raw, f"{dat}.drift_std_err", nullable=True)
+        p = _p_value(c, p_raw, f"{dat}.drift_p_value", nullable=True)
+        if se_raw is not _MISSING and p_raw is not _MISSING and (se_raw is None) != (p_raw is None):
+            c.add(dat, "drift_std_err and drift_p_value are null together (a singular covariance)")
+        elif se is not None and se <= 0:
+            c.add(f"{dat}.drift_std_err", f"must be positive, got {se}")
+        elif drift is not None and se is not None and p is not None and not _p_close(p, 2.0 * _normal_sf(abs(drift / se))):  # Python only
+            c.add(f"{dat}.drift_p_value", f"is {p}, but 2 * (1 - Phi(|drift / drift_std_err|)) is {2.0 * _normal_sf(abs(drift / se))}")
+
+
+def _check_correlogram(c: _Checker, value: object, at: str, nlags: int | None, n: int | None, z: float | None) -> int | None:
+    if value is _MISSING:
+        return None
+    g = c.obj(value, at)
+    if g is None:
+        return None
+    band = c.number(c.key(g, "band", at), f"{at}.band")
+    if band is not None and band <= 0:
+        c.add(f"{at}.band", f"must be positive, got {band}")
+        band = None
+    elif band is not None and n is not None and z is not None and band != z / math.sqrt(n):
+        c.add(f"{at}.band", f"is {band}, but z / sqrt(n) is {z / math.sqrt(n)}")
+    count = c.integer(c.key(g, "outside_count", at), f"{at}.outside_count")
+    rows = c.array(c.key(g, "rows", at), f"{at}.rows")
+    if rows is None:
+        return count
+    if nlags is not None and len(rows) != nlags:
+        c.add(f"{at}.rows", f"has {len(rows)} rows, but lags 1 to {nlags} make {nlags}")
+    flags: list[bool | None] = []
+    for k, item in enumerate(rows, start=1):
+        rat = f"{at}.rows[{k - 1}]"
+        row = c.obj(item, rat)
+        if row is None:
+            flags.append(None)
+            continue
+        lag = c.integer(c.key(row, "lag", rat), f"{rat}.lag", minimum=1)
+        if lag is not None and lag != k:
+            c.add(f"{rat}.lag", f"is {lag}, expected {k}")
+        v = c.number(c.key(row, "acf", rat), f"{rat}.acf")
+        if v is not None and not -1 <= v <= 1:
+            c.add(f"{rat}.acf", f"must be between -1 and 1, got {v}")
+            v = None
+        flag = _boolean(c, c.key(row, "outside", rat), f"{rat}.outside")
+        flags.append(flag)
+        if flag is not None and v is not None and band is not None and flag != (abs(v) > band):  # Python only
+            c.add(f"{rat}.outside", f"is {flag}, but |acf| {abs(v)} {'>' if abs(v) > band else '<='} band {band}")
+    if count is not None and None not in flags and count != sum(flags):  # type: ignore[arg-type]
+        c.add(f"{at}.outside_count", f"is {count}, but {sum(flags)} rows are flagged")  # type: ignore[arg-type]
+    return count
+
+
+def validate_residuals(data: object, model_id: str) -> list[str]:
+    """Every problem in a `residuals_<model_id>` payload (contract.md section 3.8)."""
+    c = _Checker()
+    root = c.obj(data, "data")
+    if root is None:
+        return c.problems
+    c.equals(c.key(root, "sample", "data"), "train", "data.sample")
+    c.equals(c.key(root, "model_id", "data"), model_id, "data.model_id")
+    n = c.integer(c.key(root, "n", "data"), "data.n", minimum=2)
+    _burn(c, c.key(root, "burn_excluded", "data"), "data.burn_excluded")  # n and nobs: the cross-file check below
+    z = c.number(c.key(root, "z", "data"), "data.z")
+    if z is not None and z != Z_FOR_ALPHA[0.05]:
+        c.add("data.z", f"is {z}, expected {Z_FOR_ALPHA[0.05]}")
+        z = None
+    nlags = c.integer(c.key(root, "nlags", "data"), "data.nlags", minimum=1)
+    rows = c.array(c.key(root, "rows", "data"), "data.rows")
+    if rows is not None:
+        if n is not None and len(rows) != n:
+            c.add("data.rows", f"has {len(rows)} rows, but n is {n}")
+        dates: list[str | None] = []
+        for i, item in enumerate(rows):
+            row = c.obj(item, f"data.rows[{i}]")
+            if row is None:
+                dates.append(None)
+                continue
+            dates.append(c.date(c.key(row, "date", f"data.rows[{i}]"), f"data.rows[{i}].date"))
+            c.number(c.key(row, "resid_std", f"data.rows[{i}]"), f"data.rows[{i}].resid_std")
+        _check_ascending(c, dates, "data.rows")
+    for name in ("acf", "acf_squared"):
+        _check_correlogram(c, c.key(root, name, "data"), f"data.{name}", nlags, n, z)
+    qq = c.array(c.key(root, "qq", "data"), "data.qq")
+    if qq is not None:
+        if n is not None and len(qq) != n:
+            c.add("data.qq", f"has {len(qq)} points, but n is {n}")
+        last: dict[str, float] = {}
+        for i, item in enumerate(qq):
+            at = f"data.qq[{i}]"
+            pt = c.obj(item, at)
+            if pt is None:
+                continue
+            for k in ("theoretical", "t_theoretical", "sample"):
+                v = c.number(c.key(pt, k, at), f"{at}.{k}")
+                if v is not None:
+                    if k in last and v < last[k]:
+                        c.add(f"{at}.{k}", f"{v} is below the previous point's {last[k]}; points are sorted")
+                    last[k] = v
+    tf = c.key(root, "t_fit", "data")
+    if tf is not _MISSING and (t := c.obj(tf, "data.t_fit")) is not None:
+        for k in ("df", "loc", "scale"):
+            v = c.number(c.key(t, k, "data.t_fit"), f"data.t_fit.{k}")
+            if v is not None and k != "loc" and v <= 0:
+                c.add(f"data.t_fit.{k}", f"must be positive, got {v}")
+    return c.problems
+
+
+def validate_fit_residuals(fit: object, residuals: dict[str, object]) -> list[str]:
+    """Problems between `fit` and the `residuals_<id>` payloads (each already valid on its own): each
+    model's file must exist and hold that model's id, `n` and `burn_excluded` (so n + burn = nobs),
+    the fit's `nlags`, and its two outside counts. The export tool runs this on the files on disk
+    after a write, `--only` included, so a fit.json rebuilt alone after a code change cannot sit
+    beside residual files from the old code. Like the other validators it never raises."""
+    problems: list[str] = []
+    data = fit if isinstance(fit, dict) else {}
+    models = data.get("models") if isinstance(data.get("models"), list) else []
+    settings = data.get("diagnostic_settings") if isinstance(data.get("diagnostic_settings"), dict) else {}
+    for model in models:
+        if not isinstance(model, dict) or not isinstance(model.get("diagnostics"), dict):
+            continue
+        name, dg = f"residuals_{model.get('id')}", model["diagnostics"]
+        series = residuals.get(name)
+        if not isinstance(series, dict):
+            problems.append(f"{name}: missing, but fit has model {model.get('id')!r}")
+            continue
+        acf, acf_sq = series.get("acf"), series.get("acf_squared")
+        checks = [
+            ("model_id", series.get("model_id"), model.get("id")),
+            ("n", series.get("n"), dg.get("n")),
+            ("burn_excluded", series.get("burn_excluded"), dg.get("burn_excluded")),
+            ("nlags", series.get("nlags"), settings.get("nlags")),
+            ("acf.outside_count", acf.get("outside_count") if isinstance(acf, dict) else None, dg.get("acf_outside_count")),
+            ("acf_squared.outside_count", acf_sq.get("outside_count") if isinstance(acf_sq, dict) else None, dg.get("acf_squared_outside_count")),
+        ]
+        for field, got, want in checks:
+            if got != want:
+                problems.append(f"{name}: {field} is {_show(got)}, but fit.json says {_show(want)}")
+    extra = sorted(set(residuals) - {f"residuals_{m.get('id')}" for m in models if isinstance(m, dict)})
+    problems += [f"{name}: fit.json has no model {name.removeprefix('residuals_')!r}" for name in extra]
+    return problems
+
+
 PAYLOAD_VALIDATORS: dict[str, Callable[[object], list[str]]] = {
     "meta": validate_meta,
     "prices": validate_prices,
@@ -1224,4 +2030,6 @@ PAYLOAD_VALIDATORS: dict[str, Callable[[object], list[str]]] = {
     "stationarity": validate_stationarity,
     "acf_pacf": validate_acf_pacf,
     "aic_grid": validate_aic_grid,
+    "fit": validate_fit,
+    **{f"residuals_{mid}": (lambda data, mid=mid: validate_residuals(data, mid)) for mid in MODEL_IDS},
 }

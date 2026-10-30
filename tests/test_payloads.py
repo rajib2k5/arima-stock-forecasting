@@ -13,7 +13,7 @@ from synthetic import NOT_RUN, write_synthetic_snapshot
 
 from arima_forecasting import selection
 from arima_forecasting.data import read_snapshot
-from arima_forecasting.export import build_payloads
+from arima_forecasting.export import ARTIFACTS, build_payloads
 from arima_forecasting.payloads import PAYLOAD_VALIDATORS, validate_eda, validate_prices
 
 
@@ -35,8 +35,8 @@ def broken(payload, edit):
 def test_the_export_builds_payloads_that_pass_both_validators(payloads):
     assert validate_prices(payloads["prices"]) == []
     assert validate_eda(payloads["eda"]) == []
-    assert set(PAYLOAD_VALIDATORS) == {"meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid"}
-    for name in ("stationarity", "acf_pacf", "aic_grid"):
+    assert set(PAYLOAD_VALIDATORS) == set(ARTIFACTS)
+    for name in ARTIFACTS[3:]:  # meta, prices and eda are checked above
         assert PAYLOAD_VALIDATORS[name](payloads[name]) == [], name
 
 

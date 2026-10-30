@@ -1,7 +1,7 @@
 """Python's payload readers against the shared corpus app/src/test/fixtures/payload_cases.json.
 
 The app's suite runs the same cases through parseMeta, parsePrices, parseEda, parseStationarity,
-parseAcfPacf and parseAicGrid (app/src/lib/contract.payloads.corpus.test.ts). Each case edits a hand-written base payload and
+parseAcfPacf, parseAicGrid, parseFit and parseResiduals (app/src/lib/contract.payloads.corpus.test.ts). Each case edits a hand-written base payload and
 states the verdict both readers must reach, so a rule changed in one language only fails a test.
 The review of milestone 1 found 12 disagreements in 34 edge payloads before this corpus existed.
 """
@@ -21,7 +21,9 @@ from arima_forecasting.payloads import (
     validate_aic_grid,
     validate_eda,
     validate_meta,
+    validate_fit,
     validate_prices,
+    validate_residuals,
     validate_stationarity,
 )
 
@@ -34,6 +36,8 @@ VALIDATORS = {
     "stationarity": validate_stationarity,
     "acf_pacf": validate_acf_pacf,
     "aic_grid": validate_aic_grid,
+    "fit": validate_fit,
+    "residuals_aic": lambda data: validate_residuals(data, "aic"),
 }
 BASES = {name: json.loads((FIXTURES / f"{name}.data.json").read_text(encoding="utf-8")) for name in VALIDATORS}
 

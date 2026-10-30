@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { parseMeta } from './contract'
 import { parseEda, parsePrices } from './contract.payloads'
 import { parseAcfPacf, parseAicGrid, parseStationarity } from './contract.order'
+import { parseFit, parseResiduals } from './contract.fit'
 import { loadArtifact } from '../data/loadArtifact'
 import corpus from '../test/fixtures/payload_cases.json'
 import pricesBase from '../test/fixtures/prices.data.json'
@@ -15,6 +16,8 @@ import metaBase from '../test/fixtures/meta.data.json'
 import stationarityBase from '../test/fixtures/stationarity.data.json'
 import acfPacfBase from '../test/fixtures/acf_pacf.data.json'
 import aicGridBase from '../test/fixtures/aic_grid.data.json'
+import fitBase from '../test/fixtures/fit.data.json'
+import residualsAicBase from '../test/fixtures/residuals_aic.data.json'
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json }
 interface Edit {
@@ -24,7 +27,7 @@ interface Edit {
 }
 interface Case {
   name: string
-  base: 'meta' | 'prices' | 'eda' | 'stationarity' | 'acf_pacf' | 'aic_grid'
+  base: 'meta' | 'prices' | 'eda' | 'stationarity' | 'acf_pacf' | 'aic_grid' | 'fit' | 'residuals_aic'
   edits: Edit[]
   valid: boolean
 }
@@ -45,8 +48,19 @@ const BASES: Record<Case['base'], Json> = {
   stationarity: stationarityBase as unknown as Json,
   acf_pacf: acfPacfBase as unknown as Json,
   aic_grid: aicGridBase as unknown as Json,
+  fit: fitBase as unknown as Json,
+  residuals_aic: residualsAicBase as unknown as Json,
 }
-const PARSERS = { meta: parseMeta, prices: parsePrices, eda: parseEda, stationarity: parseStationarity, acf_pacf: parseAcfPacf, aic_grid: parseAicGrid }
+const PARSERS = {
+  meta: parseMeta,
+  prices: parsePrices,
+  eda: parseEda,
+  stationarity: parseStationarity,
+  acf_pacf: parseAcfPacf,
+  aic_grid: parseAicGrid,
+  fit: parseFit,
+  residuals_aic: (data: unknown) => parseResiduals(data, 'aic'),
+}
 
 /** A copy of the base payload with each edit applied: set the value at a path, or delete it. */
 function apply(base: Json, edits: Edit[]): Json {
@@ -88,7 +102,7 @@ function tokenText(c: TokenCase): string {
   let node = data
   for (const key of c.path.slice(0, -1)) node = node[key] as Record<string | number, Json>
   node[c.path[c.path.length - 1]] = '__TOKEN__'
-  const envelope = { schema_version: '1.3.0', artifact: c.base, generated_at: '2026-10-29T00:00:00Z', source_commit: '0'.repeat(40), data }
+  const envelope = { schema_version: '1.4.0', artifact: c.base, generated_at: '2026-10-29T00:00:00Z', source_commit: '0'.repeat(40), data }
   return JSON.stringify(envelope).replace('"__TOKEN__"', c.token)
 }
 

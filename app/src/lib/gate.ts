@@ -14,6 +14,9 @@ export const STATIONARITY_ARTIFACTS = ['stationarity', 'acf_pacf'] as const
 /** The artifact the AIC landscape reads (milestone 2). */
 export const LANDSCAPE_ARTIFACTS = ['aic_grid'] as const
 
+/** The artifacts the fit and diagnostics page reads (milestone 3): fit.json and one residual file per model. */
+export const FIT_ARTIFACTS = ['fit', 'residuals_aic', 'residuals_bic', 'residuals_course'] as const
+
 export function hasArtifacts(meta: Meta, needed: readonly string[]): boolean {
   return needed.every((name) => meta.artifacts.includes(name))
 }
