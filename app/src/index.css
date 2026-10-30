@@ -21,6 +21,9 @@
   --band-fill: rgba(79, 184, 168, 0.16);
   --chosen-bg: rgba(224, 164, 88, 0.10);
   --flag-bg: rgba(194, 84, 80, 0.14);
+  /* milestone 4: forecast fan bands (dark) */
+  --fan-80: rgba(224, 164, 88, 0.32);
+  --fan-95: rgba(224, 164, 88, 0.14);
 }
 * { box-sizing: border-box; }
 body {
@@ -98,6 +101,8 @@ a { color: var(--teal); }
   --band-fill: rgba(37, 101, 91, 0.14);
   --chosen-bg: rgba(138, 109, 28, 0.10);
   --flag-bg: rgba(166, 62, 58, 0.10);
+  --fan-80: rgba(138, 109, 28, 0.30);
+  --fan-95: rgba(138, 109, 28, 0.12);
 }
 
 /* ---- pages ---- */
@@ -220,3 +225,16 @@ caption { caption-side: top; text-align: left; font-size: .82rem; color: var(--m
 .verdict-plain { color: var(--teal); border-color: var(--teal); }
 tr.reading > td { font-size: .8rem; padding-bottom: .7rem; }
 .test-table th .sub { text-transform: none; letter-spacing: 0; }
+
+/* ---- milestone 4: forecast and evaluation ---- */
+.fan-band80 { fill: var(--fan-80); stroke: none; }
+.fan-band95 { fill: var(--fan-95); stroke: none; }
+.fan-trail { opacity: .45; }
+.fan-now line { stroke: var(--accent); stroke-linecap: round; }
+.fan-now .bar95 { stroke-width: 1.5; }
+.fan-now .bar80 { stroke-width: 5; opacity: .7; }
+.fan-now circle { fill: var(--line-secondary); stroke: var(--bg); stroke-width: 1; }
+.walk-actual-dot { fill: var(--line-primary); }
+.toggles label { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; color: var(--muted); cursor: pointer; }
+.toggles input { padding: 0; }
+.walk-controls button:disabled { opacity: .45; cursor: not-allowed; }

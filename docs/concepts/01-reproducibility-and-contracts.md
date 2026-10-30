@@ -89,12 +89,12 @@ producer can add things without breaking it. This repo applies it to one level o
 not to the other.
 
 - **The envelope's top level is closed.** Both readers, Python's `validate_envelope`
-  (`src/arima_forecasting/contract.py:119-122`) and the app's `parseEnvelope`
-  (`app/src/lib/contract.ts:182-187`), reject a missing *or* an unknown top-level key. The five
+  (`src/arima_forecasting/contract.py:171-176`) and the app's `parseEnvelope`
+  (`app/src/lib/contract.ts:279-285`), reject a missing *or* an unknown top-level key. The five
   envelope keys are what every artifact shares and what the loader trusts before it reads any
   payload, so a new one is a major bump (`docs/architecture/contract.md:44-48`).
 - **The `data` payload is open.** The app's payload parsers build a *new* object from the keys
-  they know (`contract.ts:192-195`, `:305`). Unknown keys inside `data` are ignored and not passed
+  they know (`contract.ts:290-293`, `:416`). Unknown keys inside `data` are ignored and not passed
   on, so a minor version can add a field without breaking an older app. Missing or wrongly typed
   known keys are still errors; tolerance is not coercion.
 
@@ -168,7 +168,7 @@ JavaScript calls `Number.MAX_SAFE_INTEGER` (measured). `JSON.parse` turns every 
 double, so `JSON.parse("9007199254740993")` gives `9007199254740992`, and the 310-digit `10**309`
 that Python writes happily becomes `Infinity` (both measured in Node 22). So `dumps` refuses any
 integer beyond ±(2^53 − 1), naming its path, after `json.dumps` has run
-(`src/arima_forecasting/contract.py:173-191`, the walk at `:152-170`;
+(`src/arima_forecasting/contract.py:229-247`, the walk at `:208-226`;
 `docs/architecture/contract.md:37-42`). A value that really needs more digits must travel as a
 string.
 
@@ -203,7 +203,7 @@ Sources of accidental difference, and the guard for each:
 - **Random ids.** nbformat gives each new cell a random id; two calls gave `bd6a5883` and
   `6e7f134d` (measured). The builder sets `cell-00`, `cell-01`, ... (`tools/build_notebooks.py:403`).
 - **Key order.** `sort_keys=True` makes the bytes independent of dict insertion order
-  (`contract.py:189`).
+  (`contract.py:245`).
 - **Formatting.** Fixed two-space indent and exactly one trailing newline.
 
 **Assumptions**

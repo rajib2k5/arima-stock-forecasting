@@ -3,7 +3,7 @@
  * runs every corpus case through them): what they return, and the messages they give.
  */
 import { describe, expect, it } from 'vitest'
-import { parseAcfPacf, parseAicGrid, parseStationarity, tableVerdict } from './contract.order'
+import { GRID_MAX_D, GRID_MAX_ORDER, MAX_GRID_CELLS, MAX_PMDARIMA_RUNS, MAX_VISITED, parseAcfPacf, parseAicGrid, parseStationarity, tableVerdict } from './contract.order'
 import stationarityData from '../test/fixtures/stationarity.data.json'
 import acfPacfData from '../test/fixtures/acf_pacf.data.json'
 import aicGridData from '../test/fixtures/aic_grid.data.json'
@@ -71,6 +71,29 @@ describe('parseAcfPacf', () => {
 })
 
 describe('parseAicGrid', () => {
+  it('bounds its lists by the grid’s dimensions, as payloads.py does (the size cases of the shared corpus run them)', () => {
+    expect([GRID_MAX_ORDER, GRID_MAX_D, MAX_GRID_CELLS, MAX_PMDARIMA_RUNS, MAX_VISITED]).toEqual([5, 2, 324, 2, 72])
+  })
+
+  it('does not walk a cell params object longer than any cell has (payloads.py the same)', () => {
+    const data = copy(aicGridData) as { cells: { k_params: number; params: Record<string, unknown> }[] }
+    data.cells[9].params = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`x${i}`, 'not a number']))
+    const r = parseAicGrid(data)
+    expect(r.ok ? [] : r.errors).toEqual([`data.cells[9].params: has 13 entries, but k_params is ${data.cells[9].k_params}`])
+    data.cells[9].params = Object.fromEntries(Array.from({ length: data.cells[9].k_params }, (_, i) => [`x${i}`, 'not a number']))
+    const within = parseAicGrid(data)
+    expect((within.ok ? [] : within.errors).filter((e) => e.startsWith('data.cells[9].params["x'))).toHaveLength(data.cells[9].k_params) // a key from the file is quoted
+  })
+
+  it('quotes a value of any size in a short message', () => {
+    // An order of 200,000 numbers was once quoted whole: 400 kB of text for one error.
+    const data = copy(aicGridData) as { selection: { order: unknown } }
+    data.selection.order = new Array(200_000).fill(0)
+    const r = parseAicGrid(data)
+    expect(r.ok ? [] : r.errors).toContain('data.selection.order: expected [p, d, q], got an array of 200000')
+    expect((r.ok ? [] : r.errors).join('').length).toBeLessThan(1000)
+  })
+
   it('returns the cells, the selection and the cross-check', () => {
     const r = parseAicGrid(copy(aicGridData))
     expect(r.ok).toBe(true)

@@ -19,14 +19,16 @@ An empty list means the payload is valid. Like validate_envelope, it never raise
 
 from __future__ import annotations
 
+import functools
 import math
 import re
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
 
-from arima_forecasting.contract import MAX_SAFE_INTEGER
-from arima_forecasting.prep import SEGMENTS
+from arima_forecasting.contract import MAX_PROBLEMS, MAX_SAFE_INTEGER, more_problems
+from arima_forecasting.contract import shown as _show
+from arima_forecasting.prep import MAX_GAP_DAYS, SEGMENTS
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
@@ -42,9 +44,12 @@ BLANK = re.compile(
 )
 
 
-def _show(value: object) -> str:
-    text = repr(value)
-    return text if len(text) <= 40 else text[:37] + "..."
+class _Full(Exception):
+    """Raised by _Checker.add in place of problem MAX_PROBLEMS + 1: the validator stops there (_capped)."""
+
+    def __init__(self, problems: list[str]) -> None:
+        super().__init__(len(problems))
+        self.problems = problems
 
 
 class _Checker:
@@ -52,6 +57,8 @@ class _Checker:
         self.problems: list[str] = []
 
     def add(self, path: str, message: str) -> None:
+        if len(self.problems) == MAX_PROBLEMS:
+            raise _Full(self.problems)
         self.problems.append(f"{path}: {message}")
 
     def obj(self, value: object, path: str) -> dict[str, Any] | None:
@@ -79,12 +86,12 @@ class _Checker:
         if text is None:
             return None
         if _DATE.fullmatch(text) is None:
-            self.add(path, f"{text!r} is not a date written YYYY-MM-DD")
+            self.add(path, f"{_show(text)} is not a date written YYYY-MM-DD")
             return None
         try:
             date.fromisoformat(text)
         except ValueError:
-            self.add(path, f"{text!r} is not a calendar date")
+            self.add(path, f"{_show(text)} is not a calendar date")
             return None
         return text
 
@@ -135,6 +142,39 @@ class _Checker:
 _MISSING = object()
 
 
+def _capped(validate: Callable[..., list[str]]) -> Callable[..., list[str]]:
+    """A validator that stops at MAX_PROBLEMS problems and ends its list with more_problems (contract.md, "Bounds")."""
+
+    @functools.wraps(validate)
+    def run(*args: Any, **kwargs: Any) -> list[str]:
+        try:
+            return validate(*args, **kwargs)
+        except _Full as full:
+            return [*full.problems, more_problems("data")]
+
+    return run
+
+
+# Every list is bounded before it is walked, in both readers (contract.md, "Bounds"): a longer one is
+# one short problem and is not read, so no file, of 6 MB or 600, makes a reader slow or writes a
+# message per item past the bound. Lists of days and points take MAX_LIST: no list of trading days
+# can be longer than the download window's 4,291 calendar days, and the KDE grids have 200 points.
+# Short lists of names (meta's milestones and artifacts, eda's KDEs, the fit's lag lists) take
+# MAX_NAMES: 6, 18, 2 and 3 today. A list that enumerates a pinned set or an order takes that set's
+# size (each says so where it is read).
+MAX_LIST = 10_000
+MAX_NAMES = 100
+
+
+def _list(c: _Checker, value: object, path: str, most: int, what: str) -> list[Any] | None:
+    """An array of at most `most` items, or one short problem and None (the same text in both readers)."""
+    items = c.array(value, path)
+    if items is not None and len(items) > most:
+        c.add(path, f"has {len(items)} {what}, more than the {most} a reader takes")
+        return None
+    return items
+
+
 def _check_ascending(checker: _Checker, dates: list[str | None], path: str) -> None:
     previous: str | None = None
     for index, day in enumerate(dates):
@@ -145,6 +185,56 @@ def _check_ascending(checker: _Checker, dates: list[str | None], path: str) -> N
         previous = day
 
 
+# Project constants, pinned and never read from the file (config.OOS_WINDOW and config.TRAIN_FRACTION;
+# tests/test_payloads.py ties them): the out-of-sample window, as calendar dates with an exclusive end,
+# and the course window's train share. meta.windows.oos must state the window; prices.json's oos rows
+# must lie inside it and its train and test rows before it, and its train_fraction must be the share.
+# The made-up fixtures keep these (their oos day is 2024-01-02); the forecast fixtures do not (their
+# windows are in 2021), so the forecast files' windows are tied to prices.json's splits across files
+# (validate_forecast_prices), not pinned to dates.
+OOS_START = "2024-01-01"
+OOS_END_EXCLUSIVE = "2026-10-01"
+TRAIN_FRACTION = 0.9
+# prep.MAX_GAP_DAYS, imported: the producer's own coverage rule (prep.check_coverage) refuses a window
+# whose first bar is more than this many calendar days after its start, whose last bar is more than this
+# many before its exclusive end, or that has a longer gap between two bars. A reader applies it to the
+# oos rows, so rows dropped at either end or inside are caught (contract.md 3.2).
+OOS_MAX_GAP_DAYS = MAX_GAP_DAYS
+
+
+def _check_split_rule(c: _Checker, segments: list[str]) -> None:
+    """The producer's split (prep.train_size): the course window's first int(n x TRAIN_FRACTION) rows are
+    train and the rest test, with the pinned fraction, never the file's. A boundary moved by one row (and
+    the split counts rewritten to match) is refused here; the counts alone could not see it."""
+    n_train, n_test = segments.count("train"), segments.count("test")
+    want = int((n_train + n_test) * TRAIN_FRACTION)
+    if n_train != want:
+        c.add(
+            "data.rows",
+            f"{n_train} rows are train and {n_test} test, but the course window's {n_train + n_test} rows split at "
+            f"{TRAIN_FRACTION} give int({n_train + n_test} x {TRAIN_FRACTION}) = {want} train and {n_train + n_test - want} test (prep.train_size)",
+        )
+
+
+def _check_oos_coverage(c: _Checker, dates: list[str], segments: list[str]) -> None:
+    """The producer's coverage rule on the oos rows (prep.check_coverage with MAX_GAP_DAYS): the first at
+    most OOS_MAX_GAP_DAYS calendar days after OOS_START, the last at most that many before
+    OOS_END_EXCLUSIVE, and no two consecutive ones further apart. The dates are valid calendar dates."""
+    oos = [(i, date.fromisoformat(d)) for i, (d, s) in enumerate(zip(dates, segments, strict=True)) if s == "oos"]
+    if not oos:
+        return
+    rule = f"more than {OOS_MAX_GAP_DAYS} (prep.MAX_GAP_DAYS) means rows are missing"
+    (first_at, first), (last_at, last) = oos[0], oos[-1]
+    if (first - date.fromisoformat(OOS_START)).days > OOS_MAX_GAP_DAYS:
+        c.add(f"data.rows[{first_at}].date", f"the first oos row is {first}, {(first - date.fromisoformat(OOS_START)).days} calendar days after the out-of-sample window starts on {OOS_START}; {rule}")
+    if (date.fromisoformat(OOS_END_EXCLUSIVE) - last).days > OOS_MAX_GAP_DAYS:
+        c.add(f"data.rows[{last_at}].date", f"the last oos row is {last}, {(date.fromisoformat(OOS_END_EXCLUSIVE) - last).days} calendar days before the out-of-sample window ends on {OOS_END_EXCLUSIVE} (exclusive); {rule}")
+    for (_, a), (j, b) in zip(oos, oos[1:]):
+        if (b - a).days > OOS_MAX_GAP_DAYS:
+            c.add(f"data.rows[{j}].date", f"{b} is {(b - a).days} calendar days after the oos row before it, {a}; {rule}")
+
+
+@_capped
 def validate_prices(data: object) -> list[str]:
     """Every problem in a `prices` payload (contract.md section 3.2)."""
     c = _Checker()
@@ -160,7 +250,7 @@ def validate_prices(data: object) -> list[str]:
         c.string(c.key(src, "yfinance_version", "data.source"), "data.source.yfinance_version")
         sha = c.string(c.key(src, "raw_sha256", "data.source"), "data.source.raw_sha256")
         if sha is not None and _SHA256.fullmatch(sha) is None:
-            c.add("data.source.raw_sha256", f"{sha!r} is not 64 lowercase hex characters")
+            c.add("data.source.raw_sha256", f"{_show(sha)} is not 64 lowercase hex characters")
         c.integer(c.key(src, "raw_rows", "data.source"), "data.source.raw_rows", minimum=1)
         stamp = c.string(c.key(src, "downloaded_at", "data.source"), "data.source.downloaded_at")
         if stamp is not None:
@@ -171,7 +261,7 @@ def validate_prices(data: object) -> list[str]:
             except ValueError:
                 valid = False
             if not valid:
-                c.add("data.source.downloaded_at", f"{stamp!r} is not a UTC time written YYYY-MM-DDTHH:MM:SSZ")
+                c.add("data.source.downloaded_at", f"{_show(stamp)} is not a UTC time written YYYY-MM-DDTHH:MM:SSZ")
         request = c.key(src, "request", "data.source")
         if request is not _MISSING and (req := c.obj(request, "data.source.request")) is not None:
             start = c.date(c.key(req, "start", "data.source.request"), "data.source.request.start")
@@ -182,7 +272,7 @@ def validate_prices(data: object) -> list[str]:
             c.equals(c.key(req, "auto_adjust", "data.source.request"), True, "data.source.request.auto_adjust")
 
     rows_value = c.key(root, "rows", "data")
-    rows = c.array(rows_value, "data.rows")
+    rows = _list(c, rows_value, "data.rows", MAX_LIST, "rows")
     row_dates: list[str | None] = []
     row_segments: list[str | None] = []
     if rows is not None:
@@ -202,7 +292,7 @@ def validate_prices(data: object) -> list[str]:
             c.number(c.key(row, "log_close", at), f"{at}.log_close")
             segment = c.key(row, "segment", at)
             if segment is not _MISSING and segment not in SEGMENTS:
-                c.add(f"{at}.segment", f"expected one of {', '.join(SEGMENTS)}, got {segment!r}")
+                c.add(f"{at}.segment", f"expected one of {', '.join(SEGMENTS)}, got {_show(segment)}")
                 segment = None
             row_segments.append(None if segment is _MISSING else segment)
         _check_ascending(c, row_dates, "data.rows")
@@ -213,13 +303,16 @@ def validate_prices(data: object) -> list[str]:
             if segment is None:
                 continue
             if order[segment] < last_rank:
-                c.add(f"data.rows[{index}].segment", f"{segment!r} after a later segment; expected train, then test, then oos")
+                c.add(f"data.rows[{index}].segment", f"{_show(segment)} after a later segment; expected train, then test, then oos")
             last_rank = max(last_rank, order[segment])
+        if None not in row_dates and None not in row_segments:
+            _check_split_rule(c, row_segments)
+            _check_oos_coverage(c, row_dates, row_segments)  # type: ignore[arg-type]
 
     fill = c.key(root, "fill", "data")
     if fill is not _MISSING and (fl := c.obj(fill, "data.fill")) is not None:
         c.equals(c.key(fl, "method", "data.fill"), "ffill", "data.fill.method")
-        filled = c.array(c.key(fl, "filled_dates", "data.fill"), "data.fill.filled_dates")
+        filled = _list(c, c.key(fl, "filled_dates", "data.fill"), "data.fill.filled_dates", MAX_LIST, "dates")
         if filled is not None:
             days = [c.date(day, f"data.fill.filled_dates[{i}]") for i, day in enumerate(filled)]
             for i in range(1, len(days)):
@@ -235,6 +328,8 @@ def validate_prices(data: object) -> list[str]:
         fraction = c.number(c.key(sp, "train_fraction", "data.splits"), "data.splits.train_fraction")
         if fraction is not None and not 0 < fraction < 1:
             c.add("data.splits.train_fraction", f"must be between 0 and 1, got {fraction}")
+        elif fraction is not None and fraction != TRAIN_FRACTION:
+            c.add("data.splits.train_fraction", f"is {fraction}, but this reader splits the course window at {TRAIN_FRACTION}")
         for name in SEGMENTS:
             at = f"data.splits.{name}"
             block = c.key(sp, name, "data.splits")
@@ -242,6 +337,11 @@ def validate_prices(data: object) -> list[str]:
                 continue
             start = c.date(c.key(bl, "start", at), f"{at}.start")
             end = c.date(c.key(bl, "end", at), f"{at}.end")
+            # The pinned out-of-sample window: the oos segment inside it, train and test before it.
+            if name == "oos" and start is not None and end is not None and not (OOS_START <= start and end < OOS_END_EXCLUSIVE):
+                c.add(at, f"runs {start} to {end}, but this reader's out-of-sample window is {OOS_START} to {OOS_END_EXCLUSIVE} (exclusive)")
+            if name != "oos" and end is not None and not end < OOS_START:
+                c.add(f"{at}.end", f"is {end}, but the {name} rows come before the out-of-sample window, which starts {OOS_START}")
             n = c.integer(c.key(bl, "n", at), f"{at}.n", minimum=1)
             if rows is None or None in row_dates or None in row_segments:
                 continue
@@ -266,7 +366,7 @@ def _check_kde(c: _Checker, item: object, at: str) -> str | None:
         value = c.number(c.key(kde, name, at), f"{at}.{name}")
         if value is not None and value <= 0:
             c.add(f"{at}.{name}", f"must be positive, got {value}")
-    points = c.array(c.key(kde, "points", at), f"{at}.points")
+    points = _list(c, c.key(kde, "points", at), f"{at}.points", MAX_LIST, "points")
     if points is not None:
         if len(points) < 2:
             c.add(f"{at}.points", f"expected at least 2 points, got {len(points)}")
@@ -288,6 +388,7 @@ def _check_kde(c: _Checker, item: object, at: str) -> str | None:
     return variable
 
 
+@_capped
 def validate_eda(data: object) -> list[str]:
     """Every problem in an `eda` payload (contract.md section 3.3)."""
     c = _Checker()
@@ -316,7 +417,7 @@ def validate_eda(data: object) -> list[str]:
             for name in ("mean", "std", "skew", "excess_kurtosis"):
                 c.number(c.key(ret, name, "data.summary.log_return"), f"data.summary.log_return.{name}")
 
-    kdes = c.array(c.key(root, "kdes", "data"), "data.kdes")
+    kdes = _list(c, c.key(root, "kdes", "data"), "data.kdes", MAX_NAMES, "KDEs")
     if kdes is not None:
         variables = [_check_kde(c, item, f"data.kdes[{i}]") for i, item in enumerate(kdes)]
         for required in KDE_VARIABLES_REQUIRED:
@@ -324,13 +425,13 @@ def validate_eda(data: object) -> list[str]:
                 c.add("data.kdes", f"no KDE for {required!r}")
         named = [v for v in variables if v is not None]
         if len(set(named)) != len(named):
-            c.add("data.kdes", f"duplicate variables: {named}")
+            c.add("data.kdes", f"duplicate variables: {_show(next(v for i, v in enumerate(named) if v in named[:i]))} appears more than once")
 
     decomposition = c.key(root, "decomposition", "data")
     if decomposition is not _MISSING and (dc := c.obj(decomposition, "data.decomposition")) is not None:
         c.equals(c.key(dc, "model", "data.decomposition"), "additive", "data.decomposition.model")
         period = c.integer(c.key(dc, "period", "data.decomposition"), "data.decomposition.period", minimum=2)
-        rows = c.array(c.key(dc, "rows", "data.decomposition"), "data.decomposition.rows")
+        rows = _list(c, c.key(dc, "rows", "data.decomposition"), "data.decomposition.rows", MAX_LIST, "rows")
         if rows is not None:
             dates: list[str | None] = []
             nulls: list[bool] = []
@@ -367,7 +468,7 @@ def validate_eda(data: object) -> list[str]:
                     c.add(
                         "data.decomposition.rows",
                         f"runs {dates[0]} to {dates[-1]}, but the summary covers "
-                        f"{summary.get('start')} to {summary.get('end')}",
+                        f"{_show(summary.get('start'))} to {_show(summary.get('end'))}",
                     )
     return c.problems
 
@@ -375,6 +476,7 @@ def validate_eda(data: object) -> list[str]:
 MILESTONE_STATUSES = ("done", "current", "planned")
 
 
+@_capped
 def validate_meta(data: object) -> list[str]:
     """Every problem in a `meta` payload (contract.md section 3.1), the rules of the app's parseMeta.
 
@@ -402,8 +504,10 @@ def validate_meta(data: object) -> list[str]:
             end = c.date(c.key(window, "end_exclusive", at), f"{at}.end_exclusive")
             if start is not None and end is not None and start >= end:
                 c.add(at, f"start {start} must be before end_exclusive {end}")
+            elif name == "oos" and start is not None and end is not None and (start, end) != (OOS_START, OOS_END_EXCLUSIVE):
+                c.add(at, f"is {start} to {end}, but this reader's out-of-sample window is {OOS_START} to {OOS_END_EXCLUSIVE} (exclusive)")
 
-    milestones = c.array(c.key(root, "milestones", "data"), "data.milestones")
+    milestones = _list(c, c.key(root, "milestones", "data"), "data.milestones", MAX_NAMES, "milestones")
     if milestones is not None:
         before = len(c.problems)
         seen: set[int] = set()
@@ -429,7 +533,7 @@ def validate_meta(data: object) -> list[str]:
         if len(c.problems) == before and statuses.count("current") != 1:
             c.add("data.milestones", f"expected exactly one 'current' milestone, found {statuses.count('current')}")
 
-    artifacts = c.array(c.key(root, "artifacts", "data"), "data.artifacts")
+    artifacts = _list(c, c.key(root, "artifacts", "data"), "data.artifacts", MAX_NAMES, "artifacts")
     names: list[str] = []
     if artifacts is not None:
         for index, item in enumerate(artifacts):
@@ -437,7 +541,7 @@ def validate_meta(data: object) -> list[str]:
             if name is not None:
                 names.append(name)
     if "held_artifacts" in root:  # added in 1.1.0; a 1.0.x file has no such key
-        held = c.array(root["held_artifacts"], "data.held_artifacts")
+        held = _list(c, root["held_artifacts"], "data.held_artifacts", MAX_NAMES, "artifacts")
         if held is not None:
             for index, item in enumerate(held):
                 if not isinstance(item, str) or item not in names or item == "meta" or held.index(item) != index:
@@ -567,6 +671,7 @@ def _check_verdict(c: _Checker, value: object, adf: bool | None, kp: bool | None
         c.add(path, f"is {verdict!r}, but ADF reject {adf} and KPSS reject {kp} make it {_table_verdict(adf, kp)!r}")
 
 
+@_capped
 def validate_stationarity(data: object) -> list[str]:
     """Every problem in a `stationarity` payload (contract.md section 3.4)."""
     c = _Checker()
@@ -579,7 +684,7 @@ def validate_stationarity(data: object) -> list[str]:
     if alpha is not None and not 0 < alpha < 1:
         c.add("data.alpha", f"must be between 0 and 1, got {alpha}")
         alpha = None
-    transforms = c.array(c.key(root, "transforms", "data"), "data.transforms")
+    transforms = _list(c, c.key(root, "transforms", "data"), "data.transforms", len(TRANSFORM_D), "transforms")  # one per transform at most
     tests: list[tuple[int, bool, bool] | None] = []  # (d, adf rejects, kpss rejects) per transform
     if transforms is not None:
         if not transforms:
@@ -663,6 +768,7 @@ def validate_stationarity(data: object) -> list[str]:
     return c.problems
 
 
+@_capped
 def validate_acf_pacf(data: object) -> list[str]:
     """Every problem in an `acf_pacf` payload (contract.md section 3.5)."""
     c = _Checker()
@@ -685,7 +791,7 @@ def validate_acf_pacf(data: object) -> list[str]:
         for name in ("fft", "adjusted", "bartlett_confint"):
             _boolean(c, c.key(st, name, "data.acf_settings"), f"data.acf_settings.{name}")
     c.string(c.key(root, "pacf_method", "data"), "data.pacf_method")
-    series = c.array(c.key(root, "series", "data"), "data.series")
+    series = _list(c, c.key(root, "series", "data"), "data.series", len(TRANSFORM_D), "series")  # one per transform at most
     if series is not None:
         if not series:
             c.add("data.series", "must not be empty")
@@ -705,7 +811,7 @@ def validate_acf_pacf(data: object) -> list[str]:
                 previous = d
             c.integer(c.key(s, "n", at), f"{at}.n", minimum=2)
             counts = {name: c.integer(c.key(s, f"{name}_outside_count", at), f"{at}.{name}_outside_count") for name in ("acf", "pacf")}
-            rows = c.array(c.key(s, "rows", at), f"{at}.rows")
+            rows = _list(c, c.key(s, "rows", at), f"{at}.rows", MAX_LIST, "rows")
             if rows is None:
                 continue
             flags: dict[str, list[bool | None]] = {"acf": [], "pacf": []}
@@ -745,7 +851,14 @@ def validate_acf_pacf(data: object) -> list[str]:
 
 
 def _finite(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    """A number that is a finite double. An int too big for a double (a JSON integer of 400 digits;
+    JSON.parse reads it as Infinity) is not one, and is refused here: math.isfinite would raise."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 # The two-sided normal quantile z = Phi^-1(1 - alpha / 2) for each alpha a payload may use. A table
@@ -775,6 +888,18 @@ _START = re.compile(
 # The largest log-likelihood a cell may lose against a model it nests (selection.NESTING_TOLERANCE).
 # Pinned here, not read from the file being checked: a file cannot loosen its own check.
 NESTING_TOLERANCE = 2e-3
+# The grid's dimensions (selection.GRID_ORDERS, GRID_SPECS; tests/test_payloads.py ties them): p and
+# q run from 0 to 5 and d from 0 to 2, each d with some of the three trend codes, so a grid has at
+# most 6 x 6 x 3 x 3 = 324 cells (the export's has 144). A cell has at most p + q + 2 = 12 parameters.
+GRID_MAX_ORDER = 5
+GRID_MAX_D = 2
+MAX_GRID_CELLS = (GRID_MAX_ORDER + 1) ** 2 * (GRID_MAX_D + 1) * len(TREND_CODES)
+MAX_CELL_PARAMS = 2 * GRID_MAX_ORDER + 2
+# The pmdarima cross-check (selection.PMDARIMA_RUNS) makes two runs. Each stepwise search fits each
+# (order, seasonal order, intercept) once (pmdarima/arima/_auto_solvers.py:230, `results_dict`), with p
+# and q up to max_p = max_q = 5 (both runs) and one d, non-seasonal: at most 6 x 6 x 2 = 72 fits.
+MAX_PMDARIMA_RUNS = 2
+MAX_VISITED = 72
 START_GRAMMAR = "'default', 'random <k>', 'nested (p, d, q) <trend>' (optionally ', perturbed +' or '-'), each optionally followed by ', polished', or 'polished from (p, d, q) <trend>'"
 
 
@@ -802,7 +927,7 @@ def _check_cell(c: _Checker, item: object, at: str, n_train: int | None, thresho
             c.add(f"{at}.reason", f"must be null for an ok cell, got {_show(reason)}")
         elif status != "ok":
             c.string(reason, f"{at}.reason")
-    warns = c.array(c.key(cell, "warnings", at), f"{at}.warnings")
+    warns = _list(c, c.key(cell, "warnings", at), f"{at}.warnings", MAX_WARNINGS, "warnings")
     for i, w in enumerate(warns or []):
         wo = c.obj(w, f"{at}.warnings[{i}]")
         if wo is not None:
@@ -835,8 +960,9 @@ def _check_cell(c: _Checker, item: object, at: str, n_train: int | None, thresho
         if params is not None:
             if k is not None and len(params) != k:
                 c.add(f"{at}.params", f"has {len(params)} entries, but k_params is {k}")
-            for name, value in params.items():
-                c.number(value, f"{at}.params.{name}")
+            if len(params) <= MAX_CELL_PARAMS:  # a longer object is refused above (k is at most this), and not walked
+                for name, value in params.items():
+                    c.number(value, f"{at}.params[{_show(name)}]")  # a key from the file: quoted, as any value is
         nobs = c.integer(values["nobs_effective"], f"{at}.nobs_effective", minimum=1)
         if nobs is not None and n_train is not None and d is not None and nobs != n_train - d:
             c.add(f"{at}.nobs_effective", f"is {nobs}, but n_train - d is {n_train - d}")
@@ -870,6 +996,12 @@ def _nests(small: dict[str, Any], big: dict[str, Any]) -> bool:
     return not same and small["d"] == big["d"] and small["p"] <= big["p"] and small["q"] <= big["q"] and small["trend"] in (big["trend"], "n")
 
 
+def _whole(digits: str) -> int:
+    """A run of digits from a start label as an int; one too long for a safe integer reads as one past
+    the largest (int() of more than 4,300 digits raises, and no bound here is near 2**53)."""
+    return int(digits) if len(digits) <= 15 else MAX_SAFE_INTEGER + 1
+
+
 def _check_starts(c: _Checker, cells: list[dict[str, Any]], specs: list[tuple[int, list[str]]], ps: list[int], qs: list[int], random_starts: int | None) -> None:
     """A random start must be one the settings drew; a nested start must be a model of the grid one
     step smaller than the cell (the next smaller p or q, or no trend), so the start existed."""
@@ -880,18 +1012,18 @@ def _check_starts(c: _Checker, cells: list[dict[str, Any]], specs: list[tuple[in
             continue
         at = f"data.cells[{i}].start"
         if match.group(1) is not None:
-            if random_starts is not None and int(match.group(1)) > random_starts:
-                c.add(at, f"is {match.group(0)!r}, but fit_settings.random_starts is {random_starts}")
+            if random_starts is not None and _whole(match.group(1)) > random_starts:
+                c.add(at, f"is {_show(match.group(0))}, but fit_settings.random_starts is {random_starts}")
             if x["p"] == 0 or x["q"] == 0:
-                c.add(at, f"is {match.group(0)!r}, but random starts are drawn only when p and q are both at least 1")
+                c.add(at, f"is {_show(match.group(0))}, but random starts are drawn only when p and q are both at least 1")
         elif match.group(8) is not None:
-            sp, sd, sq, st = int(match.group(8)), int(match.group(9)), int(match.group(10)), match.group(11)
+            sp, sd, sq, st = _whole(match.group(8)), _whole(match.group(9)), _whole(match.group(10)), match.group(11)
             if sd != x["d"] or sp not in ps or sq not in qs or st not in trends.get(x["d"], []):
-                c.add(at, f"is {match.group(0)!r}, which is not a cell of the grid with the same d")
+                c.add(at, f"is {_show(match.group(0))}, which is not a cell of the grid with the same d")
         elif match.group(2) is not None:
-            sp, sd, sq, st = int(match.group(2)), int(match.group(3)), int(match.group(4)), match.group(5)
+            sp, sd, sq, st = _whole(match.group(2)), _whole(match.group(3)), _whole(match.group(4)), match.group(5)
             if match.group(6) is not None and (sp, sq) == (x["p"], x["q"]):
-                c.add(at, f"is {match.group(0)!r}, but the step that drops the trend adds no AR or MA coefficient to perturb")
+                c.add(at, f"is {_show(match.group(0))}, but the step that drops the trend adds no AR or MA coefficient to perturb")
             steps = []
             if x["p"] in ps and ps.index(x["p"]) > 0:
                 steps.append((ps[ps.index(x["p"]) - 1], x["q"], x["trend"]))
@@ -900,7 +1032,7 @@ def _check_starts(c: _Checker, cells: list[dict[str, Any]], specs: list[tuple[in
             if x["trend"] != "n" and "n" in trends.get(x["d"], []):
                 steps.append((x["p"], x["q"], "n"))
             if sd != x["d"] or (sp, sq, st) not in steps:
-                c.add(at, f"is {match.group(0)!r}, which is not a model of the grid one step smaller than ({x['p']}, {x['d']}, {x['q']}) {x['trend']}")
+                c.add(at, f"is {_show(match.group(0))}, which is not a model of the grid one step smaller than ({x['p']}, {x['d']}, {x['q']}) {x['trend']}")
 
 
 def _check_nesting(c: _Checker, cells: list[dict[str, Any]], tolerance: float) -> None:
@@ -918,10 +1050,10 @@ def _check_nesting(c: _Checker, cells: list[dict[str, Any]], tolerance: float) -
 
 
 def _check_grid_axis(c: _Checker, value: object, path: str) -> list[int] | None:
-    items = c.array(value, path)
+    items = _list(c, value, path, GRID_MAX_ORDER + 1, "orders")
     if items is None:
         return None
-    out = [c.integer(v, f"{path}[{i}]") for i, v in enumerate(items)]
+    out = [_bounded(c, v, f"{path}[{i}]", GRID_MAX_ORDER) for i, v in enumerate(items)]
     if not out:
         c.add(path, "must not be empty")
     if None in out:
@@ -932,6 +1064,7 @@ def _check_grid_axis(c: _Checker, value: object, path: str) -> list[int] | None:
     return out  # type: ignore[return-value]
 
 
+@_capped
 def validate_aic_grid(data: object) -> list[str]:
     """Every problem in an `aic_grid` payload (contract.md section 3.6)."""
     c = _Checker()
@@ -948,7 +1081,7 @@ def validate_aic_grid(data: object) -> list[str]:
     if grid is not _MISSING and (gd := c.obj(grid, "data.grid")) is not None:
         ps = _check_grid_axis(c, c.key(gd, "p", "data.grid"), "data.grid.p")
         qs = _check_grid_axis(c, c.key(gd, "q", "data.grid"), "data.grid.q")
-        raw_specs = c.array(c.key(gd, "specs", "data.grid"), "data.grid.specs")
+        raw_specs = _list(c, c.key(gd, "specs", "data.grid"), "data.grid.specs", GRID_MAX_D + 1, "specs")
         if raw_specs is not None:
             specs = []
             before = len(c.problems)
@@ -959,8 +1092,8 @@ def validate_aic_grid(data: object) -> list[str]:
                 sp = c.obj(item, at)
                 if sp is None:
                     continue
-                d = c.integer(c.key(sp, "d", at), f"{at}.d")
-                trends = c.array(c.key(sp, "trends", at), f"{at}.trends")
+                d = _bounded(c, c.key(sp, "d", at), f"{at}.d", GRID_MAX_D)
+                trends = _list(c, c.key(sp, "trends", at), f"{at}.trends", len(TREND_CODES), "trends")
                 codes = [_choice(c, t, TREND_CODES, f"{at}.trends[{j}]") for j, t in enumerate(trends or [])]
                 if trends is not None and (not codes or None in codes or any(b <= a for a, b in zip(codes, codes[1:]))):  # type: ignore[operator]
                     c.add(f"{at}.trends", f"must be a non-empty list of trend codes in alphabetical order, got {_show(trends)}")
@@ -996,7 +1129,7 @@ def validate_aic_grid(data: object) -> list[str]:
         tolerance = NESTING_TOLERANCE  # the reader's own bound, whatever the file says
 
     cells: list[dict[str, Any]] | None = None
-    raw_cells = c.array(c.key(root, "cells", "data"), "data.cells")
+    raw_cells = _list(c, c.key(root, "cells", "data"), "data.cells", MAX_GRID_CELLS, "cells")
     if raw_cells is not None:
         parsed = [_check_cell(c, item, f"data.cells[{i}]", n_train, threshold) for i, item in enumerate(raw_cells)]
         if None not in parsed:
@@ -1036,10 +1169,10 @@ def validate_aic_grid(data: object) -> list[str]:
         bic = c.number(c.key(sl, "bic", at), f"{at}.bic")
         k = c.integer(c.key(sl, "k_params", at), f"{at}.k_params", minimum=1)
         c.string(c.key(sl, "rule", at), f"{at}.rule")
-        within = _list_of(c, c.key(sl, "within_2_aic", at), f"{at}.within_2_aic", _NEAR_TIE_FIELDS)
+        within = _list_of(c, c.key(sl, "within_2_aic", at), f"{at}.within_2_aic", _NEAR_TIE_FIELDS, MAX_GRID_CELLS, "cells")
         bic_choice = _fields(c, c.key(sl, "bic_choice", at), f"{at}.bic_choice", _BIC_FIELDS)
         per_d = _best_per_d(c, c.key(sl, "best_per_d", at), f"{at}.best_per_d")
-        counts = _list_of(c, c.key(sl, "status_counts", at), f"{at}.status_counts", _COUNT_FIELDS)
+        counts = _list_of(c, c.key(sl, "status_counts", at), f"{at}.status_counts", _COUNT_FIELDS, GRID_MAX_D + 1, "entries")
         if order is not None and d_sel is not None and order[1] != d_sel:
             c.add(f"{at}.order", f"has d = {order[1]}, but d_selected is {d_sel}")
         if specs is not None and d_sel is not None and d_sel not in [d for d, _ in specs]:
@@ -1082,7 +1215,7 @@ def validate_aic_grid(data: object) -> list[str]:
         status = _choice(c, c.key(pc, "status", at), CHECK_STATUSES, f"{at}.status")
         reason = c.key(pc, "reason", at)
         version = c.key(pc, "version", at)
-        runs = c.array(c.key(pc, "runs", at), f"{at}.runs")
+        runs = _list(c, c.key(pc, "runs", at), f"{at}.runs", MAX_PMDARIMA_RUNS, "runs")
         if status == "ok":
             if reason is not _MISSING and reason is not None:
                 c.add(f"{at}.reason", f"must be null when status is ok, got {_show(reason)}")
@@ -1130,8 +1263,8 @@ def _fields(c: _Checker, value: object, path: str, spec: tuple[tuple[str, str], 
     return tuple(out) if len(c.problems) == before else None
 
 
-def _list_of(c: _Checker, value: object, path: str, spec: tuple[tuple[str, str], ...]) -> list[tuple[Any, ...]] | None:
-    items = c.array(value, path)
+def _list_of(c: _Checker, value: object, path: str, spec: tuple[tuple[str, str], ...], most: int, what: str) -> list[tuple[Any, ...]] | None:
+    items = _list(c, value, path, most, what)
     if items is None:
         return None
     parsed = [_fields(c, item, f"{path}[{i}]", spec) for i, item in enumerate(items)]
@@ -1139,7 +1272,7 @@ def _list_of(c: _Checker, value: object, path: str, spec: tuple[tuple[str, str],
 
 
 def _best_per_d(c: _Checker, value: object, path: str) -> list[tuple[int, tuple[Any, ...] | None]] | None:
-    items = c.array(value, path)
+    items = _list(c, value, path, GRID_MAX_D + 1, "entries")  # one per d at most
     if items is None:
         return None
     before = len(c.problems)
@@ -1176,7 +1309,7 @@ def _check_run(c: _Checker, item: object, at: str, cells: list[dict[str, Any]] |
     aic = c.number(c.key(run, "aic", at), f"{at}.aic")
     _boolean(c, c.key(run, "converged", at), f"{at}.converged")
     c.integer(c.key(run, "iterations", at), f"{at}.iterations")
-    visited = c.array(c.key(run, "visited", at), f"{at}.visited")
+    visited = _list(c, c.key(run, "visited", at), f"{at}.visited", MAX_VISITED, "fits")
     if visited is not None:
         if not visited:
             c.add(f"{at}.visited", "must not be empty: the chosen model is its first entry")
@@ -1190,7 +1323,7 @@ def _check_run(c: _Checker, item: object, at: str, cells: list[dict[str, Any]] |
             vaic = c.number(c.key(vo, "aic", vat), f"{vat}.aic")
             if j == 0 and None not in (vorder, vint, vaic, order, intercept, aic) and (vorder, vint, vaic) != (order, intercept, aic):
                 c.add(vat, "must be the chosen model: the same order, with_intercept and aic as the run")
-    warns = c.array(c.key(run, "warnings", at), f"{at}.warnings")
+    warns = _list(c, c.key(run, "warnings", at), f"{at}.warnings", MAX_WARNINGS, "warnings")
     for j, w in enumerate(warns or []):
         if (wo := c.obj(w, f"{at}.warnings[{j}]")) is not None:
             c.string(c.key(wo, "category", f"{at}.warnings[{j}]"), f"{at}.warnings[{j}].category")
@@ -1237,6 +1370,7 @@ _REL = 1e-9  # relative tolerance for a value Python recomputes from other expor
 # problem, not a list of 1e8 parameter names. The burn-in is d for these models, so at most MAX_D.
 MAX_PQ = 10
 MAX_D = 2
+MAX_FIT_PARAMS = 2 * MAX_PQ + 2  # p + q coefficients, a trend term and sigma2: the most a bounded order has
 # The refit's log-likelihood tolerance and the cancelling distance (fitting.LLF_TOLERANCE and
 # fitting.CANCEL_DISTANCE). Pinned here, not read from the file being checked, as NESTING_TOLERANCE
 # is: a file that states another value is refused, so it cannot loosen its own checks.
@@ -1258,7 +1392,9 @@ P_FLOOR = 1e-300
 
 
 def _close(a: float, b: float, rel: float = _REL) -> bool:
-    return abs(a - b) <= rel * max(1.0, abs(a), abs(b))
+    """Equal to `rel` relative, with an absolute floor of `rel`. Never true when either is not finite:
+    a recomputed value that overflowed to inf would otherwise match any number (inf <= rel * inf)."""
+    return math.isfinite(a) and math.isfinite(b) and abs(a - b) <= rel * max(1.0, abs(a), abs(b))
 
 
 def _p_close(p: float, want: float) -> bool:
@@ -1292,7 +1428,7 @@ LIBRARY_NAMES = {"drift": "x1"}  # statsmodels 0.15.0 labels ARIMA's drift as an
 
 
 def _int_list(c: _Checker, value: object, path: str) -> list[int] | None:
-    items = c.array(value, path)
+    items = _list(c, value, path, MAX_NAMES, "lags")
     if items is None:
         return None
     out = [c.integer(v, f"{path}[{i}]", minimum=1) for i, v in enumerate(items)]
@@ -1304,8 +1440,13 @@ def _int_list(c: _Checker, value: object, path: str) -> list[int] | None:
     return out  # type: ignore[return-value]
 
 
+# The most warnings one fit may list (fit.models[].warnings, course_track's, each forecast refit's),
+# checked before the list is walked: a file with millions of warnings gets one short problem (both readers).
+MAX_WARNINGS = 100
+
+
 def _warnings(c: _Checker, value: object, path: str) -> None:
-    items = c.array(value, path)
+    items = _list(c, value, path, MAX_WARNINGS, "warnings")
     for i, item in enumerate(items or []):
         w = c.obj(item, f"{path}[{i}]")
         if w is not None:
@@ -1381,7 +1522,7 @@ _NO_TEST = ("z", "p_value")  # sigma2's: null always, a boundary null (contract.
 
 
 def _check_params(c: _Checker, value: object, at: str, names: list[str] | None) -> None:
-    rows = c.array(value, at)
+    rows = _list(c, value, at, MAX_FIT_PARAMS, "rows")
     if rows is None:
         return
     if names is not None and len(rows) != len(names):
@@ -1393,10 +1534,10 @@ def _check_params(c: _Checker, value: object, at: str, names: list[str] | None) 
             continue
         name = c.string(c.key(row, "name", rat), f"{rat}.name")
         if name is not None and names is not None and i < len(names) and name != names[i]:
-            c.add(f"{rat}.name", f"is {name!r}, expected {names[i]!r}")
+            c.add(f"{rat}.name", f"is {_show(name)}, expected {names[i]!r}")
         library = c.string(c.key(row, "library_name", rat), f"{rat}.library_name")
         if name is not None and library is not None and library != LIBRARY_NAMES.get(name, name):
-            c.add(f"{rat}.library_name", f"is {library!r}; statsmodels labels {name!r} as {LIBRARY_NAMES.get(name, name)!r}")
+            c.add(f"{rat}.library_name", f"is {_show(library)}; statsmodels labels {_show(name)} as {_show(LIBRARY_NAMES.get(name, name))}")
         val = c.number(c.key(row, "value", rat), f"{rat}.value")
         if name == "sigma2" and val is not None and val <= 0:  # Python only
             c.add(f"{rat}.value", f"must be positive, got {val}: sigma2 is a variance")
@@ -1444,6 +1585,9 @@ def _check_roots(c: _Checker, value: object, at: str, count: int | None) -> list
     if count is not None and len(rows) != count:
         c.add(at, f"has {len(rows)} roots, expected {count}")
         return None
+    if len(rows) > MAX_PQ:  # no count (the order was refused): the list is bounded all the same
+        c.add(at, f"has {len(rows)} roots, more than the {MAX_PQ} a reader takes")
+        return None
     out: list[complex] = []
     for i, item in enumerate(rows):
         rat = f"{at}[{i}]"
@@ -1484,7 +1628,7 @@ def _best_matching(ar: list[complex], ma: list[complex], distance: float) -> tup
 
 
 def _check_pairs(c: _Checker, value: object, at: str, ar: list[complex] | None, ma: list[complex] | None, distance: float | None) -> None:
-    rows = c.array(value, at)
+    rows = _list(c, value, at, MAX_PQ, "pairs")  # one root of each kind per pair at most
     if rows is None:
         return
     got: list[tuple[int, int]] = []
@@ -1530,7 +1674,7 @@ def _check_diagnostics(c: _Checker, value: object, at: str, model: dict[str, Any
         c.add(f"{at}.burn_excluded", f"is {burn}, but the fit's loglikelihood_burn is {model['burn']}")
     if n is not None and burn is not None and model.get("nobs") is not None and n != model["nobs"] - burn:
         c.add(f"{at}.n", f"is {n}, but nobs - burn_excluded is {model['nobs'] - burn}")
-    burned = c.array(c.key(dg, "burned", at), f"{at}.burned")
+    burned = _list(c, c.key(dg, "burned", at), f"{at}.burned", MAX_D, "rows")  # burn_excluded is at most MAX_D
     if burned is not None:
         if burn is not None and len(burned) != burn:
             c.add(f"{at}.burned", f"has {len(burned)} rows, but burn_excluded is {burn}")
@@ -1543,7 +1687,7 @@ def _check_diagnostics(c: _Checker, value: object, at: str, model: dict[str, Any
     m = c.number(c.key(dg, "max_abs_resid_after_burn", at), f"{at}.max_abs_resid_after_burn")
     if m is not None and m < 0:
         c.add(f"{at}.max_abs_resid_after_burn", f"must be >= 0, got {m}")
-    lb = c.array(c.key(dg, "ljung_box", at), f"{at}.ljung_box")
+    lb = _list(c, c.key(dg, "ljung_box", at), f"{at}.ljung_box", len(LJUNG_BOX_LAGS), "rows")
     lb_rows: list[tuple[bool, float | None]] = []
     previous: tuple[int, float] | None = None  # the last row's lag and Q
     if lb is not None:
@@ -1610,7 +1754,7 @@ def _check_diagnostics(c: _Checker, value: object, at: str, model: dict[str, Any
             want = n / 6.0 * (skew * skew + 0.25 * (kurtosis - 3.0) * (kurtosis - 3.0))  # type: ignore[operator]
             if not (math.isfinite(want) and _close(stat, want)):  # type: ignore[arg-type]
                 c.add(f"{jat}.statistic", f"is {stat}, but n / 6 (skew^2 + (kurtosis - 3)^2 / 4) with n {n}, skew {skew} and kurtosis {kurtosis} is {want}")
-    arch = c.array(c.key(dg, "arch_lm", at), f"{at}.arch_lm")
+    arch = _list(c, c.key(dg, "arch_lm", at), f"{at}.arch_lm", len(ARCH_LM_LAGS), "rows")
     arch_p: list[float | None] = []
     if arch is not None:
         lags = settings.get("arch_lm_lags")
@@ -1684,6 +1828,7 @@ def _check_information(c: _Checker, vals: dict[str, float | None], llf: float, k
             c.add(f"{at}.{name}", f"is {got}, but {labels[name]} is {expected}{'' if name == 'aic' else ' (n = nobs_effective)'}")
 
 
+@_capped
 def validate_fit(data: object) -> list[str]:
     """Every problem in a `fit` payload (contract.md section 3.7)."""
     c = _Checker()
@@ -1728,7 +1873,7 @@ def validate_fit(data: object) -> list[str]:
         _pinned(c, _int_list(c, c.key(s, "arch_lm_lags", sat), f"{sat}.arch_lm_lags"), f"{sat}.arch_lm_lags", list(ARCH_LM_LAGS), "checks ARCH-LM at lags")
         _pinned(c, c.integer(c.key(s, "arch_lm_ddof", sat), f"{sat}.arch_lm_ddof"), f"{sat}.arch_lm_ddof", ARCH_LM_DDOF, "checks ARCH-LM with ddof")
         _pinned(c, c.integer(c.key(s, "nlags", sat), f"{sat}.nlags", minimum=1), f"{sat}.nlags", NLAGS, "checks the correlograms at nlags")
-    models = c.array(c.key(root, "models", "data"), "data.models")
+    models = _list(c, c.key(root, "models", "data"), "data.models", len(MODEL_IDS), "models")
     parsed: dict[str, dict[str, Any]] = {}
     if models is not None:
         ids = [m.get("id") if isinstance(m, dict) else None for m in models]
@@ -1840,7 +1985,7 @@ def _check_course_track(c: _Checker, value: object, n_train: int | None, course:
         nobs = c.integer(c.key(f, "nobs", fat), f"{fat}.nobs", minimum=2)
         if nobs is not None and n_course is not None and nobs != n_course:
             c.add(f"{fat}.nobs", f"is {nobs}, but n_course is {n_course}")
-        for i, item in enumerate(c.array(c.key(f, "params", fat), f"{fat}.params") or []):
+        for i, item in enumerate(_list(c, c.key(f, "params", fat), f"{fat}.params", MAX_FIT_PARAMS, "rows") or []):
             row = c.obj(item, f"{fat}.params[{i}]")
             if row is not None:
                 c.string(c.key(row, "name", f"{fat}.params[{i}]"), f"{fat}.params[{i}].name")
@@ -1905,7 +2050,7 @@ def _check_correlogram(c: _Checker, value: object, at: str, nlags: int | None, n
     elif band is not None and n is not None and z is not None and band != z / math.sqrt(n):
         c.add(f"{at}.band", f"is {band}, but z / sqrt(n) is {z / math.sqrt(n)}")
     count = c.integer(c.key(g, "outside_count", at), f"{at}.outside_count")
-    rows = c.array(c.key(g, "rows", at), f"{at}.rows")
+    rows = _list(c, c.key(g, "rows", at), f"{at}.rows", MAX_LIST, "rows")
     if rows is None:
         return count
     if nlags is not None and len(rows) != nlags:
@@ -1933,6 +2078,7 @@ def _check_correlogram(c: _Checker, value: object, at: str, nlags: int | None, n
     return count
 
 
+@_capped
 def validate_residuals(data: object, model_id: str) -> list[str]:
     """Every problem in a `residuals_<model_id>` payload (contract.md section 3.8)."""
     c = _Checker()
@@ -1948,7 +2094,7 @@ def validate_residuals(data: object, model_id: str) -> list[str]:
         c.add("data.z", f"is {z}, expected {Z_FOR_ALPHA[0.05]}")
         z = None
     nlags = c.integer(c.key(root, "nlags", "data"), "data.nlags", minimum=1)
-    rows = c.array(c.key(root, "rows", "data"), "data.rows")
+    rows = _list(c, c.key(root, "rows", "data"), "data.rows", MAX_LIST, "rows")
     if rows is not None:
         if n is not None and len(rows) != n:
             c.add("data.rows", f"has {len(rows)} rows, but n is {n}")
@@ -1963,7 +2109,7 @@ def validate_residuals(data: object, model_id: str) -> list[str]:
         _check_ascending(c, dates, "data.rows")
     for name in ("acf", "acf_squared"):
         _check_correlogram(c, c.key(root, name, "data"), f"data.{name}", nlags, n, z)
-    qq = c.array(c.key(root, "qq", "data"), "data.qq")
+    qq = _list(c, c.key(root, "qq", "data"), "data.qq", MAX_LIST, "points")
     if qq is not None:
         if n is not None and len(qq) != n:
             c.add("data.qq", f"has {len(qq)} points, but n is {n}")
@@ -1999,9 +2145,10 @@ def validate_fit_residuals(fit: object, residuals: dict[str, object]) -> list[st
     models = data.get("models") if isinstance(data.get("models"), list) else []
     settings = data.get("diagnostic_settings") if isinstance(data.get("diagnostic_settings"), dict) else {}
     for model in models:
-        if not isinstance(model, dict) or not isinstance(model.get("diagnostics"), dict):
+        # A model whose id is not one of MODEL_IDS is validate_fit's problem; it names no file here.
+        if not isinstance(model, dict) or not isinstance(model.get("diagnostics"), dict) or model.get("id") not in MODEL_IDS:
             continue
-        name, dg = f"residuals_{model.get('id')}", model["diagnostics"]
+        name, dg = f"residuals_{model['id']}", model["diagnostics"]
         series = residuals.get(name)
         if not isinstance(series, dict):
             problems.append(f"{name}: missing, but fit has model {model.get('id')!r}")
@@ -2018,9 +2165,1122 @@ def validate_fit_residuals(fit: object, residuals: dict[str, object]) -> list[st
         for field, got, want in checks:
             if got != want:
                 problems.append(f"{name}: {field} is {_show(got)}, but fit.json says {_show(want)}")
-    extra = sorted(set(residuals) - {f"residuals_{m.get('id')}" for m in models if isinstance(m, dict)})
+    extra = sorted(set(residuals) - {f"residuals_{m['id']}" for m in models if isinstance(m, dict) and m.get("id") in MODEL_IDS})
     problems += [f"{name}: fit.json has no model {name.removeprefix('residuals_')!r}" for name in extra]
     return problems
+
+
+# --- milestone 4: forecast_<model>_<method> and evaluation (contract.md 3.9 and 3.10) -----------------
+# The app's parsers (contract.forecast.ts) check the same shapes, enums, nulls, bounds, pins and integer
+# and date bookkeeping. The checks below that recompute a number from others or compare one with alpha
+# (every dollar value from mean_log and sd_log, the t quantiles, each ratio, each DM statistic and
+# p-value, Kupiec's LR and its p-value, every verdict) are Python's alone, by ADR-0001.
+
+FORECAST_METHODS = ("static", "walk_forward", "refit")
+FORECAST_KINDS = {"static": "multi_step", "walk_forward": "one_step", "refit": "one_step"}
+KIND_IDS = ("multi_step", "one_step")
+PARAMETER_SOURCES = ("train", "expanding_refit")
+# The forecast files, one per (model, method), in the export's order (forecasting.FORECASTS; a test ties them).
+FORECASTS = (("aic", "static"), ("aic", "walk_forward"), ("aic", "refit"), ("bic", "static"), ("bic", "walk_forward"), ("course", "static"), ("course", "walk_forward"))
+WINDOW_IDS = ("test", "oos")
+# Pinned, never read from the file, compared exactly (forecasting.LEVELS, NORMAL_Z, REFIT_EVERY;
+# evaluation.ALPHA and the DM settings). tests/test_forecasting.py and tests/test_evaluation.py tie them
+# to the producer's constants.
+LEVELS = (0.8, 0.95)
+NORMAL_Z = (1.2815515655446004, 1.959963984540054)
+REFIT_EVERY = 21
+HEADLINE_USD = "median"
+# The Method picker's text, pinned per method id (evaluation.METHOD_LABELS; a test ties them): free
+# text read from the file could say "refit every 5 days" beside a refit every 21.
+METHOD_LABELS = {"static": "Static multi-step (the course's)", "walk_forward": "Walk-forward one-step", "refit": "Walk-forward one-step, refit every 21 days"}
+# The Model picker's text, pinned per model id as the method labels are (fitting.LABELS; a test ties them):
+# free text read from the file could swap two models' names.
+MODEL_LABELS = {"aic": "AIC choice (ADR-0002)", "bic": "BIC choice", "course": "Course refit"}
+DM_SETTINGS: dict[str, Any] = {"horizon": 1, "errors": "log", "losses": ["squared", "absolute"], "correction": "harvey_leybourne_newbold", "alternative": "two_sided", "baseline": "random_walk", "same_tolerance": 1e-9}
+DM_LOSSES = ("squared", "absolute")
+DM_VERDICTS = ("beats_rw", "no_difference", "worse_than_rw", "same_as_rw")
+DISTRIBUTIONS = ("normal", "t")
+COVERAGE_VERDICTS = ("too_narrow", "consistent", "too_wide", "not_tested")
+# Rows per window: bounded before any row is read (both readers).
+MAX_ROWS = 10_000
+# From this t_df on, Python checks a t quantile against the Cornish-Fisher expansion in 1 / df
+# (Abramowitz and Stegun 26.7.5, four terms: within 4.5e-16 relative of scipy's t.ppf from df 1e3 up,
+# measured), not by evaluating the t's CDF, whose continued fraction needs about sqrt(df) terms. A
+# near-normal residual series gives such a df: scipy's t.fit on a simulated Gaussian walk returned
+# more than 1e6. The fits on AAPL give 3.2 to 3.4.
+T_ASYMPTOTIC_DF = 1e4
+T_CDF_TOLERANCE = 1e-10  # |F(t_quantile) - (1 + level) / 2| allowed (Python only)
+T_QUANTILE_REL = 1e-12  # |t_quantile / expansion - 1| allowed past T_ASYMPTOTIC_DF (Python only)
+ROW_NUMBERS = ("actual_log", "actual_usd", "mean_log", "sd_log", "median_usd", "mean_usd", "lower_80_usd", "upper_80_usd", "lower_95_usd", "upper_95_usd", "t_lower_80_usd", "t_upper_80_usd", "t_lower_95_usd", "t_upper_95_usd")
+# Each dollar bound: (field, which multiplier list, its index, the sign of the multiplier).
+_BOUNDS = (
+    ("lower_80_usd", "normal_z", 0, -1.0),
+    ("upper_80_usd", "normal_z", 0, 1.0),
+    ("lower_95_usd", "normal_z", 1, -1.0),
+    ("upper_95_usd", "normal_z", 1, 1.0),
+    ("t_lower_80_usd", "t_multiplier", 0, -1.0),
+    ("t_upper_80_usd", "t_multiplier", 0, 1.0),
+    ("t_lower_95_usd", "t_multiplier", 1, -1.0),
+    ("t_upper_95_usd", "t_multiplier", 1, 1.0),
+)
+_MULTIPLIER = {"normal": "normal_z", "t": "t_multiplier"}
+MAX_ITERATIONS = 10_000
+
+
+def _near(a: float, b: float, rel: float = _REL) -> bool:
+    """Equal to `rel` relative, with no absolute floor: for small quantities (log errors, a mean loss
+    differential of 1e-6) where _close's floor of 1 would accept almost anything. Never true when either
+    is not finite."""
+    return math.isfinite(a) and math.isfinite(b) and abs(a - b) <= rel * max(abs(a), abs(b))
+
+
+def _exp(x: float) -> float:
+    """math.exp that gives inf instead of raising past about 709.78."""
+    try:
+        return math.exp(x)
+    except OverflowError:
+        return math.inf
+
+
+def _betacf(a: float, b: float, x: float) -> float:
+    """The continued fraction of the incomplete beta function (modified Lentz), at most MAX_ITERATIONS
+    terms; nan if it has not converged by then."""
+    tiny = 1e-300
+    qab, qap, qam = a + b, a + 1.0, a - 1.0
+    c, d = 1.0, 1.0 - qab * x / qap
+    d = 1.0 / (d if abs(d) >= tiny else tiny)
+    h = d
+    for m in range(1, MAX_ITERATIONS + 1):
+        m2 = 2 * m
+        for aa in (m * (b - m) * x / ((qam + m2) * (a + m2)), -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))):
+            d = 1.0 + aa * d
+            d = 1.0 / (d if abs(d) >= tiny else tiny)
+            c = 1.0 + aa / c
+            c = c if abs(c) >= tiny else tiny
+            h *= d * c
+        if abs(d * c - 1.0) <= 1e-16:
+            return h
+    return math.nan
+
+
+def _lgamma_ratio(a: float, b: float) -> float:
+    """ln Gamma(a + b) - ln Gamma(a) for a, b > 0. For a >= 50 by Stirling's series, (a - 1/2) ln(1 +
+    b / a) + b ln(a + b) - b + S(a + b) - S(a) with S(z) = 1 / (12 z) - 1 / (360 z^3) + 1 / (1260 z^5) -
+    1 / (1680 z^7): the plain difference of two lgamma values near a ln a loses their digits (7e-10
+    at a = 1e6, which would move a t tail by as much). Below 50 the plain difference is exact enough."""
+    if a < 50.0:
+        return math.lgamma(a + b) - math.lgamma(a)
+
+    def stirling(z: float) -> float:
+        z2 = z * z
+        return 1.0 / (12.0 * z) - 1.0 / (360.0 * z * z2) + 1.0 / (1260.0 * z * z2 * z2) - 1.0 / (1680.0 * z * z2 * z2 * z2)
+
+    return (a - 0.5) * math.log1p(b / a) + b * math.log(a + b) - b + stirling(a + b) - stirling(a)
+
+
+def _betainc(a: float, b: float, x: float, y: float) -> float:
+    """The regularised incomplete beta function I_x(a, b) for a, b > 0, with y = 1 - x passed in so a
+    caller can compute it without cancellation. Accurate to relative precision on the side where it
+    is small (Numerical Recipes, 6.4: the fraction converges fast for x < (a + 1) / (a + b + 2), and
+    I_x(a, b) = 1 - I_y(b, a) on the other side)."""
+    if not (a > 0.0 and b > 0.0 and math.isfinite(a) and math.isfinite(b)):
+        return math.nan  # a df of 0, or one whose half underflows to 0, has no distribution
+    if x <= 0.0:
+        return 0.0
+    if y <= 0.0:
+        return 1.0
+    log_front = a * math.log(x) + b * math.log(y) + _lgamma_ratio(a, b) - math.lgamma(b)
+    if x < (a + 1.0) / (a + b + 2.0):
+        return _exp(log_front) * _betacf(a, b, x) / a
+    return 1.0 - _exp(log_front) * _betacf(b, a, y) / b
+
+
+def _t_sf(x: float, df: float) -> float:
+    """P(T > x) for a Student T on df > 0 degrees of freedom: I_z(df / 2, 1 / 2) / 2 with z = df / (df
+    + x^2) for x >= 0, and 1 minus that for x < 0 (no scipy in the readers). 0, a subnormal and a huge
+    x are handled: x^2 underflows to 0 (the tail is 1/2) or overflows to inf (the tail is 0)."""
+    if math.isnan(x):
+        return math.nan
+    s = abs(x) * abs(x)
+    if s == 0.0:
+        tail = 0.5
+    elif math.isinf(s):
+        tail = 0.0
+    else:
+        tail = 0.5 * _betainc(df / 2.0, 0.5, df / (df + s), s / (df + s))
+    return tail if x >= 0 else 1.0 - tail
+
+
+def _check_t_p(c: _Checker, p: float | None, statistic: float | None, df: int | None, path: str) -> None:
+    """Python only: a two-sided p-value is 2 P(T > |statistic|) on df, to P_REL, or within P_FLOOR;
+    a 0 only where that tail is below P_FLOOR (as _check_chi2_p)."""
+    if p is None or statistic is None or df is None or df < 1:
+        return
+    if df > MAX_ROWS - 1:
+        # A DM row's df is its window's n - 1 (both checked against the windows), and no window has
+        # more than MAX_ROWS rows; so a larger df comes only from a file whose windows are already
+        # refused, and the p-value is left unchecked there. _t_sf is never called on it: within 1.4e-12
+        # relative of scipy up to df 1e4, it is off by 1.2e-9 at 1e7 (past P_REL) and by a factor of 3
+        # at 2^53 (measured at x = 1/8 to 59/8).
+        return
+    want = min(1.0, 2.0 * _t_sf(abs(statistic), df))
+    if math.isnan(want):
+        c.add(path, f"the t tail at {statistic} on {df} df could not be evaluated")
+    elif p == 0.0:
+        if want > P_FLOOR:
+            c.add(path, f"is 0, but 2 P(T > |{statistic}|) on {df} df is {want}, above the underflow floor {P_FLOOR}: only a smaller tail may be written as 0")
+    elif not _p_close(p, want):
+        c.add(path, f"is {p}, but 2 P(T > |statistic_hln|) with statistic_hln {statistic} on {df} df is {want}")
+
+
+def _t_quantile_expansion(z: float, df: float) -> float:
+    """The Student-t quantile on df degrees of freedom at the probability whose normal quantile is z,
+    by the Cornish-Fisher expansion (Abramowitz and Stegun 26.7.5) to 1 / df^4. Products, not powers:
+    a huge df gives z, not an OverflowError."""
+    z2 = z * z
+    g1 = (z2 + 1.0) * z / 4.0
+    g2 = ((5.0 * z2 + 16.0) * z2 + 3.0) * z / 96.0
+    g3 = (((3.0 * z2 + 19.0) * z2 + 17.0) * z2 - 15.0) * z / 384.0
+    g4 = ((((79.0 * z2 + 776.0) * z2 + 1482.0) * z2 - 1920.0) * z2 - 945.0) * z / 92160.0
+    u = 1.0 / df
+    return z + u * (g1 + u * (g2 + u * (g3 + u * g4)))
+
+
+def kupiec_lr(n: int, inside: int, level: float) -> float:
+    """Kupiec's unconditional-coverage LR statistic for `inside` of `n` days inside an interval of
+    nominal `level` (0 log 0 = 0), as evaluation.kupiec computes it; clamped at 0."""
+    rate = inside / n
+
+    def term(count: int, prob: float) -> float:
+        return 0.0 if count == 0 else count * math.log(prob)
+
+    lr = -2.0 * (term(inside, level) + term(n - inside, 1.0 - level) - term(inside, rate) - term(n - inside, 1.0 - rate))
+    return lr if lr > 0.0 else 0.0
+
+
+def _row_count(c: _Checker, value: object, path: str, least: int = 1) -> int | None:
+    """A window's n: an integer from `least` to MAX_ROWS (both readers), checked before any row is read."""
+    v = c.integer(value, path, minimum=0)
+    if v is not None and not least <= v <= MAX_ROWS:
+        c.add(path, f"expected an integer from {least} to {MAX_ROWS}, got {v}")
+        return None
+    return v
+
+
+def _pin_list(c: _Checker, value: object, path: str, pin: tuple[float, ...] | list[Any], rule: str) -> None:
+    """A list that must equal this reader's pin exactly: same length, same values, same types (1 and
+    1.0 are the same JSON number, so an int equal to a float pin passes, as in JavaScript)."""
+    items = c.array(value, path)
+    if items is None:
+        return
+    same = len(items) == len(pin) and all(not isinstance(a, bool) and type(a) in (int, float, str) and a == b and (isinstance(a, str) == isinstance(b, str)) for a, b in zip(items, pin))
+    if not same:
+        c.add(path, f"is {_show(items)}, but this reader {rule} {_show(list(pin))}")
+
+
+def _pin_number(c: _Checker, value: object, path: str, pin: float, rule: str, *, integer: bool = False) -> None:
+    v = c.integer(value, path, minimum=1) if integer else c.number(value, path)
+    if v is not None and v != pin:
+        c.add(path, f"is {v}, but this reader {rule} {pin}")
+
+
+def _above(c: _Checker, value: object, path: str, floor: float, why: str) -> float | None:
+    v = c.number(value, path)
+    if v is not None and not v > floor:
+        c.add(path, f"must be above {floor} ({why}), got {v}")
+        return None
+    return v
+
+
+def _numbers(c: _Checker, value: object, path: str, keys: tuple[str, ...]) -> dict[str, float] | None:
+    if value is _MISSING:
+        return None
+    o = c.obj(value, path)
+    if o is None:
+        return None
+    out = {k: c.number(c.key(o, k, path), f"{path}.{k}") for k in keys}
+    return None if None in out.values() else out  # type: ignore[return-value]
+
+
+def _check_forecast_rows(c: _Checker, rows: list[Any], at: str, z: tuple[float, ...], k: list[float] | None, multi_step: bool) -> list[dict[str, Any]] | None:
+    """The rows of one window; returns them when every row is complete. Python only: the dollar values
+    from mean_log and sd_log, actual_usd from actual_log, and a static path's sd_log never falling."""
+    out: list[dict[str, Any]] = []
+    complete = True
+    previous_date: str | None = None
+    previous_sd: float | None = None
+    for i, item in enumerate(rows):
+        rat = f"{at}[{i}]"
+        row = c.obj(item, rat)
+        if row is None:
+            complete = False
+            continue
+        day = c.date(c.key(row, "date", rat), f"{rat}.date")
+        if day is not None:
+            if previous_date is not None and day <= previous_date:
+                c.add(f"{rat}.date", f"{day} does not come after {previous_date}")
+            previous_date = day
+        values = {name: c.number(c.key(row, name, rat), f"{rat}.{name}") for name in ROW_NUMBERS}
+        sd = values["sd_log"]
+        if sd is not None and not sd > 0:
+            c.add(f"{rat}.sd_log", f"must be above 0 (a forecast with no spread), got {sd}")
+            sd = None
+        if day is None or None in values.values() or sd is None:
+            complete = False
+            previous_sd = None
+            continue
+        mu = values["mean_log"]
+        # Python only: every dollar value from the two doubles it is made of.
+        wants = {"actual_usd": _exp(values["actual_log"]), "median_usd": _exp(mu), "mean_usd": _exp(mu + sd * sd / 2.0)}
+        for field, key, index, sign in _BOUNDS:
+            multipliers = z if key == "normal_z" else k
+            if multipliers is not None:
+                wants[field] = _exp(mu + sign * multipliers[index] * sd)
+        formulas = {"actual_usd": "exp(actual_log)", "median_usd": "exp(mean_log)", "mean_usd": "exp(mean_log + sd_log^2 / 2)"}
+        for field, want in wants.items():
+            if not _close(values[field], want):
+                formula = formulas.get(field) or f"exp(mean_log {'-' if field.startswith(('lower', 't_lower')) else '+'} m sd_log) with this file's multiplier"
+                c.add(f"{rat}.{field}", f"is {values[field]}, but {formula} is {want}")
+        if multi_step and previous_sd is not None and sd < previous_sd * (1.0 - _REL):
+            c.add(f"{rat}.sd_log", f"is {sd}, below the step before's {previous_sd}: an h-step forecast variance is a running sum of non-negative terms, so it cannot fall as h grows")
+        previous_sd = sd
+        out.append({"date": day, **values})
+    return out if complete else None
+
+
+def _check_forecast_window(c: _Checker, item: object, at: str, expected: str, z: tuple[float, ...], k: list[float] | None, multi_step: bool) -> dict[str, Any]:
+    w = c.obj(item, at)
+    if w is None:
+        return {}
+    ident = _choice(c, c.key(w, "id", at), WINDOW_IDS, f"{at}.id")
+    if ident is not None and ident != expected:
+        c.add(f"{at}.id", f"is {ident!r}, expected {expected!r} (the windows are 'test' then 'oos')")
+    first = c.date(c.key(w, "start", at), f"{at}.start")
+    last = c.date(c.key(w, "end", at), f"{at}.end")
+    n = _row_count(c, c.key(w, "n", at), f"{at}.n")
+    origin_raw = c.key(w, "origin", at)
+    origin = None
+    if origin_raw is not _MISSING and (o := c.obj(origin_raw, f"{at}.origin")) is not None:
+        oat = f"{at}.origin"
+        day = c.date(c.key(o, "date", oat), f"{oat}.date")
+        if day is not None and first is not None and not day < first:
+            c.add(f"{oat}.date", f"is {day}, but the origin is the last day before the window, which starts {first}")
+        log_close = c.number(c.key(o, "log_close", oat), f"{oat}.log_close")
+        close = c.number(c.key(o, "close_usd", oat), f"{oat}.close_usd")
+        if log_close is not None and close is not None and not _close(close, _exp(log_close)):  # Python only
+            c.add(f"{oat}.close_usd", f"is {close}, but exp(log_close) is {_exp(log_close)}")
+        if None not in (day, log_close, close):
+            origin = {"date": day, "log_close": log_close, "close_usd": close}
+    rows_raw = c.key(w, "rows", at)
+    rows = None
+    dates = None
+    # The bound first: no row is read when n is out of bounds, and no list longer than MAX_ROWS is walked.
+    if n is not None and rows_raw is not _MISSING:
+        listed = c.array(rows_raw, f"{at}.rows")
+        if listed is not None and len(listed) != n:
+            c.add(f"{at}.rows", f"has {len(listed)} rows, but n is {n}")
+        if listed is not None and len(listed) <= MAX_ROWS:
+            rows = _check_forecast_rows(c, listed, f"{at}.rows", z, k, multi_step)
+            if rows:
+                if first is not None and rows[0]["date"] != first:
+                    c.add(f"{at}.rows[0].date", f"is {rows[0]['date']}, but the window starts {first}")
+                if last is not None and rows[-1]["date"] != last:
+                    c.add(f"{at}.rows[{len(rows) - 1}].date", f"is {rows[-1]['date']}, but the window ends {last}")
+            if rows is not None and len(rows) == n:
+                dates = [r["date"] for r in rows]
+    return {"id": ident, "start": first, "end": last, "n": n, "origin": origin, "rows": rows, "dates": dates}
+
+
+def _check_intervals(c: _Checker, value: object, t_df: float | None) -> list[float] | None:
+    """The interval block; returns the t multipliers when they are two numbers (Python ties them to
+    t_df, so a wrong multiplier is one problem here and the rows are checked against the file's own)."""
+    iat = "data.intervals"
+    if value is _MISSING:
+        return None
+    iv = c.obj(value, iat)
+    if iv is None:
+        return None
+    _pin_list(c, c.key(iv, "levels", iat), f"{iat}.levels", LEVELS, "draws the intervals at levels")
+    _pin_list(c, c.key(iv, "normal_z", iat), f"{iat}.normal_z", NORMAL_Z, "uses the normal quantiles")
+    pair = {}
+    for name in ("t_quantile", "t_multiplier"):
+        items = c.array(c.key(iv, name, iat), f"{iat}.{name}")
+        if items is None:
+            continue
+        if len(items) != len(LEVELS):
+            c.add(f"{iat}.{name}", f"expected {len(LEVELS)} numbers, got {_show(items)}")
+            continue
+        got = [c.number(v, f"{iat}.{name}[{i}]") for i, v in enumerate(items)]
+        if None not in got:
+            pair[name] = got
+    scale = c.number(c.key(iv, "t_scale", iat), f"{iat}.t_scale")
+    # Python only: the scale from t_df, each multiplier = quantile x scale, each quantile by the t's CDF
+    # (or, from T_ASYMPTOTIC_DF on, by the Cornish-Fisher expansion).
+    if t_df is not None:
+        want = math.sqrt((t_df - 2.0) / t_df)
+        if scale is not None and not _near(scale, want):
+            c.add(f"{iat}.t_scale", f"is {scale}, but sqrt((t_df - 2) / t_df) is {want}")
+        for i, (q, level) in enumerate(zip(pair.get("t_quantile", []), LEVELS)):
+            target = 0.5 + level / 2.0
+            if t_df >= T_ASYMPTOTIC_DF:
+                expansion = _t_quantile_expansion(NORMAL_Z[i], t_df)
+                if not _near(q, expansion, T_QUANTILE_REL):
+                    c.add(f"{iat}.t_quantile[{i}]", f"is {q}, but the t quantile at {target} on {t_df} df is {expansion} (Cornish-Fisher)")
+                continue
+            cdf = 1.0 - _t_sf(q, t_df)
+            if not q > 0 or not abs(cdf - target) <= T_CDF_TOLERANCE:
+                c.add(f"{iat}.t_quantile[{i}]", f"is {q}, but the t on {t_df} df puts {cdf} below it, not {target}")
+    if scale is not None and "t_quantile" in pair and "t_multiplier" in pair:
+        for i, (q, m) in enumerate(zip(pair["t_quantile"], pair["t_multiplier"])):
+            if not _near(m, q * scale):
+                c.add(f"{iat}.t_multiplier[{i}]", f"is {m}, but t_quantile x t_scale is {q * scale}")
+    return pair.get("t_multiplier")
+
+
+def expected_refits(n_test: int, n_oos: int) -> int:
+    """ceil((n_test + n_oos) / REFIT_EVERY) - 1: the first REFIT_EVERY rows keep the training estimates."""
+    return -(-(n_test + n_oos) // REFIT_EVERY) - 1
+
+
+def _check_refits(c: _Checker, value: object, method: str | None, names: list[str] | None, dates: list[str] | None, expected: int | None) -> list[dict[str, Any]] | None:
+    at = "data.refits"
+    if value is _MISSING or method is None:
+        return None
+    if method != "refit":
+        if value is not None:
+            c.add(at, f"must be null for method {method!r}, which keeps the training parameters")
+        return None
+    if value is None:
+        c.add(at, "is null, but the refit method lists every re-estimation")
+        return None
+    items = c.array(value, at)
+    if items is None or expected is None:
+        return None
+    if len(items) != expected:  # one short problem, however long the list: never a loop over it
+        c.add(at, f"has {len(items)} entries, but the test and oos rows take {expected} (one per {REFIT_EVERY} rows after the first {REFIT_EVERY})")
+        return None
+    out = []
+    previous: int | None = None
+    for k, item in enumerate(items):
+        eat = f"{at}[{k}]"
+        e = c.obj(item, eat)
+        if e is None:
+            previous = None
+            continue
+        day = c.date(c.key(e, "start_date", eat), f"{eat}.start_date")
+        row = REFIT_EVERY * (k + 1)
+        if day is not None and dates is not None and day != dates[row]:
+            c.add(f"{eat}.start_date", f"is {day}, but row {row} (from 0) of the test and oos rows is {dates[row]}")
+        n_obs = c.integer(c.key(e, "n_obs", eat), f"{eat}.n_obs", minimum=1)
+        if n_obs is not None and previous is not None and n_obs != previous + REFIT_EVERY:
+            c.add(f"{eat}.n_obs", f"is {n_obs}, but the entry before was fitted on {previous} observations and each refit adds {REFIT_EVERY}")
+        previous = n_obs
+        params = c.array(c.key(e, "params", eat), f"{eat}.params")
+        if params is not None and names is not None:
+            if len(params) != len(names):
+                c.add(f"{eat}.params", f"has {len(params)} parameters, but the order and trend have {len(names)}: {', '.join(names)}")
+            else:
+                for i, p_item in enumerate(params):
+                    pat = f"{eat}.params[{i}]"
+                    p = c.obj(p_item, pat)
+                    if p is None:
+                        continue
+                    name = c.string(c.key(p, "name", pat), f"{pat}.name")
+                    if name is not None and name != names[i]:
+                        c.add(f"{pat}.name", f"is {_show(name)}, expected {names[i]!r}")
+                    v = c.number(c.key(p, "value", pat), f"{pat}.value")
+                    if name == "sigma2" and v is not None and not v > 0:  # Python only
+                        c.add(f"{pat}.value", f"must be positive, got {v}: sigma2 is a variance")
+        c.number(c.key(e, "llf", eat), f"{eat}.llf")
+        _boolean(c, c.key(e, "converged", eat), f"{eat}.converged")
+        c.integer(c.key(e, "iterations", eat), f"{eat}.iterations")
+        _warnings(c, c.key(e, "warnings", eat), f"{eat}.warnings")
+        out.append({"n_obs": n_obs, "start_date": day})
+    return out
+
+
+@_capped
+def validate_forecast(data: object, model_id: str, method: str) -> list[str]:
+    """Every problem in a `forecast_<model_id>_<method>` payload (contract.md section 3.9). The caller
+    passes the model and method the file name gives."""
+    if (model_id, method) not in FORECASTS:
+        return [f"no forecast file is made for model {model_id!r} and method {method!r}"]
+    c = _Checker()
+    root = c.obj(data, "data")
+    if root is None:
+        return c.problems
+    ident = _choice(c, c.key(root, "model_id", "data"), MODEL_IDS, "data.model_id")
+    if ident is not None and ident != model_id:
+        c.add("data.model_id", f"is {ident!r}, but this is the file of model {model_id!r}")
+    label = c.string(c.key(root, "label", "data"), "data.label")
+    if label is not None and label != MODEL_LABELS[model_id]:
+        c.add("data.label", f"is {_show(label)}, but this reader labels model {model_id!r} {MODEL_LABELS[model_id]!r}")
+    stated = _choice(c, c.key(root, "method", "data"), FORECAST_METHODS, "data.method")
+    if stated is not None and stated != method:
+        c.add("data.method", f"is {stated!r}, but this is the file of method {method!r}")
+    kind = _choice(c, c.key(root, "kind", "data"), KIND_IDS, "data.kind")
+    if kind is not None and stated is not None and kind != FORECAST_KINDS[stated]:
+        c.add("data.kind", f"is {kind!r}, but method {stated!r} makes {FORECAST_KINDS[stated]!r} forecasts")
+    order = _check_order(c, c.key(root, "order", "data"), "data.order")
+    trend = _choice(c, c.key(root, "trend", "data"), TREND_CODES, "data.trend")
+    parameters = _choice(c, c.key(root, "parameters", "data"), PARAMETER_SOURCES, "data.parameters")
+    if parameters is not None and stated is not None:
+        source = "expanding_refit" if stated == "refit" else "train"
+        if parameters != source:
+            c.add("data.parameters", f"is {parameters!r}, but method {stated!r} takes its parameters from {source!r}")
+    every = c.key(root, "refit_every", "data")
+    if every is not _MISSING and stated is not None:
+        if stated != "refit":
+            if every is not None:
+                c.add("data.refit_every", f"must be null for method {stated!r}, which does not re-estimate")
+        elif every is None:
+            c.add("data.refit_every", f"is null, but the refit method re-estimates every {REFIT_EVERY} rows")
+        else:
+            _pin_number(c, every, "data.refit_every", REFIT_EVERY, "re-estimates every", integer=True)
+    t_df = _above(c, c.key(root, "t_df", "data"), "data.t_df", 2.0, "a Student-t on 2 or fewer degrees of freedom has no finite variance")
+    k = _check_intervals(c, c.key(root, "intervals", "data"), t_df)
+    windows = c.array(c.key(root, "windows", "data"), "data.windows")
+    facts: list[dict[str, Any]] = [{}, {}]
+    if windows is not None:
+        if len(windows) != len(WINDOW_IDS):
+            c.add("data.windows", f"has {len(windows)} windows, expected 2: 'test' then 'oos'")
+        else:
+            facts = [_check_forecast_window(c, windows[i], f"data.windows[{i}]", wid, NORMAL_Z, k, stated == "static") for i, wid in enumerate(WINDOW_IDS)]
+            test, oos = facts
+            if test.get("id") == "test" and oos.get("id") == "oos" and test.get("end") is not None and oos.get("start") is not None and not test["end"] < oos["start"]:
+                c.add("data.windows[1].start", f"is {oos['start']}, but the test window ends {test['end']}; the oos window starts after it")
+    test, oos = facts
+    names = expected_param_names(order[0], order[2], trend) if order is not None and trend is not None else None  # only from a bounded order
+    dates = test["dates"] + oos["dates"] if test.get("dates") is not None and oos.get("dates") is not None else None
+    expected = expected_refits(test["n"], oos["n"]) if test.get("n") is not None and oos.get("n") is not None else None
+    _check_refits(c, c.key(root, "refits", "data"), stated, names, dates, expected)
+    return c.problems
+
+
+def _key_fields(c: _Checker, row: dict[str, Any], at: str, fields: tuple[tuple[str, tuple[str, ...]], ...], expected: tuple[Any, ...]) -> list[str | None]:
+    """The row's key fields, compared with the key at its position as one tuple: one problem per misplaced row."""
+    got = [_choice(c, c.key(row, name, at), options, f"{at}.{name}") for name, options in fields]
+    if None not in got and tuple(got) != tuple(expected):
+        c.add(at, f"is the row of ({', '.join(got)}), but this position holds ({', '.join(str(e) for e in expected)})")  # type: ignore[arg-type]
+    return got
+
+
+def _row_set(c: _Checker, value: object, at: str, keys: list[tuple[Any, ...]], what: str) -> list[dict[str, Any] | None] | None:
+    """Exactly len(keys) rows: a list of another length is one problem and no row is read."""
+    items = c.array(value, at)
+    if items is None:
+        return None
+    if len(items) != len(keys):
+        c.add(at, f"has {len(items)} rows, expected {len(keys)}: {what}")
+        return None
+    return [c.obj(item, f"{at}[{i}]") for i, item in enumerate(items)]
+
+
+def _window_n(c: _Checker, value: object, at: str, window: str | None, ns: dict[str, int], least: int = 1) -> int | None:
+    n = c.integer(value, at, minimum=least)
+    if n is not None and window is not None and window in ns and n != ns[window]:
+        c.add(at, f"is {n}, but the {window} window has {ns[window]} rows")
+        return None
+    return n
+
+
+_DM_TESTED = ("statistic", "statistic_hln", "p_value")  # null exactly when the verdict is "same_as_rw"
+
+
+def _check_hln_factor(c: _Checker, factor: float, n: int, at: str) -> None:
+    """Python only: Harvey, Leybourne and Newbold's sqrt((n + 1 - 2h + h (h - 1) / n) / n), h = 1."""
+    h = DM_SETTINGS["horizon"]
+    want = math.sqrt((n + 1 - 2 * h + h * (h - 1) / n) / n)
+    if not _near(factor, want):
+        c.add(f"{at}.hln_factor", f"is {factor}, but sqrt((n + 1 - 2h + h (h - 1) / n) / n) with n {n} and h {h} is {want}")
+
+
+def _check_dm_row(c: _Checker, row: dict[str, Any], at: str, ns: dict[str, int], window: str | None) -> None:
+    n = _window_n(c, c.key(row, "n", at), at + ".n", window, ns, least=2)
+    df = c.integer(c.key(row, "df", at), f"{at}.df")
+    if df is not None and n is not None and df != n - 1:
+        c.add(f"{at}.df", f"is {df}, but n - 1 is {n - 1}")
+        df = None
+    verdict = _choice(c, c.key(row, "verdict", at), DM_VERDICTS, f"{at}.verdict")
+    gap = c.number(c.key(row, "max_forecast_gap", at), f"{at}.max_forecast_gap")
+    if gap is not None and gap < 0:
+        c.add(f"{at}.max_forecast_gap", f"must be >= 0, got {gap}")
+        gap = None
+    mean_diff = c.number(c.key(row, "mean_diff", at), f"{at}.mean_diff")
+    factor = c.number(c.key(row, "hln_factor", at), f"{at}.hln_factor")
+    raw = {k: c.key(row, k, at) for k in _DM_TESTED}
+    var_raw = c.key(row, "var_diff", at)
+    if verdict == "same_as_rw":
+        # The forecasts are the random walk's: nothing is tested, and the differential may be all 0.
+        var_diff = c.number(var_raw, f"{at}.var_diff")
+        if var_diff is not None and var_diff < 0:
+            c.add(f"{at}.var_diff", f"must be >= 0, got {var_diff}")
+        nonnull = [k for k in _DM_TESTED if raw[k] is not None and raw[k] is not _MISSING]
+        if nonnull:
+            c.add(at, f"{', '.join(nonnull)} must be null where the verdict is 'same_as_rw' (the forecasts are the random walk's; nothing is tested)")
+        if gap is not None and not gap <= DM_SETTINGS["same_tolerance"]:  # Python only
+            c.add(f"{at}.verdict", f"is 'same_as_rw', but the forecasts are up to {gap} log points from the random walk's, more than same_tolerance {DM_SETTINGS['same_tolerance']}")
+        if n is not None and factor is not None:
+            _check_hln_factor(c, factor, n, at)
+        return
+    var_diff = _above(c, var_raw, f"{at}.var_diff", 0.0, "a constant loss differential leaves DM undefined")
+    nulls = [k for k in _DM_TESTED if raw[k] is None]
+    if nulls:
+        c.add(at, f"{', '.join(nulls)} null, but only a 'same_as_rw' row has no statistic")
+    statistic = None if raw["statistic"] is None else c.number(raw["statistic"], f"{at}.statistic")
+    corrected = None if raw["statistic_hln"] is None else c.number(raw["statistic_hln"], f"{at}.statistic_hln")
+    p = None if raw["p_value"] is None else _p_value(c, raw["p_value"], f"{at}.p_value")
+    if gap is not None and verdict is not None and gap <= DM_SETTINGS["same_tolerance"]:  # Python only
+        c.add(f"{at}.verdict", f"is {verdict!r}, but the forecasts are within {gap} log points of the random walk's, at most same_tolerance {DM_SETTINGS['same_tolerance']}: 'same_as_rw'")
+    if n is None:
+        return
+    # Python only: DM from its components, the HLN factor from n, the corrected statistic, its p-value, the verdict.
+    if mean_diff is not None and var_diff is not None and statistic is not None:
+        scale = math.sqrt(var_diff / n)
+        want = mean_diff / scale if scale > 0 else math.nan
+        if not (math.isfinite(want) and _near(statistic, want)):
+            c.add(f"{at}.statistic", f"is {statistic}, but mean_diff / sqrt(var_diff / n) is {want}")
+    if factor is not None:
+        _check_hln_factor(c, factor, n, at)
+    if corrected is not None and statistic is not None and factor is not None and not _near(corrected, statistic * factor):
+        c.add(f"{at}.statistic_hln", f"is {corrected}, but statistic x hln_factor is {statistic * factor}")
+    _check_t_p(c, p, corrected, df, f"{at}.p_value")
+    if p is not None and mean_diff is not None and verdict is not None:
+        want_verdict = "beats_rw" if p < ALPHA and mean_diff < 0 else ("worse_than_rw" if p < ALPHA and mean_diff > 0 else "no_difference")
+        if verdict != want_verdict:
+            c.add(f"{at}.verdict", f"is {verdict!r}, but p_value {p} and mean_diff {mean_diff} at alpha {ALPHA} give {want_verdict!r}")
+
+
+def _check_coverage_row(c: _Checker, row: dict[str, Any], at: str, ns: dict[str, int], method: str | None, window: str | None, level_index: int) -> None:
+    level = c.number(c.key(row, "level", at), f"{at}.level")
+    if level is not None and level != LEVELS[level_index]:
+        c.add(f"{at}.level", f"is {level}, but this reader expects at this position the level {LEVELS[level_index]}")
+        level = None
+    n = _window_n(c, c.key(row, "n", at), f"{at}.n", window, ns)
+    inside = c.integer(c.key(row, "inside", at), f"{at}.inside")
+    if inside is not None and n is not None and inside > n:
+        c.add(f"{at}.inside", f"is {inside}, more than the window's {n} days")
+        inside = None
+    rate = c.number(c.key(row, "rate", at), f"{at}.rate")
+    lr_raw, p_raw = c.key(row, "lr", at), c.key(row, "p_value", at)
+    verdict = _choice(c, c.key(row, "verdict", at), COVERAGE_VERDICTS, f"{at}.verdict")
+    if rate is not None and inside is not None and n is not None and rate != inside / n:  # Python only
+        c.add(f"{at}.rate", f"is {rate}, but inside / n is {inside / n}")
+    if method is None or lr_raw is _MISSING or p_raw is _MISSING:
+        return
+    if FORECAST_KINDS[method] == "multi_step":
+        if lr_raw is not None or p_raw is not None:
+            c.add(at, "lr and p_value must be null for a multi_step forecast, which is not tested")
+        if verdict is not None and verdict != "not_tested":
+            c.add(f"{at}.verdict", f"is {verdict!r}, but a multi_step forecast is 'not_tested'")
+        return
+    if lr_raw is None or p_raw is None:
+        c.add(at, "lr and p_value must be numbers for a one_step forecast, which is tested")
+        return
+    lr = c.number(lr_raw, f"{at}.lr")
+    p = _p_value(c, p_raw, f"{at}.p_value")
+    if verdict == "not_tested":
+        c.add(f"{at}.verdict", "is 'not_tested', but a one_step forecast is tested")
+        return
+    # Python only: Kupiec's LR from n, inside and the level; its chi-squared tail; the verdict.
+    if lr is not None and None not in (n, inside, level):
+        want = kupiec_lr(n, inside, level)  # type: ignore[arg-type]
+        if not _close(lr, want):
+            c.add(f"{at}.lr", f"is {lr}, but Kupiec's LR for {inside} of {n} inside at level {level} is {want}")
+        elif lr < 0:
+            c.add(f"{at}.lr", f"must be >= 0, got {lr}")
+        else:
+            _check_chi2_p(c, p, lr, 1, f"{at}.p_value", "Kupiec LR")
+    if p is not None and rate is not None and level is not None and verdict is not None:
+        want_verdict = "consistent" if p >= ALPHA else ("too_narrow" if rate < level else "too_wide")
+        if verdict != want_verdict:
+            c.add(f"{at}.verdict", f"is {verdict!r}, but p_value {p}, rate {rate} and level {level} at alpha {ALPHA} give {want_verdict!r}")
+
+
+_LOG_KEYS = ("rmse", "mae")
+_USD_KEYS = ("rmse", "mae", "mape_pct")
+_FORECAST_KEY_FIELDS = (("model_id", MODEL_IDS), ("method", FORECAST_METHODS), ("window", WINDOW_IDS))
+RW_KEYS = [(kind, w) for kind in KIND_IDS for w in WINDOW_IDS]
+METRIC_KEYS = [(m, meth, w) for m, meth in FORECASTS for w in WINDOW_IDS]
+DM_KEYS = [(m, meth, w, loss) for m, meth in FORECASTS if FORECAST_KINDS[meth] == "one_step" for w in WINDOW_IDS for loss in DM_LOSSES]
+COVERAGE_KEYS = [(m, meth, w, dist, i) for m, meth in FORECASTS for w in WINDOW_IDS for dist in DISTRIBUTIONS for i in range(len(LEVELS))]
+
+
+def _check_metric_block(c: _Checker, block: dict[str, float] | None, at: str) -> None:
+    """Python only: every metric >= 0, and RMSE >= MAE (a quadratic mean is at least the arithmetic one)."""
+    if block is None:
+        return
+    for name, value in block.items():
+        if value < 0:
+            c.add(f"{at}.{name}", f"must be >= 0, got {value}")
+    if block["rmse"] < block["mae"] * (1.0 - _REL):
+        c.add(f"{at}.rmse", f"is {block['rmse']}, below the MAE {block['mae']}: a root mean square is never below the mean absolute value")
+
+
+@_capped
+def validate_evaluation(data: object) -> list[str]:
+    """Every problem in an `evaluation` payload (contract.md section 3.10)."""
+    c = _Checker()
+    root = c.obj(data, "data")
+    if root is None:
+        return c.problems
+    _pin_number(c, c.key(root, "alpha", "data"), "data.alpha", ALPHA, "reads the tests at alpha")
+    _pin_list(c, c.key(root, "interval_levels", "data"), "data.interval_levels", LEVELS, "scores the intervals at levels")
+    _pin_number(c, c.key(root, "refit_every", "data"), "data.refit_every", REFIT_EVERY, "re-estimates every", integer=True)
+    c.equals(c.key(root, "headline_usd", "data"), HEADLINE_USD, "data.headline_usd")
+    ds = c.key(root, "dm_settings", "data")
+    if ds is not _MISSING and (s := c.obj(ds, "data.dm_settings")) is not None:
+        sat = "data.dm_settings"
+        _pin_number(c, c.key(s, "horizon", sat), f"{sat}.horizon", DM_SETTINGS["horizon"], "tests one-step forecasts, horizon", integer=True)
+        _pin_list(c, c.key(s, "losses", sat), f"{sat}.losses", DM_SETTINGS["losses"], "tests the losses")
+        for name in ("errors", "correction", "alternative", "baseline"):
+            c.equals(c.key(s, name, sat), DM_SETTINGS[name], f"{sat}.{name}")
+        _pin_number(c, c.key(s, "same_tolerance", sat), f"{sat}.same_tolerance", DM_SETTINGS["same_tolerance"], "calls a forecast the random walk's within")
+    ns: dict[str, int] = {}
+    windows = c.array(c.key(root, "windows", "data"), "data.windows")
+    if windows is not None:
+        if len(windows) != len(WINDOW_IDS):
+            c.add("data.windows", f"has {len(windows)} windows, expected 2: 'test' then 'oos'")
+        else:
+            seen = []
+            for i, expected in enumerate(WINDOW_IDS):
+                at = f"data.windows[{i}]"
+                w = c.obj(windows[i], at)
+                if w is None:
+                    seen.append(None)
+                    continue
+                ident = _choice(c, c.key(w, "id", at), WINDOW_IDS, f"{at}.id")
+                if ident is not None and ident != expected:
+                    c.add(f"{at}.id", f"is {ident!r}, expected {expected!r} (the windows are 'test' then 'oos')")
+                first = c.date(c.key(w, "start", at), f"{at}.start")
+                last = c.date(c.key(w, "end", at), f"{at}.end")
+                if first is not None and last is not None and first > last:
+                    c.add(f"{at}.end", f"is {last}, before the window's start {first}")
+                n = _row_count(c, c.key(w, "n", at), f"{at}.n")
+                if ident == expected and n is not None:
+                    ns[expected] = n
+                origin = c.date(c.key(w, "origin_date", at), f"{at}.origin_date")
+                if origin is not None and first is not None and not origin < first:
+                    c.add(f"{at}.origin_date", f"is {origin}, but the origin is the last day before the window, which starts {first}")
+                seen.append((ident, first, last))
+            if seen[0] and seen[1] and seen[0][0] == "test" and seen[1][0] == "oos" and seen[0][2] is not None and seen[1][1] is not None and not seen[0][2] < seen[1][1]:
+                c.add("data.windows[1].start", f"is {seen[1][1]}, but the test window ends {seen[0][2]}; the oos window starts after it")
+    models = _row_set(c, c.key(root, "models", "data"), "data.models", [(m,) for m in MODEL_IDS], "'aic', 'bic', 'course' in that order")
+    for i, m in enumerate(models or []):
+        if m is None:
+            continue
+        at = f"data.models[{i}]"
+        ident = _choice(c, c.key(m, "id", at), MODEL_IDS, f"{at}.id")
+        if ident is not None and ident != MODEL_IDS[i]:
+            c.add(f"{at}.id", f"is {ident!r}, expected {MODEL_IDS[i]!r}")
+        own = ident or MODEL_IDS[i]  # against the row's own id, so a misplaced model is one problem
+        _pin_list(c, c.key(m, "methods", at), f"{at}.methods", [meth for mid, meth in FORECASTS if mid == own], f"lists model {own!r}'s forecast files as")
+        label = c.string(c.key(m, "label", at), f"{at}.label")
+        if label is not None and label != MODEL_LABELS[own]:
+            c.add(f"{at}.label", f"is {_show(label)}, but this reader labels model {own!r} {MODEL_LABELS[own]!r}")
+        _above(c, c.key(m, "t_df", at), f"{at}.t_df", 2.0, "a Student-t on 2 or fewer degrees of freedom has no finite variance")
+    methods = _row_set(c, c.key(root, "methods", "data"), "data.methods", [(m,) for m in FORECAST_METHODS], "'static', 'walk_forward', 'refit' in that order")
+    for i, m in enumerate(methods or []):
+        if m is None:
+            continue
+        at = f"data.methods[{i}]"
+        ident = _choice(c, c.key(m, "id", at), FORECAST_METHODS, f"{at}.id")
+        if ident is not None and ident != FORECAST_METHODS[i]:
+            c.add(f"{at}.id", f"is {ident!r}, expected {FORECAST_METHODS[i]!r}")
+        own = ident or FORECAST_METHODS[i]
+        kind = _choice(c, c.key(m, "kind", at), KIND_IDS, f"{at}.kind")
+        if kind is not None and kind != FORECAST_KINDS[own]:
+            c.add(f"{at}.kind", f"is {kind!r}, but method {own!r} makes {FORECAST_KINDS[own]!r} forecasts")
+        label = c.string(c.key(m, "label", at), f"{at}.label")
+        if label is not None and label != METHOD_LABELS[own]:
+            c.add(f"{at}.label", f"is {_show(label)}, but this reader labels method {own!r} {METHOD_LABELS[own]!r}")
+    rw_rows = _row_set(c, c.key(root, "random_walk", "data"), "data.random_walk", RW_KEYS, "multi_step test, multi_step oos, one_step test, one_step oos")
+    rw: dict[tuple[str, str], dict[str, Any]] = {}
+    for i, row in enumerate(rw_rows or []):
+        if row is None:
+            continue
+        at = f"data.random_walk[{i}]"
+        kind, window = _key_fields(c, row, at, (("kind", KIND_IDS), ("window", WINDOW_IDS)), RW_KEYS[i])
+        _window_n(c, c.key(row, "n", at), f"{at}.n", window, ns)
+        log = _numbers(c, c.key(row, "log", at), f"{at}.log", _LOG_KEYS)
+        usd = _numbers(c, c.key(row, "usd", at), f"{at}.usd", _USD_KEYS)
+        _check_metric_block(c, log, f"{at}.log")
+        _check_metric_block(c, usd, f"{at}.usd")
+        if (kind, window) == RW_KEYS[i] and log is not None and usd is not None:
+            rw[RW_KEYS[i]] = {"log": log, "usd": usd}
+    metric_rows = _row_set(c, c.key(root, "metrics", "data"), "data.metrics", METRIC_KEYS, "one per forecast file and window, in FORECASTS order, test before oos")
+    for i, row in enumerate(metric_rows or []):
+        if row is None:
+            continue
+        at = f"data.metrics[{i}]"
+        model, method, window = _key_fields(c, row, at, _FORECAST_KEY_FIELDS, METRIC_KEYS[i])
+        _window_n(c, c.key(row, "n", at), f"{at}.n", window, ns)
+        blocks = {"log": _numbers(c, c.key(row, "log", at), f"{at}.log", _LOG_KEYS)}
+        for name in ("usd_median", "usd_mean"):
+            blocks[name] = _numbers(c, c.key(row, name, at), f"{at}.{name}", _USD_KEYS)
+        for name, block in blocks.items():
+            _check_metric_block(c, block, f"{at}.{name}")
+        ratios_raw = c.key(row, "ratio_to_rw", at)
+        ratios: dict[str, dict[str, float] | None] = {}
+        if ratios_raw is not _MISSING and (r := c.obj(ratios_raw, f"{at}.ratio_to_rw")) is not None:
+            rat = f"{at}.ratio_to_rw"
+            ratios = {"log": _numbers(c, c.key(r, "log", rat), f"{rat}.log", _LOG_KEYS), **{name: _numbers(c, c.key(r, name, rat), f"{rat}.{name}", _USD_KEYS) for name in ("usd_median", "usd_mean")}}
+        bt = _numbers(c, c.key(row, "back_transform", at), f"{at}.back_transform", ("max_pct", "mean_pct"))
+        if bt is not None and (bt["mean_pct"] < 0 or bt["max_pct"] < bt["mean_pct"] * (1.0 - _REL)):  # Python only
+            c.add(f"{at}.back_transform", f"max_pct {bt['max_pct']} and mean_pct {bt['mean_pct']}: the largest gap is at least the mean one, and both are >= 0 (exp(s^2 / 2) >= 1)")
+        # Python only: each ratio is the model's metric over the random walk's, the same division.
+        key = (FORECAST_KINDS[method], window) if method is not None and window is not None else None
+        base = rw.get(key) if key is not None and (model, method, window) == METRIC_KEYS[i] else None
+        if base is not None:
+            for name, block in blocks.items():
+                ratio = ratios.get(name)
+                rw_block = base["log"] if name == "log" else base["usd"]
+                if block is None or ratio is None:
+                    continue
+                for metric, value in ratio.items():
+                    denominator = rw_block[metric]
+                    if denominator == 0:
+                        c.add(f"{at}.ratio_to_rw.{name}.{metric}", f"is {value}, but the random walk's {metric} is 0, so there is no ratio")
+                    elif value != block[metric] / denominator:
+                        c.add(f"{at}.ratio_to_rw.{name}.{metric}", f"is {value}, but the metric {block[metric]} / the random walk's {denominator} is {block[metric] / denominator}")
+    dm_rows = _row_set(c, c.key(root, "dm", "data"), "data.dm", DM_KEYS, "one per one-step forecast file, window and loss (squared, then absolute)")
+    for i, row in enumerate(dm_rows or []):
+        if row is None:
+            continue
+        at = f"data.dm[{i}]"
+        _model, _method, window, _loss = _key_fields(c, row, at, (*_FORECAST_KEY_FIELDS, ("loss", DM_LOSSES)), DM_KEYS[i])
+        _check_dm_row(c, row, at, ns, window)
+    coverage_rows = _row_set(c, c.key(root, "coverage", "data"), "data.coverage", COVERAGE_KEYS, "one per forecast file, window, distribution (normal, then t) and level (0.8, then 0.95)")
+    for i, row in enumerate(coverage_rows or []):
+        if row is None:
+            continue
+        at = f"data.coverage[{i}]"
+        *key, level_index = COVERAGE_KEYS[i]
+        _model, method, window, _dist = _key_fields(c, row, at, (*_FORECAST_KEY_FIELDS, ("distribution", DISTRIBUTIONS)), tuple(key))
+        _check_coverage_row(c, row, at, ns, method, window, level_index)
+    return c.problems
+
+
+def _fit_models(fit: object) -> dict[str, dict[str, Any]]:
+    data = fit if isinstance(fit, dict) else {}
+    models = data.get("models") if isinstance(data.get("models"), list) else []
+    return {m["id"]: m for m in models if isinstance(m, dict) and isinstance(m.get("id"), str)}
+
+
+# A one-step forecast's variance (sd_log^2 of a walk-forward or refit row) is the Kalman filter's
+# one-step variance F_t, which for these models settles at the parameters' sigma2. statsmodels stops
+# updating the state covariance once it changes by less than 1e-19 in a step (its steady-state switch,
+# `tolerance`), and that leaves F_t a constant fraction above sigma2: measured on AAPL, 2.67e-5 (bic),
+# 2.38e-7 (course) and 5.7e-14 (aic); on the made-up fixtures 0 to 3.4e-7; with the switch off
+# (tolerance 0) 5.7e-14 or less for all three. SIGMA2_REL is about 4 times the largest of these, and
+# far below any rescaling of sd_log a reader could notice (a factor of 1.0001 on sd_log is 2e-4 on sd_log^2).
+SIGMA2_REL = 1e-4
+
+
+def _sigma2(params: object) -> float | None:
+    """The positive finite `sigma2` of a params list ([{name, value}, ...]), or None."""
+    for p in params if isinstance(params, list) else []:
+        if isinstance(p, dict) and p.get("name") == "sigma2" and _finite(p.get("value")) and p["value"] > 0:
+            return float(p["value"])
+    return None
+
+
+def _one_step_variance_problems(name: str, data: dict[str, Any], sigma2: float | None) -> list[str]:
+    """Each one-step row's sd_log^2 against the sigma2 its parameters had: the fit's for a walk-forward
+    file and for a refit file's first REFIT_EVERY rows, each refit's own for the rows of its block. One
+    problem per window at most; only for a file valid on its own (the caller checks)."""
+    refits = data.get("refits") if data.get("method") == "refit" else []
+    first_row = 0  # the window's first row among the test and oos rows taken together
+    problems: list[str] = []
+    for w in data["windows"]:
+        start, first_row = first_row, first_row + len(w["rows"])  # counted whole, so a break below cannot shift the next window's blocks
+        for i, r in enumerate(w["rows"]):
+            block = (start + i) // REFIT_EVERY
+            source = "fit.json" if block == 0 or not refits else f"refits[{block - 1}]"
+            s2 = sigma2 if source == "fit.json" else _sigma2(refits[block - 1].get("params")) if block - 1 < len(refits) else None
+            if s2 is None:
+                continue
+            v = r["sd_log"] * r["sd_log"]
+            if not abs(v / s2 - 1.0) <= SIGMA2_REL:
+                problems.append(f"{name}: window {_show(w['id'])} row {i} sd_log^2 is {v}, {v / s2 - 1.0:.3g} relative from the sigma2 {s2} of {source}; a one-step variance is sigma2 to within SIGMA2_REL = {SIGMA2_REL}")
+                break
+    return problems
+
+
+def validate_forecast_fit(fit: object, residuals: dict[str, object], forecasts: dict[str, object]) -> list[str]:
+    """Problems between the forecast files and `fit` and the `residuals_<id>` files (each already valid
+    on its own): each file's order, trend and label are its model's, its t_df is that model's residual
+    t fit's df, a refit file's first n_obs is n_train + REFIT_EVERY, and each one-step row's sd_log^2
+    is its parameters' sigma2 to SIGMA2_REL (`_one_step_variance_problems`; only for a forecast file
+    valid on its own). Never raises."""
+    problems: list[str] = []
+    models = _fit_models(fit)
+    n_train = fit.get("n_train") if isinstance(fit, dict) else None
+    for model_id, method in FORECASTS:
+        name = f"forecast_{model_id}_{method}"
+        data = forecasts.get(name)
+        if not isinstance(data, dict):
+            problems.append(f"{name}: missing")
+            continue
+        model = models.get(model_id)
+        if model is None:
+            problems.append(f"{name}: fit.json has no model {model_id!r}")
+            continue
+        for field in ("order", "trend", "label"):
+            if data.get(field) != model.get(field):
+                problems.append(f"{name}: {field} is {_show(data.get(field))}, but fit.json says {_show(model.get(field))}")
+        series = residuals.get(f"residuals_{model_id}")
+        t_fit = series.get("t_fit") if isinstance(series, dict) else None
+        df = t_fit.get("df") if isinstance(t_fit, dict) else None
+        if data.get("t_df") != df:
+            problems.append(f"{name}: t_df is {_show(data.get('t_df'))}, but residuals_{model_id}.json's t fit has df {_show(df)}")
+        if method == "refit" and isinstance(data.get("refits"), list) and data["refits"]:
+            first = data["refits"][0]
+            if isinstance(first, dict) and first.get("n_obs") != (n_train + REFIT_EVERY if isinstance(n_train, int) else None):
+                problems.append(f"{name}: refits[0].n_obs is {_show(first.get('n_obs'))}, but fit.n_train + {REFIT_EVERY} is {_show(n_train + REFIT_EVERY if isinstance(n_train, int) else None)}")
+        if FORECAST_KINDS[method] == "one_step" and not validate_forecast(data, model_id, method):
+            problems += _one_step_variance_problems(name, data, _sigma2(model.get("params")))
+    # The refits' parameter names need no tie here: validate_forecast names them from the file's order
+    # and trend, tied to the fit's just above, and validate_fit names the fit's from the same two.
+    return problems
+
+
+def _fsum_mean(values: list[float]) -> float:
+    return math.fsum(values) / len(values)
+
+
+def _recompute_metrics(actual: list[float], forecast: list[float], *, mape: bool) -> dict[str, float]:
+    errors = [a - f for a, f in zip(actual, forecast, strict=True)]
+    out = {"rmse": math.sqrt(_fsum_mean([e * e for e in errors])), "mae": _fsum_mean([abs(e) for e in errors])}
+    if mape:
+        out["mape_pct"] = 100.0 * _fsum_mean([abs(e) / abs(a) for e, a in zip(errors, actual, strict=True)])
+    return out
+
+
+def _window_facts(window: dict[str, Any]) -> tuple[Any, ...]:
+    """What every file must agree on about a window: its id, bounds, origin, and each row's date and actuals."""
+    rows = window.get("rows") if isinstance(window.get("rows"), list) else []
+    return (window.get("id"), window.get("start"), window.get("end"), window.get("n"), window.get("origin"), [(r.get("date"), r.get("actual_log"), r.get("actual_usd")) for r in rows if isinstance(r, dict)])
+
+
+def _same_windows(forecasts: dict[str, object]) -> list[str]:
+    """Every forecast file's windows equal the first file's: the same ids, bounds, origins, dates and
+    actuals, exactly. One problem per file and window at most."""
+    names = [f"forecast_{m}_{meth}" for m, meth in FORECASTS]
+    present = [n for n in names if isinstance(forecasts.get(n), dict) and isinstance(forecasts[n].get("windows"), list)]
+    if not present:
+        return []
+    reference = present[0]
+    ref = [_window_facts(w) for w in forecasts[reference]["windows"] if isinstance(w, dict)]
+    problems = []
+    for name in present[1:]:
+        mine = [_window_facts(w) for w in forecasts[name]["windows"] if isinstance(w, dict)]
+        if len(mine) != len(ref):
+            problems.append(f"{name}: has {len(mine)} windows, but {reference} has {len(ref)}")
+            continue
+        for a, b in zip(mine, ref):
+            if a != b:
+                field = next(label for label, x, y in zip(("id", "start", "end", "n", "origin", "rows (date, actual_log, actual_usd)"), a, b) if x != y)
+                problems.append(f"{name}: window {_show(a[0])} differs from {reference}'s in its {field}: every forecast file describes the same days and actuals")
+    return problems
+
+
+def validate_forecast_prices(prices: object, forecasts: dict[str, object]) -> list[str]:
+    """Problems between the forecast files and `prices` (each already valid on its own): each window's
+    rows are that segment's rows of prices.json (date, log_close, close_usd, exactly), its origin is the
+    row before the segment, and its start, end and n are the segment's; and its start, end, n and origin
+    date are prices.json's `splits` (the window's segment, and the end of the segment before it), which
+    validate_prices ties to the rows and to the pinned out-of-sample window. One problem per file and
+    window at most for each tie. Never raises."""
+    data = prices if isinstance(prices, dict) else {}
+    rows = data.get("rows") if isinstance(data.get("rows"), list) else []
+    table = [r for r in rows if isinstance(r, dict)]
+    splits = data.get("splits") if isinstance(data.get("splits"), dict) else {}
+    problems = []
+    for name in (f"forecast_{m}_{meth}" for m, meth in FORECASTS):
+        forecast = forecasts.get(name)
+        if not isinstance(forecast, dict) or not isinstance(forecast.get("windows"), list):
+            problems.append(f"{name}: missing")
+            continue
+        for w in forecast["windows"]:
+            if not isinstance(w, dict) or w.get("id") not in WINDOW_IDS:
+                continue
+            index = [i for i, r in enumerate(table) if r.get("segment") == w["id"]]
+            want_rows = [(table[i].get("date"), table[i].get("log_close"), table[i].get("close_usd")) for i in index]
+            before = table[index[0] - 1] if index and index[0] > 0 else {}
+            want = (w["id"], want_rows[0][0] if want_rows else None, want_rows[-1][0] if want_rows else None, len(want_rows), {"date": before.get("date"), "log_close": before.get("log_close"), "close_usd": before.get("close_usd")}, want_rows)
+            got = _window_facts(w)
+            if got != want:
+                field = next(label for label, x, y in zip(("id", "start", "end", "n", "origin", "rows (date, actual_log, actual_usd)"), got, want) if x != y)
+                problems.append(f"{name}: window {_show(w['id'])} does not match prices.json in its {field}")
+            prior = SEGMENTS[SEGMENTS.index(w["id"]) - 1]  # the segment whose last day is the origin
+            span, before = (splits[k] if isinstance(splits.get(k), dict) else {} for k in (w["id"], prior))
+            origin = w.get("origin") if isinstance(w.get("origin"), dict) else {}
+            for field, mine, theirs in (("start", w.get("start"), span.get("start")), ("end", w.get("end"), span.get("end")), ("n", w.get("n"), span.get("n")), ("origin date", origin.get("date"), before.get("end"))):
+                if mine != theirs:
+                    problems.append(f"{name}: window {_show(w['id'])} {field} is {_show(mine)}, but prices.json's splits say {_show(theirs)}")
+                    break
+    return problems
+
+
+def validate_forecast_evaluation(evaluation: object, forecasts: dict[str, object]) -> list[str]:
+    """Problems between `evaluation` and the forecast files: every file describes the same days and
+    actuals (`_same_windows`), the windows and t_df agree, and every metric, every random-walk metric,
+    each DM mean_diff, var_diff and max_forecast_gap, each coverage count and each back-transform gap
+    is recomputed from the forecast rows (to _REL relative; counts and the gap exactly).
+
+    The checks assume each file is valid on its own, as the export tool's are; a file that is not
+    (validate_forecast, validate_evaluation) is named once and left out of them, so a malformed file
+    cannot make them raise. Never raises: a number that cannot be recomputed (an overflow, a division
+    by a zero actual) is reported as a problem."""
+    problems: list[str] = []
+    valid: dict[str, object] = {}
+    for model_id, method in FORECASTS:
+        name = f"forecast_{model_id}_{method}"
+        if name not in forecasts:
+            problems.append(f"{name}: missing")
+        elif validate_forecast(forecasts[name], model_id, method):
+            problems.append(f"{name}: not valid on its own (validate_forecast), so the checks across files leave it out")
+        else:
+            valid[name] = forecasts[name]
+    if validate_evaluation(evaluation):
+        problems.append("evaluation: not valid on its own (validate_evaluation), so it is not checked against the forecast rows")
+        evaluation = {}
+    problems += _same_windows(valid)
+    try:
+        _evaluation_from_rows(evaluation, valid, problems)
+    except (ArithmeticError, ValueError, TypeError, KeyError) as error:
+        problems.append(f"evaluation: a number could not be recomputed from the forecast rows ({type(error).__name__}: {error})")
+    return problems
+
+
+def _evaluation_from_rows(evaluation: object, forecasts: dict[str, object], problems: list[str]) -> None:
+    ev = evaluation if isinstance(evaluation, dict) else {}
+    files = {name: data for name, data in forecasts.items() if isinstance(data, dict)}
+
+    def window(model_id: str, method: str, wid: str) -> dict[str, Any] | None:
+        data = files.get(f"forecast_{model_id}_{method}")
+        ws = data.get("windows") if data else None
+        found = [w for w in ws if isinstance(w, dict) and w.get("id") == wid] if isinstance(ws, list) else []
+        return found[0] if len(found) == 1 and isinstance(found[0].get("rows"), list) else None
+
+    def compare(where: str, got: object, want: float) -> None:
+        if not isinstance(got, (int, float)) or not _near(float(got), want):
+            problems.append(f"evaluation: {where} is {_show(got)}, but the forecast rows give {want}")
+
+    for w in ev.get("windows", []) if isinstance(ev.get("windows"), list) else []:
+        if not isinstance(w, dict):
+            continue
+        for name, data in files.items():
+            mine = [x for x in data.get("windows", []) if isinstance(x, dict) and x.get("id") == w.get("id")] if isinstance(data.get("windows"), list) else []
+            if len(mine) != 1:
+                continue
+            ours = {"start": mine[0].get("start"), "end": mine[0].get("end"), "n": mine[0].get("n"), "origin_date": (mine[0].get("origin") or {}).get("date")}
+            for field, value in ours.items():
+                if w.get(field) != value:
+                    problems.append(f"evaluation: windows {_show(w.get('id'))}.{field} is {_show(w.get(field))}, but {name} says {_show(value)}")
+    for m in ev.get("models", []) if isinstance(ev.get("models"), list) else []:
+        if isinstance(m, dict):
+            for model_id, method in FORECASTS:
+                data = files.get(f"forecast_{model_id}_{method}")
+                if model_id == m.get("id") and data is not None and data.get("t_df") != m.get("t_df"):
+                    problems.append(f"evaluation: models {model_id!r}.t_df is {_show(m.get('t_df'))}, but forecast_{model_id}_{method} says {_show(data.get('t_df'))}")
+    # Each model's label is its forecast files' (which validate_forecast_fit ties to fit.json's).
+    for m in ev.get("models", []) if isinstance(ev.get("models"), list) else []:
+        if isinstance(m, dict):
+            for model_id, method in FORECASTS:
+                data = files.get(f"forecast_{model_id}_{method}")
+                if model_id == m.get("id") and data is not None and data.get("label") != m.get("label"):
+                    problems.append(f"evaluation: models {model_id!r}.label is {_show(m.get('label'))}, but forecast_{model_id}_{method} says {_show(data.get('label'))}")
+    # Forecasts made from the same state with the same parameters are the same numbers: each static
+    # path's first day is that model's walk-forward first day (one step from the same origin), and the
+    # refit's first REFIT_EVERY days use the training parameters, so they are the walk-forward's.
+    for model_id in dict.fromkeys(m for m, _ in FORECASTS):
+        walk = files.get(f"forecast_{model_id}_walk_forward")
+        for method, count in (("static", 1), ("refit", REFIT_EVERY)):
+            other = files.get(f"forecast_{model_id}_{method}")
+            if walk is None or other is None or not isinstance(walk.get("windows"), list) or not isinstance(other.get("windows"), list):
+                continue
+            for w_walk, w_other in zip(walk["windows"], other["windows"]):
+                if method == "refit" and w_walk.get("id") != "test":
+                    continue  # the first block's rows are the test window's (or both, if it is short)
+                for i, (a, b) in enumerate(zip(w_walk.get("rows", [])[:count], w_other.get("rows", [])[:count])):
+                    for field in ("mean_log", "sd_log"):
+                        if not _near(float(a[field]), float(b[field])):
+                            problems.append(f"forecast_{model_id}_{method}: window {_show(w_other.get('id'))} row {i} {field} is {b[field]}, but forecast_{model_id}_walk_forward's, made from the same state and parameters, is {a[field]}")
+                            break
+    # The random walk: the origin on every row (multi_step) or the row before (one_step).
+    reference = files.get(f"forecast_{FORECASTS[0][0]}_{FORECASTS[0][1]}")
+    for row in ev.get("random_walk", []) if isinstance(ev.get("random_walk"), list) else []:
+        if not isinstance(row, dict) or reference is None:
+            continue
+        w = window(*FORECASTS[0], row.get("window"))  # type: ignore[arg-type]
+        if w is None or not isinstance(w.get("origin"), dict):
+            continue
+        rows, origin = w["rows"], w["origin"]
+        a_log, a_usd = [r["actual_log"] for r in rows], [r["actual_usd"] for r in rows]
+        if row.get("kind") == "multi_step":
+            f_log, f_usd = [origin["log_close"]] * len(rows), [origin["close_usd"]] * len(rows)
+        else:
+            f_log, f_usd = [origin["log_close"], *a_log[:-1]], [origin["close_usd"], *a_usd[:-1]]
+        where = f"random_walk {row.get('kind')} {row.get('window')}"
+        for block, (actual, forecast, mape) in (("log", (a_log, f_log, False)), ("usd", (a_usd, f_usd, True))):
+            for metric, want in _recompute_metrics(actual, forecast, mape=mape).items():
+                compare(f"{where} {block}.{metric}", (row.get(block) or {}).get(metric), want)
+    for row in ev.get("metrics", []) if isinstance(ev.get("metrics"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        w = window(row.get("model_id"), row.get("method"), row.get("window"))  # type: ignore[arg-type]
+        if w is None:
+            continue
+        rows = w["rows"]
+        a_log, a_usd = [r["actual_log"] for r in rows], [r["actual_usd"] for r in rows]
+        where = f"metrics {row.get('model_id')} {row.get('method')} {row.get('window')}"
+        for block, actual, forecast, mape in (("log", a_log, [r["mean_log"] for r in rows], False), ("usd_median", a_usd, [r["median_usd"] for r in rows], True), ("usd_mean", a_usd, [r["mean_usd"] for r in rows], True)):
+            for metric, want in _recompute_metrics(actual, forecast, mape=mape).items():
+                compare(f"{where} {block}.{metric}", (row.get(block) or {}).get(metric), want)
+        gaps = [100.0 * math.expm1(r["sd_log"] * r["sd_log"] / 2.0) for r in rows]
+        compare(f"{where} back_transform.max_pct", (row.get("back_transform") or {}).get("max_pct"), max(gaps))
+        compare(f"{where} back_transform.mean_pct", (row.get("back_transform") or {}).get("mean_pct"), _fsum_mean(gaps))
+    for row in ev.get("dm", []) if isinstance(ev.get("dm"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        w = window(row.get("model_id"), row.get("method"), row.get("window"))  # type: ignore[arg-type]
+        if w is None or not isinstance(w.get("origin"), dict) or row.get("loss") not in DM_LOSSES:
+            continue
+        rows = w["rows"]
+        previous = [w["origin"]["log_close"], *(r["actual_log"] for r in rows[:-1])]
+        square = row["loss"] == "squared"
+
+        def loss(e: float, square: bool = square) -> float:
+            return e * e if square else abs(e)
+
+        d = [loss(r["actual_log"] - r["mean_log"]) - loss(r["actual_log"] - prev) for r, prev in zip(rows, previous, strict=True)]
+        gap = max(abs(r["mean_log"] - prev) for r, prev in zip(rows, previous, strict=True))
+        if row.get("max_forecast_gap") != gap:
+            problems.append(f"evaluation: dm {row.get('model_id')} {row.get('method')} {row.get('window')} {row.get('loss')} max_forecast_gap is {_show(row.get('max_forecast_gap'))}, but the forecast rows give {gap}")
+        mean = _fsum_mean(d)
+        where = f"dm {row.get('model_id')} {row.get('method')} {row.get('window')} {row.get('loss')}"
+        # The mean of a differential of mixed signs: compared at the scale of its terms.
+        got = row.get("mean_diff")
+        scale = max(abs(mean), _fsum_mean([abs(x) for x in d]))
+        if not isinstance(got, (int, float)) or not abs(float(got) - mean) <= _REL * scale:
+            problems.append(f"evaluation: {where} mean_diff is {_show(got)}, but the forecast rows give {mean}")
+        compare(f"{where} var_diff", row.get("var_diff"), _fsum_mean([(x - mean) * (x - mean) for x in d]))
+    for row in ev.get("coverage", []) if isinstance(ev.get("coverage"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        data = files.get(f"forecast_{row.get('model_id')}_{row.get('method')}")
+        w = window(row.get("model_id"), row.get("method"), row.get("window"))  # type: ignore[arg-type]
+        intervals = data.get("intervals") if data else None
+        key = _MULTIPLIER.get(row.get("distribution"))  # type: ignore[arg-type]
+        if w is None or not isinstance(intervals, dict) or key is None or row.get("level") not in LEVELS or not isinstance(intervals.get(key), list):
+            continue
+        m = intervals[key][LEVELS.index(row["level"])]
+        inside = sum(1 for r in w["rows"] if r["mean_log"] - m * r["sd_log"] <= r["actual_log"] <= r["mean_log"] + m * r["sd_log"])
+        if row.get("inside") != inside:
+            problems.append(f"evaluation: coverage {row.get('model_id')} {row.get('method')} {row.get('window')} {row.get('distribution')} {row.get('level')} inside is {_show(row.get('inside'))}, but {inside} rows lie inside mean_log -+ {m} sd_log")
+
 
 
 PAYLOAD_VALIDATORS: dict[str, Callable[[object], list[str]]] = {
@@ -2032,4 +3292,6 @@ PAYLOAD_VALIDATORS: dict[str, Callable[[object], list[str]]] = {
     "aic_grid": validate_aic_grid,
     "fit": validate_fit,
     **{f"residuals_{mid}": (lambda data, mid=mid: validate_residuals(data, mid)) for mid in MODEL_IDS},
+    **{f"forecast_{mid}_{meth}": (lambda data, mid=mid, meth=meth: validate_forecast(data, mid, meth)) for mid, meth in FORECASTS},
+    "evaluation": validate_evaluation,
 }

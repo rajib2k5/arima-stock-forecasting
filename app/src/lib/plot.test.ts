@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extent, formatTick, gapPath, linearScale, nearestIndex, niceStep, niceTicks, runs, stepDecimals, yearTicks } from './plot'
+import { extent, formatLogTick, formatTick, gapPath, linearScale, logTicks, nearestIndex, niceStep, niceTicks, runs, stepDecimals, yearTicks } from './plot'
 
 describe('extent', () => {
   it('spans every series and skips nulls and non-finite values', () => {
@@ -110,5 +110,25 @@ describe('gapPath', () => {
   })
   it('is empty when every value is missing', () => {
     expect(gapPath([0, 1], [null, NaN], id, id)).toBe('')
+  })
+})
+
+describe('logTicks', () => {
+  it('takes the coarsest of 1, 2 and 5 times powers of ten, then finer steps, that gives three ticks', () => {
+    expect(logTicks(1, 1e6)).toEqual([1, 10, 100, 1000, 10000, 100000, 1000000])
+    expect(logTicks(15, 900)).toEqual([20, 50, 100, 200, 500])
+    // The real static oos fan of the AIC model spans about $111 to $876.
+    expect(logTicks(111, 876)).toEqual([150, 200, 300, 500, 700])
+    expect(logTicks(150, 260)).toEqual([150, 200, 250])
+    expect(logTicks(0.25, 0.9)).toEqual([0.3, 0.5, 0.7])
+  })
+  it('falls back to evenly spaced ticks on a range too narrow for any, and gives none for a range it cannot place', () => {
+    expect(logTicks(33, 41)).toEqual(niceTicks(33, 41, 5))
+    expect(logTicks(0, 10)).toEqual([])
+    expect(logTicks(5, 2)).toEqual([])
+    expect(logTicks(7, 7)).toEqual([7])
+  })
+  it('writes a tick with no trailing zeros', () => {
+    expect([formatLogTick(150), formatLogTick(0.30000000000000004), formatLogTick(1500), formatLogTick(2.5)]).toEqual(['150', '0.3', '1500', '2.5'])
   })
 })

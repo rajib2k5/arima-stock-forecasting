@@ -146,3 +146,33 @@ export function gapPath(xs: readonly number[], ys: readonly (number | null)[], s
 function round2(v: number): number {
   return Math.round(v * 100) / 100
 }
+
+/** Mantissas for log-axis ticks, coarsest first: 1, 2 and 5 times powers of ten, then finer steps. */
+const LOG_MANTISSAS: readonly (readonly number[])[] = [[1], [1, 2, 5], [1, 1.5, 2, 3, 5, 7], [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9]]
+
+/**
+ * Tick values for a log axis over [lo, hi], lo > 0: the coarsest mantissa set that gives at least
+ * three ticks inside the range. A range too narrow for any (under about 20%) is close to linear, so
+ * it gets niceTicks. Each value is rounded to 12 significant digits, so 3 × 10⁻¹ is 0.3.
+ */
+export function logTicks(lo: number, hi: number, target = 5): number[] {
+  if (!(lo > 0) || !Number.isFinite(hi) || !(hi > lo)) return lo > 0 && lo === hi ? [lo] : []
+  const first = Math.floor(Math.log10(lo))
+  const last = Math.ceil(Math.log10(hi))
+  for (const mantissas of LOG_MANTISSAS) {
+    const ticks: number[] = []
+    for (let e = first; e <= last; e++) {
+      for (const m of mantissas) {
+        const v = Number((m * 10 ** e).toPrecision(12))
+        if (v >= lo && v <= hi) ticks.push(v)
+      }
+    }
+    if (ticks.length >= 3) return ticks
+  }
+  return niceTicks(lo, hi, target)
+}
+
+/** A log-axis tick as text: up to six significant digits, no trailing zeros (150, 0.5, 1500). */
+export function formatLogTick(value: number): string {
+  return String(Number(value.toPrecision(6)))
+}

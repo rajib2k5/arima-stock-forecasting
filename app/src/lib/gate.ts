@@ -17,6 +17,22 @@ export const LANDSCAPE_ARTIFACTS = ['aic_grid'] as const
 /** The artifacts the fit and diagnostics page reads (milestone 3): fit.json and one residual file per model. */
 export const FIT_ARTIFACTS = ['fit', 'residuals_aic', 'residuals_bic', 'residuals_course'] as const
 
+/**
+ * The artifacts the forecast and evaluation page reads (milestone 4): the seven forecast files
+ * (forecasting.FORECAST_ARTIFACTS, one per model and method) and evaluation.json. Written out, not
+ * built from contract.forecast.ts, so that the main bundle does not pull in the forecast parsers.
+ */
+export const FORECAST_ARTIFACTS = [
+  'forecast_aic_static',
+  'forecast_aic_walk_forward',
+  'forecast_aic_refit',
+  'forecast_bic_static',
+  'forecast_bic_walk_forward',
+  'forecast_course_static',
+  'forecast_course_walk_forward',
+  'evaluation',
+] as const
+
 export function hasArtifacts(meta: Meta, needed: readonly string[]): boolean {
   return needed.every((name) => meta.artifacts.includes(name))
 }

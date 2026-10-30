@@ -4,7 +4,8 @@ import App from './App'
 import { resetMemoryFallback, safeStorage } from './lib/storage'
 import type { FetchLike } from './data/loadArtifact'
 import { validMetaEnvelope, withValue } from './test/fixtures/fixtures'
-import { edaEnvelope, fitEnvelope, orderEnvelope, pricesEnvelope } from './test/fixtures/payloads'
+import { edaEnvelope, fitEnvelope, forecastEnvelope, orderEnvelope, pricesEnvelope } from './test/fixtures/payloads'
+import { FORECAST_ARTIFACTS } from './lib/gate'
 
 const STORE = safeStorage()
 
@@ -43,7 +44,7 @@ describe('App (integration)', () => {
     stubFetch(withValue(['schema_version'], '2.0.0'))
     render(<App />)
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('major version 2 is not supported')
+    expect(alert).toHaveTextContent('"2.0.0" has a major version other than 1')
     expect(within(alert).getByText('uv run python tools/export_app_data.py')).toBeInTheDocument()
     expect(screen.queryByText('AAPL')).toBeNull()
   })
@@ -165,6 +166,31 @@ describe('App (integration)', () => {
 
   it('does not offer the fit page when meta lacks one of its residual files', async () => {
     stubFetch(withValue(['data', 'artifacts'], ['meta', 'fit', 'residuals_aic', 'residuals_bic']))
+    render(<App />)
+    await screen.findByText('AAPL')
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'Architecture'])
+  })
+
+  it('offers the forecast page after the fit page once meta lists its eight files, and loads evaluation.json and the first forecast file only when it opens', async () => {
+    const meta = withValue(['data', 'artifacts'], ['meta', 'fit', 'residuals_aic', 'residuals_bic', 'residuals_course', ...FORECAST_ARTIFACTS])
+    const fn = vi.fn<FetchLike>(async (url) => {
+      const name = url.replace(/^.*data\//, '').replace('.json', '')
+      return { ok: true, status: 200, statusText: 'OK', json: async () => (name === 'meta' ? meta : forecastEnvelope(name)) }
+    })
+    vi.stubGlobal('fetch', fn)
+    render(<App />)
+    await screen.findByText('AAPL')
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['About', 'Fit and diagnostics', 'Forecast and evaluation', 'Architecture'])
+    expect(fn).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(nav).getByRole('link', { name: 'Forecast and evaluation' }))
+    expect(await screen.findByRole('img', { name: /^Forecast of AIC choice \(ADR-0002\), Static multi-step/ })).toBeInTheDocument()
+    expect(fn.mock.calls.map(([url]) => url.replace(/^.*data\//, '')).sort()).toEqual(['evaluation.json', 'forecast_aic_static.json', 'meta.json'])
+  })
+
+  it('does not offer the forecast page when meta lacks one of its eight files', async () => {
+    stubFetch(withValue(['data', 'artifacts'], ['meta', ...FORECAST_ARTIFACTS.filter((a) => a !== 'forecast_aic_refit')]))
     render(<App />)
     await screen.findByText('AAPL')
     const nav = screen.getByRole('navigation', { name: 'Primary' })

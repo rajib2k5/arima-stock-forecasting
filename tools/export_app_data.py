@@ -11,23 +11,25 @@ This is a thin wrapper. The logic lives in the package: export.py builds the pay
 wraps them in the envelope, payloads.py checks their shape, provenance.py supplies the commit and
 the time, artifacts.py compares two exports. This file only wires them together.
 
---check rebuilds every artifact in memory and compares `schema_version`, `artifact` and `data`
-with the files in --out. `generated_at` and `source_commit` are not compared, because they
-legitimately differ between the export run and the check run. It exits 1 on any difference,
-missing file or extra file, and writes nothing.
+--check rebuilds every artifact in memory, runs the cross-file check below on the rebuild, and
+compares `schema_version`, `artifact` and `data` with the files in --out. `generated_at` and
+`source_commit` are not compared, because they legitimately differ between the export run and the
+check run. It exits 1 on any disagreement, difference, missing file or extra file, and writes nothing.
 
 --only NAMES writes just the named artifacts, and takes the AIC grid from the aic_grid.json already
 in --out instead of refitting it (the grid is most of an export's 8 minutes). It is a shortcut for
 iterating on the later artifacts; a full export and --check are still what a commit needs, because
 only they rebuild the grid from the snapshot.
 
-fit.json and the three residuals_<id>.json files must describe the same fits (payloads.
-validate_fit_residuals). Before writing, the tool checks the set the folder would hold (the files
-it writes, and the ones --only leaves as they are) and refuses to write if they disagree, so
-`--only fit` after a code change fails instead of leaving fit.json beside stale residual files;
-after writing, it reads the four files back from disk and checks them again. Both checks run only
-when the run writes one of the four or the folder already holds one, so `--only meta` into a folder
-without them writes meta.json and nothing else is asked of it.
+fit.json, the three residuals_<id>.json files, the seven forecast_<model>_<method>.json files and
+evaluation.json must describe the same fits and forecasts, and the forecasts' actuals must be
+prices.json's rows (payloads.validate_fit_residuals, validate_forecast_fit, validate_forecast_prices and
+validate_forecast_evaluation). Before writing, the tool checks the set the
+folder would hold (the files it writes, and the ones --only leaves as they are) and refuses to write
+if they disagree, so `--only fit` after a code change fails instead of leaving fit.json beside stale
+residual or forecast files; after writing, it reads the whole set back from disk and checks it
+again. Both checks run only when the run writes one of the set or the folder already holds one, so
+`--only meta` into a folder without them writes meta.json and nothing else is asked of it.
 """
 
 from __future__ import annotations
@@ -52,7 +54,7 @@ from arima_forecasting.contract import dumps, make_envelope, validate_envelope  
 from arima_forecasting.data import SnapshotError, read_snapshot  # noqa: E402
 from arima_forecasting.export import ARTIFACTS, build_payloads  # noqa: E402
 from arima_forecasting.fitting import GridMismatch  # noqa: E402
-from arima_forecasting.payloads import PAYLOAD_VALIDATORS, validate_fit_residuals  # noqa: E402
+from arima_forecasting.payloads import PAYLOAD_VALIDATORS, validate_fit_residuals, validate_forecast_evaluation, validate_forecast_fit, validate_forecast_prices  # noqa: E402
 from arima_forecasting.prep import DataQualityError  # noqa: E402
 from arima_forecasting.provenance import build_time, source_commit  # noqa: E402
 from arima_forecasting.selection import ModelSearchError  # noqa: E402
@@ -137,6 +139,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     texts = {name: dumps(envelope) for name, envelope in envelopes.items()}
 
     if args.check:
+        # The fresh export's own family must agree before it is compared: equal to an inconsistent
+        # rebuild, the committed files would be inconsistent too.
+        mismatch = _family_problems({name: envelopes[name]["data"] for name in CHECKED})
+        if mismatch:
+            print("the fresh export's fit, residuals, forecast and evaluation files disagree:")
+            for problem in mismatch:
+                print(f"  - {problem}")
+            return EXIT_INVALID
         stale = compare_exports(args.out, envelopes)
         if stale:
             for line in stale:
@@ -151,20 +161,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     writing = [name for name in texts if args.only is None or name in args.only]
-    # The cross-file check runs when this run writes a fit or residuals file, or the folder already
+    # The cross-file check runs when this run writes a file of the family, or the folder already
     # holds one: `--only meta` into a folder that has none of them writes meta.json as before.
-    family = any(name in FIT_FAMILY for name in writing) or any((args.out / f"{name}.json").exists() for name in FIT_FAMILY)
+    family = any(name in FAMILY for name in writing) or any((args.out / f"{name}.json").exists() for name in FAMILY)
     if family:
-        # The fit and residual files the folder will hold: the new ones, and the old ones --only keeps.
-        planned = {name: envelopes[name]["data"] for name in writing if name in FIT_FAMILY}
+        # The family the folder will hold: the new files, and the old ones --only keeps.
+        planned = {name: envelopes[name]["data"] for name in writing if name in CHECKED}
         try:
-            planned |= {name: read_artifact(args.out, name)["data"] for name in FIT_FAMILY if name not in planned}
+            planned |= {name: read_artifact(args.out, name)["data"] for name in CHECKED if name not in planned}
         except ArtifactError as error:
-            print(f"error: --only {','.join(writing)} keeps a fit or residuals file that is not valid: {error}", file=sys.stderr)
+            print(f"error: --only {','.join(writing)} keeps a fit, residuals, forecast or evaluation file that is not valid: {error}", file=sys.stderr)
             return EXIT_INVALID
-        mismatch = _fit_family_problems(planned)
+        mismatch = _family_problems(planned)
         if mismatch:
-            print("refusing to write: fit.json and the residuals files would disagree (add them to --only, or run a full export):", file=sys.stderr)
+            print("refusing to write: the fit, residuals, forecast and evaluation files would disagree (add them to --only, or run a full export):", file=sys.stderr)
             for problem in mismatch:
                 print(f"  - {problem}", file=sys.stderr)
             return EXIT_INVALID
@@ -179,24 +189,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     # Read the whole set back from disk and check it again.
     try:
-        written = {name: read_artifact(args.out, name)["data"] for name in FIT_FAMILY}
+        written = {name: read_artifact(args.out, name)["data"] for name in CHECKED}
     except ArtifactError as error:
         print(f"error: after writing, {error}", file=sys.stderr)
         return EXIT_INVALID
-    mismatch = _fit_family_problems(written)
+    mismatch = _family_problems(written)
     if mismatch:
-        print(f"error: after writing, fit.json and the residuals files in {args.out} disagree:", file=sys.stderr)
+        print(f"error: after writing, the fit, residuals, forecast and evaluation files in {args.out} disagree:", file=sys.stderr)
         for problem in mismatch:
             print(f"  - {problem}", file=sys.stderr)
         return EXIT_INVALID
     return 0
 
 
-FIT_FAMILY = tuple(name for name in ARTIFACTS if name == "fit" or name.startswith("residuals_"))
+# The files that must agree with each other: the fit, its residual series, the forecasts made from it,
+# and the evaluation computed from the forecasts.
+FAMILY = tuple(name for name in ARTIFACTS if name in ("fit", "evaluation") or name.startswith(("residuals_", "forecast_")))
+# What the check reads: the family, then prices.json, whose rows the forecasts' actuals and origins must be.
+# prices.json alone does not start the check (a folder of milestone-1 files has nothing to agree with it).
+CHECKED = (*FAMILY, "prices")
 
 
-def _fit_family_problems(files: dict[str, Any]) -> list[str]:
-    return validate_fit_residuals(files["fit"], {name: data for name, data in files.items() if name != "fit"})
+def _family_problems(files: dict[str, Any]) -> list[str]:
+    residuals = {name: data for name, data in files.items() if name.startswith("residuals_")}
+    forecasts = {name: data for name, data in files.items() if name.startswith("forecast_")}
+    return (
+        validate_fit_residuals(files["fit"], residuals)
+        + validate_forecast_fit(files["fit"], residuals, forecasts)
+        + validate_forecast_prices(files["prices"], forecasts)
+        + validate_forecast_evaluation(files["evaluation"], forecasts)
+    )
 
 
 def _explain_snapshot_change(folder: Path, envelopes: dict[str, dict[str, Any]]) -> None:

@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { AppShell } from './lib/shell'
 import { useMeta } from './data/useMeta'
-import { EXPLORER_ARTIFACTS, FIT_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './lib/gate'
+import { EXPLORER_ARTIFACTS, FIT_ARTIFACTS, FORECAST_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './lib/gate'
 import { AboutView } from './views/AboutView'
 import { ArchitectureView } from './views/ArchitectureView'
 
@@ -12,6 +12,7 @@ const PriceExplorerView = lazy(() => import('./views/PriceExplorerView'))
 const StationarityView = lazy(() => import('./views/StationarityView'))
 const AicLandscapeView = lazy(() => import('./views/AicLandscapeView'))
 const FitView = lazy(() => import('./views/FitView'))
+const ForecastView = lazy(() => import('./views/ForecastView'))
 
 function loading(what: string) {
   return (
@@ -28,6 +29,7 @@ export default function App() {
   const stationarity = meta.status === 'ready' && hasArtifacts(meta.meta, STATIONARITY_ARTIFACTS)
   const landscape = meta.status === 'ready' && hasArtifacts(meta.meta, LANDSCAPE_ARTIFACTS)
   const fit = meta.status === 'ready' && hasArtifacts(meta.meta, FIT_ARTIFACTS)
+  const forecast = meta.status === 'ready' && hasArtifacts(meta.meta, FORECAST_ARTIFACTS)
   return (
     <AppShell
       slug={APP_SLUG}
@@ -82,6 +84,19 @@ export default function App() {
                 render: () => (
                   <Suspense fallback={loading('fit and diagnostics page')}>
                     <FitView />
+                  </Suspense>
+                ),
+              },
+            ]
+          : []),
+        ...(forecast
+          ? [
+              {
+                id: 'forecast',
+                label: 'Forecast and evaluation',
+                render: () => (
+                  <Suspense fallback={loading('forecast and evaluation page')}>
+                    <ForecastView />
                   </Suspense>
                 ),
               },

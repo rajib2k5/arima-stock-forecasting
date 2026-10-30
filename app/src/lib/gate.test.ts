@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { EXPLORER_ARTIFACTS, FIT_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './gate'
+import { EXPLORER_ARTIFACTS, FIT_ARTIFACTS, FORECAST_ARTIFACTS, hasArtifacts, LANDSCAPE_ARTIFACTS, STATIONARITY_ARTIFACTS } from './gate'
+import { artifactName, FORECASTS } from './contract.forecast'
 import type { Meta } from './contract'
 
 const meta = (artifacts: string[]): Meta => ({
@@ -26,6 +27,12 @@ describe('hasArtifacts', () => {
     expect(FIT_ARTIFACTS).toEqual(['fit', 'residuals_aic', 'residuals_bic', 'residuals_course'])
     expect(hasArtifacts(meta(['meta', 'fit', 'residuals_aic', 'residuals_bic', 'residuals_course']), FIT_ARTIFACTS)).toBe(true)
     expect(hasArtifacts(meta(['meta', 'fit', 'residuals_aic', 'residuals_bic']), FIT_ARTIFACTS)).toBe(false)
+  })
+  it('needs the seven forecast files and evaluation for the forecast page', () => {
+    // The gate's list is written out; it must be the parser's FORECASTS, file for file, and evaluation.
+    expect(FORECAST_ARTIFACTS).toEqual([...FORECASTS.map(([m, meth]) => artifactName(m, meth)), 'evaluation'])
+    expect(hasArtifacts(meta(['meta', ...FORECAST_ARTIFACTS]), FORECAST_ARTIFACTS)).toBe(true)
+    for (const missing of FORECAST_ARTIFACTS) expect(hasArtifacts(meta(['meta', ...FORECAST_ARTIFACTS.filter((a) => a !== missing)]), FORECAST_ARTIFACTS), missing).toBe(false)
   })
   it('is true only when every needed artifact is listed', () => {
     expect(hasArtifacts(meta(['meta', 'prices', 'eda']), EXPLORER_ARTIFACTS)).toBe(true)

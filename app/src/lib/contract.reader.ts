@@ -6,11 +6,15 @@
  * In its own module so that each lazily loaded view bundles only the parsers it uses: a module
  * shared by two chunks is bundled whole into a common chunk.
  */
-import { BLANK, isIsoDate, isRecord, typeName } from './contract'
+import { BLANK, isIsoDate, isRecord, problemList, shown, tooMany, typeName } from './contract'
+
+// The one quoting function lives in contract.ts (the envelope's parser uses it too); re-exported for the payload parsers.
+export { shown }
 
 /** Small typed readers that record a path-qualified error and return undefined on failure. */
 export class Reader {
-  readonly errors: string[] = []
+  /** At most MAX_PROBLEMS: one more throws, and the parser's `capped` ends the list there (contract.ts). */
+  readonly errors: string[] = problemList()
 
   obj(v: unknown, at: string): Record<string, unknown> | undefined {
     if (isRecord(v)) return v
@@ -27,7 +31,7 @@ export class Reader {
   str(v: unknown, at: string): string | undefined {
     if (v === MISSING) return undefined
     if (typeof v === 'string' && !BLANK.test(v)) return v
-    this.errors.push(`${at}: expected a non-empty string, got ${JSON.stringify(v) ?? typeName(v)}`)
+    this.errors.push(`${at}: expected a non-empty string, got ${shown(v)}`)
     return undefined
   }
 
@@ -35,7 +39,7 @@ export class Reader {
     const s = this.str(v, at)
     if (s === undefined) return undefined
     if (isIsoDate(s)) return s
-    this.errors.push(`${at}: "${s}" is not a calendar date (YYYY-MM-DD)`)
+    this.errors.push(`${at}: ${shown(s)} is not a calendar date (YYYY-MM-DD)`)
     return undefined
   }
 
@@ -43,7 +47,7 @@ export class Reader {
   int(v: unknown, at: string, min = 0): number | undefined {
     if (v === MISSING) return undefined
     if (typeof v === 'number' && Number.isSafeInteger(v) && v >= min) return v
-    this.errors.push(`${at}: expected an integer >= ${min}, got ${JSON.stringify(v) ?? typeName(v)}`)
+    this.errors.push(`${at}: expected an integer >= ${min}, got ${shown(v)}`)
     return undefined
   }
 
@@ -51,7 +55,7 @@ export class Reader {
   num(v: unknown, at: string): number | undefined {
     if (v === MISSING) return undefined
     if (typeof v === 'number' && Number.isFinite(v)) return v
-    this.errors.push(`${at}: expected a finite number, got ${JSON.stringify(v) ?? typeName(v)}`)
+    this.errors.push(`${at}: expected a finite number, got ${shown(v)}`)
     return undefined
   }
 
@@ -60,14 +64,14 @@ export class Reader {
     if (v === null) return null
     if (v === MISSING) return undefined
     if (typeof v === 'number' && Number.isFinite(v)) return v
-    this.errors.push(`${at}: expected a finite number or null, got ${JSON.stringify(v) ?? typeName(v)}`)
+    this.errors.push(`${at}: expected a finite number or null, got ${shown(v)}`)
     return undefined
   }
 
   literal<T extends string | boolean>(v: unknown, expected: T, at: string): T | undefined {
     if (v === MISSING) return undefined
     if (v === expected) return expected
-    this.errors.push(`${at}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(v) ?? typeName(v)}`)
+    this.errors.push(`${at}: expected ${JSON.stringify(expected)}, got ${shown(v)}`)
     return undefined
   }
 
@@ -78,11 +82,21 @@ export class Reader {
     return undefined
   }
 
+  /** An array of at most `most` items, checked before anyone walks it: a longer one is one short error (payloads._list). */
+  list(v: unknown, at: string, most: number, what: string): unknown[] | undefined {
+    const items = this.arr(v, at)
+    if (items && items.length > most) {
+      this.errors.push(tooMany(at, items.length, what, most))
+      return undefined
+    }
+    return items
+  }
+
   /** true or false; never 1 or "true" (Python's True == 1, so the Python reader checks the type too). */
   bool(v: unknown, at: string): boolean | undefined {
     if (v === MISSING) return undefined
     if (typeof v === 'boolean') return v
-    this.errors.push(`${at}: expected true or false, got ${JSON.stringify(v) ?? typeName(v)}`)
+    this.errors.push(`${at}: expected true or false, got ${shown(v)}`)
     return undefined
   }
 
@@ -91,7 +105,7 @@ export class Reader {
     if (v === MISSING) return undefined
     if (v === null && nullable) return null
     if (typeof v === 'string' && (options as readonly string[]).includes(v)) return v as T
-    this.errors.push(`${at}: expected one of ${options.join(', ')}${nullable ? ' or null' : ''}, got ${JSON.stringify(v) ?? typeName(v)}`)
+    this.errors.push(`${at}: expected one of ${options.join(', ')}${nullable ? ' or null' : ''}, got ${shown(v)}`)
     return undefined
   }
 }

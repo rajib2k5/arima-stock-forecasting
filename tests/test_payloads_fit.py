@@ -433,7 +433,12 @@ def test_no_matching_is_run_past_max_pq_roots_when_the_order_is_unknown():
     # must still not reach the matching.
     data = edited(FIT, ["models", 0], lambda m: {**m, "order": [30, 1, 30], "inv_roots_ar": close_roots(30, 0.5), "inv_roots_ma": close_roots(30, 0.4995), "cancelling_pairs": []})
     problems, seconds = timed(lambda: validate_fit(data))
-    assert problems == ["data.models[0].order[0]: expected an integer from 0 to 10, got 30", "data.models[0].order[2]: expected an integer from 0 to 10, got 30"]
+    assert problems == [
+        "data.models[0].order[0]: expected an integer from 0 to 10, got 30",
+        "data.models[0].order[2]: expected an integer from 0 to 10, got 30",
+        "data.models[0].inv_roots_ar: has 30 roots, more than the 10 a reader takes",
+        "data.models[0].inv_roots_ma: has 30 roots, more than the 10 a reader takes",
+    ]
     assert seconds < 2.0
 
 

@@ -3,7 +3,7 @@
  * test breaks one rule of contract.md sections 3.2-3.3 and checks the exact error path.
  */
 import { describe, expect, it } from 'vitest'
-import { parseEda, parsePrices } from './contract.payloads'
+import { OOS_MAX_GAP_DAYS, parseEda, parsePrices, TRAIN_FRACTION } from './contract.payloads'
 import pricesFixture from '../test/fixtures/prices.data.json'
 import edaFixture from '../test/fixtures/eda.data.json'
 
@@ -36,7 +36,7 @@ describe('parsePrices', () => {
     const r = parsePrices(prices())
     expect(r.ok ? [] : r.errors).toEqual([])
     if (!r.ok) return
-    expect(r.prices.rows).toHaveLength(6)
+    expect(r.prices.rows).toHaveLength(173) // 4 train, 1 test, and 168 oos rows six days apart from 2024-01-02 to 2026-09-30
     expect(r.prices.rows[4]).toEqual({ date: '2015-01-08', close_usd: 25, log_close: 3.2189, segment: 'test' })
     expect(r.prices.splits.train).toEqual({ start: '2015-01-02', end: '2015-01-07', n: 4 })
     expect(r.prices.fill.filled_dates).toEqual(['2015-01-06'])
@@ -118,7 +118,7 @@ describe('parsePrices', () => {
   it('refuses splits whose counts or dates disagree with the rows', () => {
     expect(pricesErrors(edited(prices(), (d) => (d.splits.train.n = 5)))).toEqual(['data.splits.train.n: says 5, but 4 rows have segment "train"'])
     expect(pricesErrors(edited(prices(), (d) => (d.splits.oos.end = '2024-01-03')))).toEqual([
-      'data.splits.oos: says 2024-01-02 to 2024-01-03, but the rows run 2024-01-02 to 2024-01-02',
+      'data.splits.oos: says 2024-01-02 to 2024-01-03, but the rows run 2024-01-02 to 2026-09-30',
     ])
   })
 
@@ -128,6 +128,81 @@ describe('parsePrices', () => {
 
   it('refuses a train fraction outside (0, 1)', () => {
     expect(pricesErrors(edited(prices(), (d) => (d.splits.train_fraction = 1)))).toEqual(['data.splits.train_fraction: must be between 0 and 1, got 1'])
+  })
+
+  it('pins the train fraction at 0.9, config.TRAIN_FRACTION', () => {
+    expect(TRAIN_FRACTION).toBe(0.9)
+    expect(pricesErrors(edited(prices(), (d) => (d.splits.train_fraction = 0.8)))).toEqual(['data.splits.train_fraction: is 0.8, but this reader splits the course window at 0.9'])
+  })
+
+  it('keeps the oos rows inside the pinned out-of-sample window and the course rows before it', () => {
+    const window = "but this reader's out-of-sample window is 2024-01-01 to 2026-10-01 (exclusive)"
+    const firstOos = (day: string) => (d: Loose) => {
+      d.rows[5].date = day
+      d.splits.oos.start = day
+    }
+    const lastOos = (day: string) => (d: Loose) => {
+      d.rows[172].date = day
+      d.splits.oos.end = day
+    }
+    expect(pricesErrors(edited(prices(), firstOos('2024-01-01')))).toEqual([]) // the window's first calendar day
+    expect(pricesErrors(prices())).toEqual([]) // the fixture's last oos row is the window's last calendar day, 2026-09-30
+    expect(pricesErrors(edited(prices(), lastOos('2026-10-01')))).toEqual([`data.splits.oos: runs 2024-01-02 to 2026-10-01, ${window}`])
+    expect(pricesErrors(edited(prices(), firstOos('2023-12-29')))).toEqual([
+      'data.rows[6].date: 2024-01-08 is 10 calendar days after the oos row before it, 2023-12-29; more than 7 (prep.MAX_GAP_DAYS) means rows are missing',
+      `data.splits.oos: runs 2023-12-29 to 2026-09-30, ${window}`,
+    ])
+    const testDay = (d: Loose) => {
+      d.rows[4].date = '2024-01-01'
+      d.splits.test.start = '2024-01-01'
+      d.splits.test.end = '2024-01-01'
+    }
+    expect(pricesErrors(edited(prices(), testDay))).toEqual(['data.splits.test.end: is 2024-01-01, but the test rows come before the out-of-sample window, which starts 2024-01-01'])
+  })
+
+  it('splits the course window as the producer does: its first int(n x 0.9) rows train, the rest test (prep.train_size)', () => {
+    // The last train row labelled test, the split counts rewritten to match: every count agrees with the rows, and only the rule refuses it.
+    const moved = (d: Loose) => {
+      d.rows[3].segment = 'test'
+      d.splits.train.end = '2015-01-06'
+      d.splits.train.n = 3
+      d.splits.test.start = '2015-01-07'
+      d.splits.test.n = 2
+    }
+    expect(OOS_MAX_GAP_DAYS).toBe(7)
+    expect(pricesErrors(edited(prices(), moved))).toEqual([
+      "data.rows: 3 rows are train and 2 test, but the course window's 5 rows split at 0.9 give int(5 x 0.9) = 4 train and 1 test (prep.train_size)",
+    ])
+  })
+
+  it('needs the oos rows to cover the window as the producer checks it: at most 7 calendar days from each end and between rows (prep.check_coverage)', () => {
+    const rule = 'more than 7 (prep.MAX_GAP_DAYS) means rows are missing'
+    const dropFirst = (d: Loose) => {
+      d.rows.splice(5, 1)
+      d.splits.oos.start = d.rows[5].date
+      d.splits.oos.n = 167
+    }
+    expect(pricesErrors(edited(prices(), dropFirst))).toEqual([]) // 2024-01-08: 7 days after the start
+    const later = (d: Loose) => {
+      dropFirst(d)
+      d.rows[5].date = '2024-01-09'
+      d.splits.oos.start = '2024-01-09'
+    }
+    expect(pricesErrors(edited(prices(), later))).toEqual([`data.rows[5].date: the first oos row is 2024-01-09, 8 calendar days after the out-of-sample window starts on 2024-01-01; ${rule}`])
+    const dropLast = (d: Loose) => {
+      d.rows.splice(172, 1)
+      d.splits.oos.end = '2026-09-24'
+      d.splits.oos.n = 167
+    }
+    expect(pricesErrors(edited(prices(), dropLast))).toEqual([]) // 7 days before the exclusive end
+    const earlier = (d: Loose) => {
+      dropLast(d)
+      d.rows[171].date = '2026-09-23'
+      d.splits.oos.end = '2026-09-23'
+    }
+    expect(pricesErrors(edited(prices(), earlier))).toEqual([`data.rows[171].date: the last oos row is 2026-09-23, 8 calendar days before the out-of-sample window ends on 2026-10-01 (exclusive); ${rule}`])
+    expect(pricesErrors(edited(prices(), (d) => (d.rows[6].date = '2024-01-09')))).toEqual([]) // 7 days apart
+    expect(pricesErrors(edited(prices(), (d) => (d.rows[6].date = '2024-01-10')))).toEqual([`data.rows[6].date: 2024-01-10 is 8 calendar days after the oos row before it, 2024-01-02; ${rule}`])
   })
 
   it('refuses filled dates that are unsorted or not among the rows', () => {
@@ -179,7 +254,7 @@ describe('parseEda', () => {
     expect(edaErrors(edited(eda(), (d) => d.kdes.pop()))).toEqual(['data.kdes: no KDE for "log_return"'])
     expect(edaErrors(edited(eda(), (d) => (d.kdes[1].variable = 'log_close')))).toEqual([
       'data.kdes: no KDE for "log_return"',
-      'data.kdes: duplicate variables log_close, log_close',
+      'data.kdes: duplicate variables: "log_close" appears more than once',
     ])
   })
 

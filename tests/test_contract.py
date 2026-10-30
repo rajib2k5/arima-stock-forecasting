@@ -35,14 +35,15 @@ def test_schema_version_constant():
     # milestone 2 added stationarity, acf_pacf and aic_grid, another minor change. 1.3.0: the
     # milestone-2 fix round added fields inside data only (each cell's start and starts_tried, the
     # multi-start fit settings, the outside flags and counts of the correlograms), minor again.
-    # 1.4.0: milestone 3 added fit and the three residuals_<id> artifacts, minor.
-    assert contract.SCHEMA_VERSION == "1.4.0"
+    # 1.4.0: milestone 3 added fit and the three residuals_<id> artifacts, minor. 1.5.0: milestone 4
+    # added the seven forecast_<model>_<method> artifacts and evaluation, minor.
+    assert contract.SCHEMA_VERSION == "1.5.0"
 
 
 def test_make_envelope_happy_path():
     envelope = make_envelope("meta", {"ticker": "AAPL"}, generated_at=NOON_UTC, source_commit=SHA)
     assert envelope == {
-        "schema_version": "1.4.0",
+        "schema_version": "1.5.0",
         "artifact": "meta",
         "generated_at": "2026-10-28T12:00:00Z",
         "source_commit": SHA,
@@ -232,7 +233,7 @@ def test_validate_accepts_a_sha256_commit(commit):
 def test_validate_reports_extra_keys():
     envelope = good_envelope()
     envelope["extra"] = 1
-    assert validate_envelope(envelope) == ["unexpected key: extra"]
+    assert validate_envelope(envelope) == ["unexpected key: 'extra'"]
 
 
 def test_validate_reports_an_empty_object_as_five_missing_keys():

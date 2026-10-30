@@ -13,7 +13,11 @@ the snapshot:
   in aic_grid.json a sample of cells (the choice, BIC's choice, the best of each d and one cell of
   each status) refits to the same values. All 144 cells are refitted by `--check` (about 8 minutes);
 - fit.json and the three residuals_<id>.json files are exactly what the current code builds from
-  prices.json's rows and aic_grid.json's estimates.
+  prices.json's rows and aic_grid.json's estimates;
+- the static and walk-forward forecast files are exactly what the current code builds from
+  prices.json's rows, fit.json's estimates and the residual files' t fits; in the refit file three
+  sampled blocks refit to the committed estimates from the ones before them; and evaluation.json is
+  exactly what the current code builds from the forecast files.
 
 Every exported file is committed (the owner's decision of 2026-10-29, DATA.md), so all of these
 tests run in every copy, a fresh clone included. The held-artifact mechanism stays: a file that
@@ -27,9 +31,12 @@ double), which is why exact equality is the right test.
 
 from __future__ import annotations
 
+import math
+import warnings
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -37,7 +44,10 @@ from arima_forecasting import selection, stationarity
 from arima_forecasting.artifacts import read_artifact, table_from_prices
 from arima_forecasting.contract import SCHEMA_VERSION
 from arima_forecasting.export import ARTIFACTS, HELD_ARTIFACTS, RESIDUAL_ARTIFACTS, eda_payload, fit_payloads, meta_payload, prices_payload
+from arima_forecasting.evaluation import evaluation_payload
+from arima_forecasting.forecasting import FORECAST_ARTIFACTS, FORECASTS, REFIT_EVERY, Spec, forecast_payload, spec_from_fit, walk_forward
 from arima_forecasting.identification import acf_pacf_payload
+from arima_forecasting.payloads import validate_forecast_evaluation, validate_forecast_fit
 from arima_forecasting.prep import price_table
 
 REPO = Path(__file__).resolve().parent.parent
@@ -260,3 +270,71 @@ def test_each_residuals_file_matches_its_model_and_the_training_dates():
         assert [r["date"] for r in dg["burned"]] == train[: dg["burn_excluded"]]
         assert series["acf"]["outside_count"] == dg["acf_outside_count"]
         assert series["acf_squared"]["outside_count"] == dg["acf_squared_outside_count"]
+
+
+# --- milestone 4: forecast_<model>_<method> and evaluation -------------------------------------------------
+
+
+def committed_forecasts() -> dict[str, dict]:
+    return {name: load(name)["data"] for name in FORECAST_ARTIFACTS}
+
+
+def test_static_and_walk_forward_forecasts_are_what_the_current_code_builds_from_the_committed_fit():
+    # Filters only, at the committed fit's parameters, over the committed rows (a second or two). The
+    # refit file is checked by sampled blocks below: refitting all 43 blocks takes about 12 s.
+    table = table_from_prices(load("prices")["data"])
+    fit = load("fit")["data"]
+    models = {m["id"]: m for m in fit["models"]}
+    for model_id, method in FORECASTS:
+        if method == "refit":
+            continue
+        t_df = load(f"residuals_{model_id}")["data"]["t_fit"]["df"]
+        assert forecast_payload(table, models[model_id], t_df, method) == load(f"forecast_{model_id}_{method}")["data"], (model_id, method)
+
+
+def test_sampled_refit_blocks_refit_to_the_committed_estimates():
+    # Each refit starts from the estimates before it, so block k is reproduced from block k - 1's
+    # committed estimates (the first from the training fit's), on the committed rows before it.
+    data = load("forecast_aic_refit")["data"]
+    fit = next(m for m in load("fit")["data"]["models"] if m["id"] == "aic")
+    y = table_from_prices(load("prices")["data"])["log_close"].to_numpy()
+    spec = spec_from_fit(fit)
+    refits = data["refits"]
+    for k in (0, len(refits) // 2, len(refits) - 1):
+        start = spec.params if k == 0 else np.array([p["value"] for p in refits[k - 1]["params"]])
+        n_obs = refits[k]["n_obs"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            again = spec.model(y[:n_obs]).fit(start_params=start, method="statespace", method_kwargs={"method": selection.OPTIMIZER, "maxiter": selection.MAXITER}, cov_type="none")
+        assert [float(v) for v in again.params] == [p["value"] for p in refits[k]["params"]], k
+        assert float(again.llf) == refits[k]["llf"]
+    # And the one-step forecasts of a sampled block follow from its committed estimates.
+    k = len(refits) // 2
+    block = Spec(spec.order, spec.trend, np.array([p["value"] for p in refits[k]["params"]]))
+    start = refits[k]["n_obs"]
+    mean, var = walk_forward(y, start, start + REFIT_EVERY, block)
+    rows = data["windows"][0]["rows"] + data["windows"][1]["rows"]
+    first = len(y) - len(rows)
+    assert [r["mean_log"] for r in rows[start - first : start - first + REFIT_EVERY]] == [float(v) for v in mean]
+    assert [r["sd_log"] for r in rows[start - first : start - first + REFIT_EVERY]] == [math.sqrt(float(v)) for v in var]
+
+
+def test_evaluation_json_is_what_the_current_code_builds_from_the_committed_forecasts():
+    assert evaluation_payload(committed_forecasts(), load("fit")["data"]) == load("evaluation")["data"]
+
+
+def test_the_forecasts_describe_the_committed_rows_and_agree_with_the_fit():
+    prices = load("prices")["data"]
+    forecasts = committed_forecasts()
+    by_segment = {s: [r for r in prices["rows"] if r["segment"] == s] for s in ("train", "test", "oos")}
+    for name, data in forecasts.items():
+        for window in data["windows"]:
+            rows = by_segment[window["id"]]
+            assert [r["date"] for r in window["rows"]] == [r["date"] for r in rows], name
+            assert [(r["actual_log"], r["actual_usd"]) for r in window["rows"]] == [(r["log_close"], r["close_usd"]) for r in rows], name
+            before = by_segment["train"][-1] if window["id"] == "test" else by_segment["test"][-1]
+            assert window["origin"] == {"date": before["date"], "log_close": before["log_close"], "close_usd": before["close_usd"]}, name
+            assert (window["start"], window["end"], window["n"]) == (prices["splits"][window["id"]]["start"], prices["splits"][window["id"]]["end"], prices["splits"][window["id"]]["n"])
+    residuals = {name: load(name)["data"] for name in RESIDUAL_ARTIFACTS}
+    assert validate_forecast_fit(load("fit")["data"], residuals, forecasts) == []
+    assert validate_forecast_evaluation(load("evaluation")["data"], forecasts) == []

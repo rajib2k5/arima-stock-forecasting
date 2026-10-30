@@ -65,7 +65,7 @@ describe('loadArtifact', () => {
     const res = await loadArtifact('meta', respond({ body: withValue(['schema_version'], '2.0.0') }))
     expect(res).toEqual({
       ok: false,
-      error: { kind: 'contract', errors: ['schema_version: major version 2 is not supported (this app reads 1.x.y)'] },
+      error: { kind: 'contract', errors: ['schema_version: "2.0.0" has a major version other than 1 (this app reads 1.x.y)'] },
     })
   })
 

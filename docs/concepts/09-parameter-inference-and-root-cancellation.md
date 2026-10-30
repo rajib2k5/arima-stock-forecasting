@@ -322,7 +322,7 @@ coefficients together", not "this model is wrong".
 - `tests/test_fitting.py:108` checks z and p against statsmodels' own, `tests/test_fitting.py:51`
   works the cancelling rule by hand, and `tests/test_fitting.py:69` shows where closest first would
   differ.
-- `src/arima_forecasting/payloads.py:1464` restates the rule in Python's validator (the number of
+- `src/arima_forecasting/payloads.py:1608` restates the rule in Python's validator (the number of
   pairs and their total distance, by dynamic programming); the app draws the exported pairs on the
   unit circle (`app/src/views/FitView.tsx:242`).
 - The covariance comparison above came from `m3_probe.py` in the milestone-3 walkthrough

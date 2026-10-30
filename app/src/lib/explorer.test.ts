@@ -8,17 +8,21 @@ describe('pricePlot', () => {
     const prices = fixturePrices()
     const dollars = pricePlot(prices, 'usd')
     const logs = pricePlot(prices, 'log')
-    expect(dollars.series[0].ys).toEqual([24, 23.5, 23.5, 24, 25, 185])
-    expect(logs.series[0].ys).toEqual([3.1781, 3.157, 3.157, 3.1781, 3.2189, 5.2204])
+    // The course rows, then the first of the 168 oos rows (every sixth day from 2024-01-02 to 2026-09-30) and the last.
+    expect(dollars.series[0].ys).toHaveLength(173)
+    expect([...dollars.series[0].ys.slice(0, 6), dollars.series[0].ys[172]]).toEqual([24, 23.5, 23.5, 24, 25, 185, 192])
+    expect([...logs.series[0].ys.slice(0, 6), logs.series[0].ys[172]]).toEqual([3.1781, 3.157, 3.157, 3.1781, 3.2189, 5.2204, 5.2575])
     expect(dollars.yLabel).toBe('adjusted close ($)')
     expect(logs.yLabel).toBe('log price, ln($)')
   })
   it('puts one x step on each trading day and a tick at the first day of each year', () => {
     const plot = pricePlot(fixturePrices(), 'usd')
-    expect(plot.xs).toEqual([0, 1, 2, 3, 4, 5])
+    expect(plot.xs).toEqual(Array.from({ length: 173 }, (_, i) => i))
     expect(plot.xTicks).toEqual([
       { x: 0, label: '2015' },
       { x: 5, label: '2024' },
+      { x: 66, label: '2025' }, // 2025-01-02
+      { x: 127, label: '2026' }, // 2026-01-03
     ])
   })
   it('reads out the date, both prices and the segment of a row', () => {
@@ -31,7 +35,7 @@ describe('segmentBands', () => {
     expect(segmentBands(fixturePrices())).toEqual([
       { from: 0, to: 3, kind: 'train', label: 'Train: 2015-01-02 to 2015-01-07, 4 trading days' },
       { from: 4, to: 4, kind: 'test', label: 'Test: 2015-01-08 to 2015-01-08, 1 trading day' },
-      { from: 5, to: 5, kind: 'oos', label: 'Out of sample: 2024-01-02 to 2024-01-02, 1 trading day' },
+      { from: 5, to: 172, kind: 'oos', label: 'Out of sample: 2024-01-02 to 2026-09-30, 168 trading days' },
     ])
   })
 })

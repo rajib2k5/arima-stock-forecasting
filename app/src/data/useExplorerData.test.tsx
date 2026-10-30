@@ -18,7 +18,7 @@ describe('loadExplorer', () => {
     expect(asked.sort()).toEqual(['eda', 'prices'])
     expect(state.status).toBe('ready')
     if (state.status !== 'ready') return
-    expect(state.prices.rows).toHaveLength(6)
+    expect(state.prices.rows).toHaveLength(173)
     expect(state.eda.summary.n).toBe(4)
     expect(state.envelopes.prices.schema_version).toBe('1.1.0')
   })
