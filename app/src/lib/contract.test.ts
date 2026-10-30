@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isIsoDate, isSourceCommit, isUtcTimestamp, parseEnvelope, parseMeta, SUPPORTED_MAJOR, type Meta } from './contract'
+import { isIsoDate, isSourceCommit, isUtcTimestamp, MAX_LIST, MAX_NAMES, OOS_WINDOW, parseEnvelope, parseMeta, SUPPORTED_MAJOR, type Meta } from './contract'
 import { VALID_COMMIT, validMetaEnvelope, withValue, without, type Json } from '../test/fixtures/fixtures'
 
 const errorsOf = (raw: unknown): string[] => {
@@ -46,19 +46,19 @@ describe('parseEnvelope: valid input', () => {
 
 describe('parseEnvelope: the top level is closed', () => {
   it('rejects an unknown top-level key and names it, so a new envelope field needs a major bump', () => {
-    expect(errorsOf(withValue(['future_field'], { anything: [1, 2, 3] }))).toEqual(['future_field: unexpected key'])
+    expect(errorsOf(withValue(['future_field'], { anything: [1, 2, 3] }))).toEqual(['"future_field": unexpected key']) // a key from the file is quoted (shown)
   })
   it('reports every unknown key, alongside the other problems', () => {
     const raw = withValue(['one'], 1) as Record<string, Json>
     raw.two = 2
     raw.artifact = 'Bad'
-    expect(errorsOf(raw)).toEqual(['artifact: "Bad" must match [a-z][a-z0-9_]*', 'one: unexpected key', 'two: unexpected key'])
+    expect(errorsOf(raw)).toEqual(['artifact: "Bad" must match [a-z][a-z0-9_]*', '"one": unexpected key', '"two": unexpected key'])
   })
   it('treats the keys "__proto__" and "constructor" in the JSON as the unknown keys they are', () => {
     // JSON.parse makes "__proto__" an own property; an object literal would set the prototype instead.
     const base = JSON.stringify(validMetaEnvelope()).slice(0, -1)
-    expect(errorsOf(JSON.parse(`${base},"__proto__":{}}`))).toEqual(['__proto__: unexpected key'])
-    expect(errorsOf(JSON.parse(`${base},"constructor":"x"}`))).toEqual(['constructor: unexpected key'])
+    expect(errorsOf(JSON.parse(`${base},"__proto__":{}}`))).toEqual(['"__proto__": unexpected key'])
+    expect(errorsOf(JSON.parse(`${base},"constructor":"x"}`))).toEqual(['"constructor": unexpected key'])
   })
 })
 
@@ -66,7 +66,7 @@ describe('parseEnvelope: schema_version', () => {
   it.each(['2.0.0', '3.1.4', '10.0.0', '0.9.0'])('refuses major %s', (v) => {
     const errs = errorsOf(withValue(['schema_version'], v))
     expect(errs).toHaveLength(1)
-    expect(errs[0]).toMatch(/^schema_version: major version \d+ is not supported \(this app reads 1\.x\.y\)$/)
+    expect(errs[0]).toBe(`schema_version: "${v}" has a major version other than 1 (this app reads 1.x.y)`)
   })
   it.each(['1.0', '1', 'v1.0.0', '1.0.0-rc.1', '1.0.0+build', '01.0.0', '1.00.0', '', ' 1.0.0', '1.0.0 ', '1.x.0'])('rejects non-semver %j', (v) => {
     expect(errorsOf(withValue(['schema_version'], v))).toEqual([`schema_version: "${v}" is not a semantic version (MAJOR.MINOR.PATCH)`])
@@ -105,7 +105,7 @@ describe('parseEnvelope: wrong types and values', () => {
     expect(errorsOf(withValue([key], value))).toEqual([message])
   })
   it.each(['', '   ', 'Meta', 'META', '1meta', '_meta', 'meta-2', 'meta.json', 'me ta', ' meta', 'meta\n', 'm\u00e9ta'])('rejects the artifact name %j', (name) => {
-    expect(errorsOf(withValue(['artifact'], name))).toEqual([`artifact: "${name}" must match [a-z][a-z0-9_]*`])
+    expect(errorsOf(withValue(['artifact'], name))).toEqual([`artifact: ${JSON.stringify(name)} must match [a-z][a-z0-9_]*`])
   })
   it.each(['meta', 'm', 'meta_2', 'a1_', 'price_history'])('accepts the artifact name %j', (name) => {
     expect(parseEnvelope(withValue(['artifact'], name)).ok).toBe(true)
@@ -193,7 +193,7 @@ describe('parseEnvelope: error collection', () => {
     raw.data = []
     const errs = errorsOf(raw)
     expect(errs).toHaveLength(5)
-    expect(errs.join('\n')).toMatch(/schema_version: major version 2/)
+    expect(errs.join('\n')).toMatch(/schema_version: "2.0.0" has a major version other than 1/)
     expect(errs.join('\n')).toMatch(/artifact: missing/)
     expect(errs.join('\n')).toMatch(/generated_at: "soon"/)
     expect(errs.join('\n')).toMatch(/source_commit: "abc"/)
@@ -348,7 +348,17 @@ describe('parseMeta: windows', () => {
     ])
   })
   it('accepts a one-day window', () => {
-    expect(parseMeta(metaData(withValue(['data', 'windows', 'oos', 'end_exclusive'], '2024-01-02'))).ok).toBe(true)
+    expect(parseMeta(metaData(withValue(['data', 'windows', 'course', 'end_exclusive'], '2015-01-02'))).ok).toBe(true)
+  })
+  it('bounds every list at MAX_LIST (days and points) or MAX_NAMES (names), as payloads.py does', () => {
+    expect([MAX_LIST, MAX_NAMES]).toEqual([10_000, 100])
+    expect(metaErrorsOf(metaData(withValue(['data', 'milestones'], new Array(101).fill(0))))).toEqual(['data.milestones: has 101 milestones, more than the 100 a reader takes'])
+  })
+  it('pins the out-of-sample window at 2024-01-01 to 2026-10-01 (exclusive), config.OOS_WINDOW', () => {
+    expect(OOS_WINDOW).toEqual({ start: '2024-01-01', end_exclusive: '2026-10-01' })
+    const pinned = "but this reader's out-of-sample window is 2024-01-01 to 2026-10-01 (exclusive)"
+    expect(metaErrorsOf(metaData(withValue(['data', 'windows', 'oos', 'start'], '2024-01-02')))).toEqual([`data.windows.oos: is 2024-01-02 to 2026-10-01, ${pinned}`])
+    expect(metaErrorsOf(metaData(withValue(['data', 'windows', 'oos', 'end_exclusive'], '2026-09-30')))).toEqual([`data.windows.oos: is 2024-01-01 to 2026-09-30, ${pinned}`])
   })
 })
 

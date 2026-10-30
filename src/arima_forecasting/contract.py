@@ -20,6 +20,7 @@ Everything here is pure: no files, no clock, no git. The caller passes the time 
 
 from __future__ import annotations
 
+import heapq
 import json
 import re
 from collections.abc import Mapping
@@ -28,7 +29,7 @@ from typing import Any
 
 # Semver. A major bump (2.0.0) means a breaking change the app must refuse. Minor and patch
 # bumps (1.1.0, 1.0.1) only add things, so an app that understands 1.x can still read them.
-SCHEMA_VERSION = "1.4.0"
+SCHEMA_VERSION = "1.5.0"
 SUPPORTED_MAJOR = 1
 
 ENVELOPE_KEYS = frozenset({"schema_version", "artifact", "generated_at", "source_commit", "data"})
@@ -46,6 +47,57 @@ UNCOMMITTED = "uncommitted"
 # JavaScript numbers are 64-bit floats, which hold a whole number exactly only up to 2**53 - 1.
 # JSON.parse rounds a bigger integer to the nearest float (and 10**309 becomes Infinity).
 MAX_SAFE_INTEGER = 2**53 - 1
+
+# A reader reports at most MAX_PROBLEMS problems per file, then one more that says it stopped
+# (more_problems), and stops reading: the bound is on the file, not on each list, so lists inside
+# lists cannot multiply it (100 KDEs of 10,000 empty points made 3,000,000 problems before it). The
+# app's contract.ts holds the same number and the same words (contract.md, "Bounds").
+MAX_PROBLEMS = 200
+
+# A message quotes a value read from a file only through shown(), in both readers: a string up to
+# SHOWN_CHARS characters, a list or an object only when it has at most SHOWN_ITEMS small, flat
+# entries, and anything else by its size alone. shown() never walks into a nested value, so a value
+# of any length or depth (a 50 MB string, a 100,000-deep array) gives a short message, quickly.
+SHOWN_CHARS = 80
+SHOWN_ITEMS = 8
+
+
+def more_problems(root: str) -> str:
+    """The problem that ends a list cut at MAX_PROBLEMS (the same words as the app's)."""
+    return f"{root}: more than {MAX_PROBLEMS} problems; a reader reports the first {MAX_PROBLEMS} and stops"
+
+
+def _small(value: object) -> bool:
+    return (
+        value is None
+        or isinstance(value, (bool, float))
+        or (isinstance(value, int) and abs(value) <= MAX_SAFE_INTEGER)
+        or (isinstance(value, str) and len(value) <= SHOWN_CHARS // 2)
+    )
+
+
+def shown(value: object) -> str:
+    """A value from a file as a message quotes it: short whatever its size, and never recursive."""
+    if isinstance(value, str):
+        if len(value) <= SHOWN_CHARS:
+            return repr(value)
+        return f"{value[:SHOWN_CHARS]!r}… ({len(value)} characters)"
+    if value is None or isinstance(value, (bool, float)):
+        return repr(value)
+    if isinstance(value, int):
+        if abs(value) <= MAX_SAFE_INTEGER:
+            return repr(value)
+        # str() of an int of more than 4,300 digits raises (json.loads refuses one too); bits never do.
+        return f"an integer of {value.bit_length()} bits"
+    if isinstance(value, list):
+        if len(value) <= SHOWN_ITEMS and all(_small(item) for item in value):
+            return repr(value)
+        return f"an array of {len(value)}"
+    if isinstance(value, dict):
+        if len(value) <= SHOWN_ITEMS and all(isinstance(k, str) and len(k) <= SHOWN_CHARS // 2 and _small(v) for k, v in value.items()):
+            return repr(value)
+        return f"an object with {len(value)} keys"
+    return type(value).__name__
 
 
 def _is_artifact(value: object) -> bool:
@@ -118,35 +170,39 @@ def validate_envelope(obj: object) -> list[str]:
     problems: list[str] = []
     for key in sorted(ENVELOPE_KEYS - obj.keys()):
         problems.append(f"missing key: {key}")
-    for key in sorted(obj.keys() - ENVELOPE_KEYS, key=str):
-        problems.append(f"unexpected key: {key}")
+    # Only the first MAX_PROBLEMS + 1 unexpected keys, in order, are ever formatted: a file may have a
+    # million, and the list is cut at MAX_PROBLEMS below.
+    for key in heapq.nsmallest(MAX_PROBLEMS + 1, obj.keys() - ENVELOPE_KEYS, key=str):
+        problems.append(f"unexpected key: {shown(key)}")
 
     if "schema_version" in obj:
         version = obj["schema_version"]
         match = _SEMVER.fullmatch(version) if isinstance(version, str) else None
         if match is None:
-            problems.append(f"schema_version {version!r} must be a semver string like '1.0.0'")
-        elif int(match.group(1)) != SUPPORTED_MAJOR:
-            # Compare the major as a number: "10.0.0" starts with "1" but is a different major.
+            problems.append(f"schema_version {shown(version)} must be a semver string like '1.0.0'")
+        elif match.group(1) != str(SUPPORTED_MAJOR):
+            # Compare the whole major: "10.0.0" starts with "1" but is a different major. The pattern
+            # allows no leading zero, so the text comparison is exact, and int() is never asked to
+            # read a major of more than 4,300 digits (it raises).
             problems.append(
-                f"schema_version {version!r} has major version {match.group(1)}; "
+                f"schema_version {shown(version)} has a major version other than {SUPPORTED_MAJOR}; "
                 f"this code understands major {SUPPORTED_MAJOR} only"
             )
     if "artifact" in obj and not _is_artifact(obj["artifact"]):
-        problems.append(f"artifact {obj['artifact']!r} must be a string matching [a-z][a-z0-9_]*")
+        problems.append(f"artifact {shown(obj['artifact'])} must be a string matching [a-z][a-z0-9_]*")
     if "generated_at" in obj and not _is_timestamp(obj["generated_at"]):
         problems.append(
-            f"generated_at {obj['generated_at']!r} must be a real UTC time written "
+            f"generated_at {shown(obj['generated_at'])} must be a real UTC time written "
             f"YYYY-MM-DDTHH:MM:SSZ"
         )
     if "source_commit" in obj and not _is_commit(obj["source_commit"]):
         problems.append(
-            f"source_commit {obj['source_commit']!r} must be 40 or 64 lowercase hex characters, "
+            f"source_commit {shown(obj['source_commit'])} must be 40 or 64 lowercase hex characters, "
             f"optionally followed by '-dirty', or 'uncommitted'"
         )
     if "data" in obj and not isinstance(obj["data"], dict):
         problems.append(f"data must be a JSON object, got {type(obj['data']).__name__}")
-    return problems
+    return problems if len(problems) <= MAX_PROBLEMS else [*problems[:MAX_PROBLEMS], more_problems("envelope")]
 
 
 def _check_safe_integers(value: object, path: str) -> None:

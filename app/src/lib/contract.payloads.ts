@@ -7,10 +7,19 @@
  * chunk (the meta loader), and a module imported by the main chunk is bundled into it whole. These
  * parsers are used only by the lazily loaded price explorer, so here they travel in its chunk.
  */
-import { isUtcTimestamp, isRecord, typeName } from './contract'
-import { MISSING, Reader } from './contract.reader'
+import { capped, isRecord, isUtcTimestamp, MAX_LIST, MAX_NAMES, OOS_WINDOW, typeName } from './contract'
+import { MISSING, Reader, shown } from './contract.reader'
 
 export const SEGMENTS = ['train', 'test', 'oos'] as const
+/** The course window's train share, a project constant (config.TRAIN_FRACTION; payloads.TRAIN_FRACTION): pinned, never read from the file. */
+export const TRAIN_FRACTION = 0.9
+/**
+ * prep.MAX_GAP_DAYS (payloads.OOS_MAX_GAP_DAYS): the producer's coverage rule (prep.check_coverage), applied to
+ * the oos rows. The first at most this many calendar days after the out-of-sample window starts, the last at
+ * most this many before it ends, and no two consecutive ones further apart, so rows dropped at either end or
+ * inside are caught (contract.md 3.2).
+ */
+export const OOS_MAX_GAP_DAYS = 7
 export type Segment = (typeof SEGMENTS)[number]
 
 export interface PriceRow {
@@ -112,13 +121,13 @@ function parseSource(r: Reader, v: unknown): PriceSource | undefined {
   const yfinance_version = r.str(r.field(o, 'yfinance_version', at), `${at}.yfinance_version`)
   let raw_sha256 = r.str(r.field(o, 'raw_sha256', at), `${at}.raw_sha256`)
   if (raw_sha256 !== undefined && !SHA256.test(raw_sha256)) {
-    r.errors.push(`${at}.raw_sha256: "${raw_sha256}" is not 64 lowercase hex characters`)
+    r.errors.push(`${at}.raw_sha256: ${shown(raw_sha256)} is not 64 lowercase hex characters`)
     raw_sha256 = undefined
   }
   const raw_rows = r.int(r.field(o, 'raw_rows', at), `${at}.raw_rows`, 1)
   let downloaded_at = r.str(r.field(o, 'downloaded_at', at), `${at}.downloaded_at`)
   if (downloaded_at !== undefined && !isUtcTimestamp(downloaded_at)) {
-    r.errors.push(`${at}.downloaded_at: "${downloaded_at}" is not a UTC timestamp (YYYY-MM-DDTHH:MM:SSZ)`)
+    r.errors.push(`${at}.downloaded_at: ${shown(downloaded_at)} is not a UTC timestamp (YYYY-MM-DDTHH:MM:SSZ)`)
     downloaded_at = undefined
   }
   const rq = r.obj(o.request, `${at}.request`)
@@ -138,8 +147,52 @@ function parseSource(r: Reader, v: unknown): PriceSource | undefined {
   return { provider, yfinance_version, raw_sha256, raw_rows, downloaded_at, request }
 }
 
+/** A row's date and segment, each valid (the split and coverage rules need no more). */
+type DatedRow = Pick<PriceRow, 'date' | 'segment'>
+
+/** Days since 0001-01-01 of a valid ISO date, by arithmetic (Hinnant's days_from_civil): Date.UTC reads the years 0-99 as 1900-1999. */
+function dayNumber(iso: string): number {
+  const [y0, m, d] = [Number(iso.slice(0, 4)), Number(iso.slice(5, 7)), Number(iso.slice(8, 10))]
+  const y = m <= 2 ? y0 - 1 : y0
+  const era = Math.floor(y / 400)
+  const yoe = y - era * 400
+  const doy = Math.floor((153 * (m > 2 ? m - 3 : m + 9) + 2) / 5) + d - 1
+  return era * 146097 + yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy
+}
+
+/**
+ * The producer's split (prep.train_size): the course window's first trunc(n x TRAIN_FRACTION) rows are train and
+ * the rest test, with the pinned fraction, never the file's. A boundary moved by one row (and the split counts
+ * rewritten to match) is refused here; the counts alone could not see it. The same words as payloads.py.
+ */
+function checkSplitRule(r: Reader, rows: readonly DatedRow[]): void {
+  const nTrain = rows.filter((row) => row.segment === 'train').length
+  const nTest = rows.filter((row) => row.segment === 'test').length
+  const want = Math.trunc((nTrain + nTest) * TRAIN_FRACTION)
+  if (nTrain !== want) {
+    r.errors.push(`data.rows: ${nTrain} rows are train and ${nTest} test, but the course window's ${nTrain + nTest} rows split at ${TRAIN_FRACTION} give int(${nTrain + nTest} x ${TRAIN_FRACTION}) = ${want} train and ${nTrain + nTest - want} test (prep.train_size)`)
+  }
+}
+
+/** The producer's coverage rule on the oos rows (OOS_MAX_GAP_DAYS); the same words as payloads.py. */
+function checkOosCoverage(r: Reader, rows: readonly DatedRow[]): void {
+  const oos = rows.flatMap((row, i) => (row.segment === 'oos' ? [{ i, date: row.date, day: dayNumber(row.date) }] : []))
+  if (oos.length === 0) return
+  const rule = `more than ${OOS_MAX_GAP_DAYS} (prep.MAX_GAP_DAYS) means rows are missing`
+  const first = oos[0]
+  const last = oos[oos.length - 1]
+  const afterStart = first.day - dayNumber(OOS_WINDOW.start)
+  if (afterStart > OOS_MAX_GAP_DAYS) r.errors.push(`data.rows[${first.i}].date: the first oos row is ${first.date}, ${afterStart} calendar days after the out-of-sample window starts on ${OOS_WINDOW.start}; ${rule}`)
+  const beforeEnd = dayNumber(OOS_WINDOW.end_exclusive) - last.day
+  if (beforeEnd > OOS_MAX_GAP_DAYS) r.errors.push(`data.rows[${last.i}].date: the last oos row is ${last.date}, ${beforeEnd} calendar days before the out-of-sample window ends on ${OOS_WINDOW.end_exclusive} (exclusive); ${rule}`)
+  oos.slice(1).forEach((b, k) => {
+    const gap = b.day - oos[k].day
+    if (gap > OOS_MAX_GAP_DAYS) r.errors.push(`data.rows[${b.i}].date: ${b.date} is ${gap} calendar days after the oos row before it, ${oos[k].date}; ${rule}`)
+  })
+}
+
 function parsePriceRows(r: Reader, v: unknown): PriceRow[] | undefined {
-  const list = r.arr(v, 'data.rows')
+  const list = r.list(v, 'data.rows', MAX_LIST, 'rows')
   if (!list) return undefined
   if (list.length === 0) {
     r.errors.push('data.rows: must not be empty')
@@ -147,6 +200,7 @@ function parsePriceRows(r: Reader, v: unknown): PriceRow[] | undefined {
   }
   const before = r.errors.length
   const rows: PriceRow[] = []
+  const dated: DatedRow[] = []
   let lastDate = ''
   let lastRank = -1
   list.forEach((item, i) => {
@@ -164,7 +218,7 @@ function parsePriceRows(r: Reader, v: unknown): PriceRow[] | undefined {
     let segment: Segment | undefined
     if (seg !== MISSING) {
       if ((SEGMENTS as readonly unknown[]).includes(seg)) segment = seg as Segment
-      else r.errors.push(`${at}.segment: expected one of ${SEGMENTS.join(', ')}, got ${JSON.stringify(seg)}`)
+      else r.errors.push(`${at}.segment: expected one of ${SEGMENTS.join(', ')}, got ${shown(seg)}`)
     }
     if (date !== undefined) {
       // ISO dates order as strings, so "not after the previous date" is a string comparison.
@@ -173,11 +227,17 @@ function parsePriceRows(r: Reader, v: unknown): PriceRow[] | undefined {
     }
     if (segment !== undefined) {
       const rank = SEGMENTS.indexOf(segment)
-      if (rank < lastRank) r.errors.push(`${at}.segment: "${segment}" after a later segment; expected train, then test, then oos`)
+      if (rank < lastRank) r.errors.push(`${at}.segment: ${shown(segment)} after a later segment; expected train, then test, then oos`)
       lastRank = Math.max(lastRank, rank)
     }
+    if (date !== undefined && segment !== undefined) dated.push({ date, segment })
     if (date !== undefined && close_usd !== undefined && log_close !== undefined && segment !== undefined) rows.push({ date, close_usd, log_close, segment })
   })
+  if (dated.length === list.length) {
+    // Every row's date and segment valid: the producer's split and coverage rules, as payloads.py.
+    checkSplitRule(r, dated)
+    checkOosCoverage(r, dated)
+  }
   return r.errors.length > before ? undefined : rows
 }
 
@@ -185,6 +245,11 @@ function parsePriceRows(r: Reader, v: unknown): PriceRow[] | undefined {
 export function parsePrices(data: unknown): PricesResult {
   if (!isRecord(data)) return { ok: false, errors: [`data: expected an object, got ${typeName(data)}`] }
   const r = new Reader()
+  return capped(r.errors, 'data', () => readPrices(r, data))
+}
+
+/** parsePrices's body, stopped by `capped` at MAX_PROBLEMS problems. */
+function readPrices(r: Reader, data: Record<string, unknown>): PricesResult {
   const ticker = r.str(r.field(data, 'ticker', 'data'), 'data.ticker')
   const price_basis = r.literal(r.field(data, 'price_basis', 'data'), 'adjusted_close', 'data.price_basis')
   const source = Object.hasOwn(data, 'source') ? parseSource(r, data.source) : (r.errors.push('data.source: missing'), undefined)
@@ -194,7 +259,7 @@ export function parsePrices(data: unknown): PricesResult {
   const fo = Object.hasOwn(data, 'fill') ? r.obj(data.fill, 'data.fill') : (r.errors.push('data.fill: missing'), undefined)
   if (fo) {
     const method = r.literal(r.field(fo, 'method', 'data.fill'), 'ffill', 'data.fill.method')
-    const list = r.arr(r.field(fo, 'filled_dates', 'data.fill'), 'data.fill.filled_dates')
+    const list = r.list(r.field(fo, 'filled_dates', 'data.fill'), 'data.fill.filled_dates', MAX_LIST, 'dates')
     if (list) {
       const before = r.errors.length
       const dates = list.map((d, i) => r.date(d, `data.fill.filled_dates[${i}]`))
@@ -216,8 +281,20 @@ export function parsePrices(data: unknown): PricesResult {
     if (fraction !== undefined && !(fraction > 0 && fraction < 1)) {
       r.errors.push(`data.splits.train_fraction: must be between 0 and 1, got ${fraction}`)
       fraction = undefined
+    } else if (fraction !== undefined && fraction !== TRAIN_FRACTION) {
+      r.errors.push(`data.splits.train_fraction: is ${fraction}, but this reader splits the course window at ${TRAIN_FRACTION}`)
+      fraction = undefined
     }
     const spans = SEGMENTS.map((name) => parseSpan(r, so[name], `data.splits.${name}`))
+    // The pinned out-of-sample window: the oos segment inside it, train and test before it (ISO dates compare as strings).
+    SEGMENTS.forEach((name, k) => {
+      const span = spans[k]
+      if (!span) return
+      if (name === 'oos' && !(OOS_WINDOW.start <= span.start && span.end < OOS_WINDOW.end_exclusive)) {
+        r.errors.push(`data.splits.oos: runs ${span.start} to ${span.end}, but this reader's out-of-sample window is ${OOS_WINDOW.start} to ${OOS_WINDOW.end_exclusive} (exclusive)`)
+      }
+      if (name !== 'oos' && !(span.end < OOS_WINDOW.start)) r.errors.push(`data.splits.${name}.end: is ${span.end}, but the ${name} rows come before the out-of-sample window, which starts ${OOS_WINDOW.start}`)
+    })
     if (rows) {
       // The spans must describe the rows: the same count, first and last date per segment.
       SEGMENTS.forEach((name, k) => {
@@ -252,7 +329,7 @@ function parseKde(r: Reader, v: unknown, at: string): Kde | undefined {
   }
   const bandwidth_factor = positive('bandwidth_factor')
   const bandwidth = positive('bandwidth')
-  const list = r.arr(r.field(o, 'points', at), `${at}.points`)
+  const list = r.list(r.field(o, 'points', at), `${at}.points`, MAX_LIST, 'points')
   const points: KdePoint[] = []
   if (list) {
     if (list.length < 2) r.errors.push(`${at}.points: expected at least 2 points, got ${list.length}`)
@@ -318,7 +395,7 @@ function parseDecomposition(r: Reader, v: unknown, summary: EdaSummary | undefin
   const before = r.errors.length
   const model = r.literal(r.field(o, 'model', at), 'additive', `${at}.model`)
   const period = r.int(r.field(o, 'period', at), `${at}.period`, 2)
-  const list = r.arr(r.field(o, 'rows', at), `${at}.rows`)
+  const list = r.list(r.field(o, 'rows', at), `${at}.rows`, MAX_LIST, 'rows')
   const rows: DecompositionRow[] = []
   if (list) {
     let lastDate = ''
@@ -360,9 +437,14 @@ function parseDecomposition(r: Reader, v: unknown, summary: EdaSummary | undefin
 export function parseEda(data: unknown): EdaResult {
   if (!isRecord(data)) return { ok: false, errors: [`data: expected an object, got ${typeName(data)}`] }
   const r = new Reader()
+  return capped(r.errors, 'data', () => readEda(r, data))
+}
+
+/** parseEda's body, stopped by `capped` at MAX_PROBLEMS problems. */
+function readEda(r: Reader, data: Record<string, unknown>): EdaResult {
   const sample = r.literal(r.field(data, 'sample', 'data'), 'train', 'data.sample')
   const summary = Object.hasOwn(data, 'summary') ? parseSummary(r, data.summary) : (r.errors.push('data.summary: missing'), undefined)
-  const list = r.arr(r.field(data, 'kdes', 'data'), 'data.kdes')
+  const list = r.list(r.field(data, 'kdes', 'data'), 'data.kdes', MAX_NAMES, 'KDEs')
   let kdes: Kde[] | undefined
   if (list) {
     const before = r.errors.length
@@ -372,7 +454,8 @@ export function parseEda(data: unknown): EdaResult {
     for (const required of REQUIRED_KDE_VARIABLES) {
       if (!variables.includes(required)) r.errors.push(`data.kdes: no KDE for "${required}"`)
     }
-    if (new Set(variables).size !== variables.length) r.errors.push(`data.kdes: duplicate variables ${variables.join(', ')}`)
+    const twice = variables.find((v, i) => variables.indexOf(v) !== i)
+    if (twice !== undefined) r.errors.push(`data.kdes: duplicate variables: ${shown(twice)} appears more than once`)
     if (r.errors.length === before) kdes = parsed as Kde[]
   }
   const decomposition = Object.hasOwn(data, 'decomposition') ? parseDecomposition(r, data.decomposition, summary) : (r.errors.push('data.decomposition: missing'), undefined)

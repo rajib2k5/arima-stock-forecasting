@@ -45,13 +45,13 @@ describe('PriceExplorer', () => {
 
   it('draws the price chart with the three segments shaded and labelled', () => {
     render(<PriceExplorer state={ready()} />)
-    const chart = screen.getByRole('img', { name: 'AAPL adjusted close in dollars, 2015-01-02 to 2024-01-02' })
+    const chart = screen.getByRole('img', { name: 'AAPL adjusted close in dollars, 2015-01-02 to 2026-09-30' })
     expect(within(chart).getAllByTestId('plot-band').map((b) => b.getAttribute('class'))).toEqual(['band band-train', 'band band-test', 'band band-oos'])
     const legend = within(screen.getByRole('list', { name: 'Segments' })).getAllByRole('listitem')
     expect(legend.map((li) => li.textContent)).toEqual([
       'Train 2015-01-02 to 2015-01-07 · 4 days',
       'Test 2015-01-08 to 2015-01-08 · 1 day',
-      'Out of sample 2024-01-02 to 2024-01-02 · 1 day',
+      'Out of sample 2024-01-02 to 2026-09-30 · 168 days',
     ])
     expect(screen.getByText(/Forward-filled closes: 2015-01-06\./)).toBeInTheDocument()
   })
@@ -62,9 +62,9 @@ describe('PriceExplorer', () => {
     expect(log).toHaveAttribute('aria-checked', 'false')
     fireEvent.click(log)
     expect(log).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('img', { name: 'AAPL log of the adjusted close, 2015-01-02 to 2024-01-02' })).toHaveTextContent('log price, ln($)')
+    expect(screen.getByRole('img', { name: 'AAPL log of the adjusted close, 2015-01-02 to 2026-09-30' })).toHaveTextContent('log price, ln($)')
     fireEvent.click(screen.getByRole('radio', { name: 'Dollars' }))
-    expect(screen.getByRole('img', { name: 'AAPL adjusted close in dollars, 2015-01-02 to 2024-01-02' })).toHaveTextContent('adjusted close ($)')
+    expect(screen.getByRole('img', { name: 'AAPL adjusted close in dollars, 2015-01-02 to 2026-09-30' })).toHaveTextContent('adjusted close ($)')
   })
 
   it('draws a panel per KDE and per decomposition component', () => {

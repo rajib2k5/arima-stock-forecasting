@@ -4,7 +4,7 @@
  * they leave to Python (ADR-0001: no statistic is re-checked here).
  */
 import { describe, expect, it } from 'vitest'
-import { ALPHA, ARCH_LM_DDOF, ARCH_LM_LAGS, CANCEL_DISTANCE, defaultTrend, expectedParamNames, LJUNG_BOX_LAGS, LLF_TOLERANCE, MAX_D, MAX_PQ, NLAGS, parseFit, parseResiduals } from './contract.fit'
+import { ALPHA, ARCH_LM_DDOF, ARCH_LM_LAGS, CANCEL_DISTANCE, defaultTrend, expectedParamNames, LJUNG_BOX_LAGS, LLF_TOLERANCE, MAX_D, MAX_PQ, MAX_WARNINGS, NLAGS, parseFit, parseResiduals } from './contract.fit'
 import fitData from '../test/fixtures/fit.data.json'
 import residualsData from '../test/fixtures/residuals_aic.data.json'
 
@@ -19,6 +19,15 @@ describe('expectedParamNames', () => {
 })
 
 describe('parseFit', () => {
+  it('quotes a value of any size in a short message', () => {
+    // An order of 200,000 numbers was once quoted whole: 400 kB of text for one error.
+    const data = structuredClone(fitData) as unknown as { models: { order: unknown }[] }
+    data.models[1].order = new Array(200_000).fill(0)
+    const r = parseFit(data)
+    expect(r.ok ? [] : r.errors).toContain('data.models[1].order: expected [p, d, q], got an array of 200000')
+    expect((r.ok ? [] : r.errors).join('').length).toBeLessThan(2000)
+  })
+
   it('returns a fresh object built from the known keys only', () => {
     const data = copy(fitData) as Record<string, unknown>
     data.extra = 'ignored'
@@ -160,6 +169,25 @@ describe('parseFit', () => {
     const data = copy(fitData)
     data.models[0].order = [p, 1, 2]
     expect(parseFit(data)).toEqual({ ok: false, errors: [`data.models[0].order[0]: expected an integer from 0 to ${MAX_PQ}, got ${p}`] })
+  })
+
+  it('takes at most 100 warnings a list, and gives one short error for more, however many', () => {
+    // 3.3 million warnings once made 324 MB of messages and took 2.6 s: the bound comes before the list is read.
+    expect(MAX_WARNINGS).toBe(100)
+    const w = { category: 'W', message: 'm' }
+    const data = copy(fitData) as { models: { warnings: unknown[] }[]; course_track: { full_series: { warnings: unknown[] } } }
+    data.models[0].warnings = new Array(100).fill(w)
+    data.course_track.full_series.warnings = new Array(100).fill(w)
+    expect(parseFit(copy(data)).ok).toBe(true)
+    data.models[0].warnings = new Array(3_300_000).fill({ category: '' })
+    data.course_track.full_series.warnings = new Array(101).fill(w)
+    const t0 = performance.now()
+    const r = parseFit(data)
+    expect(r.ok ? [] : r.errors).toEqual([
+      'data.models[0].warnings: has 3300000 warnings, more than the 100 a reader takes',
+      'data.course_track.full_series.warnings: has 101 warnings, more than the 100 a reader takes',
+    ])
+    expect(performance.now() - t0).toBeLessThan(1000)
   })
 
   it('bounds p and q by 10 and d by 2, and lets the bounds themselves through', () => {

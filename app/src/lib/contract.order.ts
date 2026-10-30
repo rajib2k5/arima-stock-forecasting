@@ -11,8 +11,8 @@
  *
  * In its own module so that only the two milestone-2 views bundle it.
  */
-import { isRecord, typeName } from './contract'
-import { MISSING, Reader } from './contract.reader'
+import { capped, isRecord, MAX_LIST, typeName } from './contract'
+import { MISSING, Reader, shown } from './contract.reader'
 
 export const TRANSFORM_IDS = ['log', 'diff1', 'diff2'] as const
 export type TransformId = (typeof TRANSFORM_IDS)[number]
@@ -181,7 +181,34 @@ export type StationarityResult = { ok: true; stationarity: Stationarity } | { ok
 export type AcfPacfResult = { ok: true; acfPacf: AcfPacf } | { ok: false; errors: string[] }
 export type AicGridResult = { ok: true; aicGrid: AicGrid } | { ok: false; errors: string[] }
 
-const show = (v: unknown) => JSON.stringify(v) ?? typeName(v)
+// Messages quote values through `shown`, so a value of any size gives a short message.
+const show = shown
+
+/**
+ * The grid's dimensions (payloads.GRID_MAX_ORDER, GRID_MAX_D and the bounds built from them;
+ * selection.GRID_ORDERS and GRID_SPECS): p and q run from 0 to 5 and d from 0 to 2, each d with some
+ * of the three trend codes, so a grid has at most 6 x 6 x 3 x 3 = 324 cells, and a cell at most
+ * p + q + 2 = 12 parameters. The pmdarima cross-check makes two runs, each fitting each (order,
+ * intercept) once with p and q up to 5: at most 6 x 6 x 2 = 72 fits (payloads.py says where).
+ */
+export const GRID_MAX_ORDER = 5
+export const GRID_MAX_D = 2
+export const MAX_GRID_CELLS = (GRID_MAX_ORDER + 1) ** 2 * (GRID_MAX_D + 1) * TREND_CODES.length
+const MAX_CELL_PARAMS = 2 * GRID_MAX_ORDER + 2
+export const MAX_PMDARIMA_RUNS = 2
+export const MAX_VISITED = 72
+/** The most warnings one cell or run may list (payloads.MAX_WARNINGS; contract.fit.ts has the same bound). */
+const MAX_WARNINGS = 100
+
+/** An integer from 0 to `most` (payloads._bounded). */
+function upTo(r: Reader, v: unknown, at: string, most: number): number | undefined {
+  const x = r.int(v, at)
+  if (x !== undefined && x > most) {
+    r.errors.push(`${at}: expected an integer from 0 to ${most}, got ${x}`)
+    return undefined
+  }
+  return x
+}
 
 /** The 2 x 2 table of concept note 05. */
 export function tableVerdict(adfRejects: boolean, kpssRejects: boolean): Verdict {
@@ -325,6 +352,11 @@ function parseNdiffs(r: Reader, v: unknown, dSelected: number | undefined): Ndif
 export function parseStationarity(data: unknown): StationarityResult {
   if (!isRecord(data)) return { ok: false, errors: [`data: expected an object, got ${typeName(data)}`] }
   const r = new Reader()
+  return capped(r.errors, 'data', () => readStationarity(r, data))
+}
+
+/** parseStationarity's body, stopped by `capped` at MAX_PROBLEMS problems. */
+function readStationarity(r: Reader, data: Record<string, unknown>): StationarityResult {
   const sample = r.literal(r.field(data, 'sample', 'data'), 'train', 'data.sample')
   const nTrain = r.int(r.field(data, 'n_train', 'data'), 'data.n_train', 3)
   let alpha = r.num(r.field(data, 'alpha', 'data'), 'data.alpha')
@@ -332,7 +364,7 @@ export function parseStationarity(data: unknown): StationarityResult {
     r.errors.push(`data.alpha: must be between 0 and 1, got ${alpha}`)
     alpha = undefined
   }
-  const list = r.arr(r.field(data, 'transforms', 'data'), 'data.transforms')
+  const list = r.list(r.field(data, 'transforms', 'data'), 'data.transforms', TRANSFORM_IDS.length, 'transforms') // one per transform at most
   const transforms: (StationarityTransform | undefined)[] = []
   const tests: ({ d: number; adf: boolean; kpss: boolean } | undefined)[] = []
   if (list) {
@@ -406,6 +438,11 @@ export function parseStationarity(data: unknown): StationarityResult {
 export function parseAcfPacf(data: unknown): AcfPacfResult {
   if (!isRecord(data)) return { ok: false, errors: [`data: expected an object, got ${typeName(data)}`] }
   const r = new Reader()
+  return capped(r.errors, 'data', () => readAcfPacf(r, data))
+}
+
+/** parseAcfPacf's body, stopped by `capped` at MAX_PROBLEMS problems. */
+function readAcfPacf(r: Reader, data: Record<string, unknown>): AcfPacfResult {
   const sample = r.literal(r.field(data, 'sample', 'data'), 'train', 'data.sample')
   const nlags = r.int(r.field(data, 'nlags', 'data'), 'data.nlags', 1)
   const alpha = r.num(r.field(data, 'alpha', 'data'), 'data.alpha')
@@ -426,7 +463,7 @@ export function parseAcfPacf(data: unknown): AcfPacfResult {
     }
   }
   const pacfMethod = r.str(r.field(data, 'pacf_method', 'data'), 'data.pacf_method')
-  const list = r.arr(r.field(data, 'series', 'data'), 'data.series')
+  const list = r.list(r.field(data, 'series', 'data'), 'data.series', TRANSFORM_IDS.length, 'series') // one per transform at most
   const series: CorrelogramSeries[] = []
   if (list) {
     if (list.length === 0) r.errors.push('data.series: must not be empty')
@@ -444,7 +481,7 @@ export function parseAcfPacf(data: unknown): AcfPacfResult {
       }
       const n = r.int(r.field(s, 'n', at), `${at}.n`, 2)
       const counts = (['acf', 'pacf'] as const).map((name) => r.int(r.field(s, `${name}_outside_count`, at), `${at}.${name}_outside_count`))
-      const rowsRaw = r.arr(r.field(s, 'rows', at), `${at}.rows`)
+      const rowsRaw = r.list(r.field(s, 'rows', at), `${at}.rows`, MAX_LIST, 'rows')
       if (!rowsRaw) return
       const flagged: Record<'acf' | 'pacf', (boolean | undefined)[]> = { acf: [], pacf: [] }
       if (nlags !== undefined && rowsRaw.length !== nlags + 1) r.errors.push(`${at}.rows: has ${rowsRaw.length} rows, but lags 0 to ${nlags} make ${nlags + 1}`)
@@ -534,9 +571,9 @@ function triple(r: Reader, v: unknown, at: string): [number, number, number] | u
 }
 
 function axis(r: Reader, v: unknown, at: string): number[] | undefined {
-  const list = r.arr(v, at)
+  const list = r.list(v, at, GRID_MAX_ORDER + 1, 'orders')
   if (!list) return undefined
-  const out = list.map((x, i) => r.int(x, `${at}[${i}]`))
+  const out = list.map((x, i) => upTo(r, x, `${at}[${i}]`, GRID_MAX_ORDER))
   if (out.length === 0) r.errors.push(`${at}: must not be empty`)
   if (out.some((x) => x === undefined)) return undefined
   const values = out as number[]
@@ -565,7 +602,7 @@ function parseCell(r: Reader, item: unknown, at: string, nTrain: number | undefi
     if (status === 'ok' && reason !== null) r.errors.push(`${at}.reason: must be null for an ok cell, got ${show(reason)}`)
     else if (status !== 'ok') r.str(reason, `${at}.reason`)
   }
-  const warnsRaw = r.arr(r.field(cell, 'warnings', at), `${at}.warnings`)
+  const warnsRaw = r.list(r.field(cell, 'warnings', at), `${at}.warnings`, MAX_WARNINGS, 'warnings')
   const warnings: AicCell['warnings'] = []
   ;(warnsRaw ?? []).forEach((w, i) => {
     const wo = r.obj(w, `${at}.warnings[${i}]`)
@@ -600,8 +637,10 @@ function parseCell(r: Reader, item: unknown, at: string, nTrain: number | undefi
     }
     const params = raw.params === MISSING ? undefined : r.obj(raw.params, `${at}.params`)
     if (params) {
-      if (k !== undefined && Object.keys(params).length !== k) r.errors.push(`${at}.params: has ${Object.keys(params).length} entries, but k_params is ${k}`)
-      for (const [name, value] of Object.entries(params)) r.num(value, `${at}.params.${name}`)
+      const count = Object.keys(params).length
+      if (k !== undefined && count !== k) r.errors.push(`${at}.params: has ${count} entries, but k_params is ${k}`)
+      // A longer object is refused above (k is at most this), and not walked.
+      if (count <= MAX_CELL_PARAMS) for (const [name, value] of Object.entries(params)) r.num(value, `${at}.params[${shown(name)}]`)
     }
     const nobs = r.int(raw.nobs_effective, `${at}.nobs_effective`, 1)
     if (nobs !== undefined && nTrain !== undefined && d !== undefined && nobs !== nTrain - d) r.errors.push(`${at}.nobs_effective: is ${nobs}, but n_train - d is ${nTrain - d}`)
@@ -724,8 +763,8 @@ const BIC_FIELDS: [string, FieldKind][] = [['p', 'int'], ['q', 'int'], ['trend',
 const BEST_FIELDS: [string, FieldKind][] = [['p', 'int'], ['q', 'int'], ['trend', 'trend'], ['aic', 'number']]
 const COUNT_FIELDS: [string, FieldKind][] = [['d', 'int'], ...CELL_STATUSES.map((s): [string, FieldKind] => [s, 'int'])]
 
-function listOf(r: Reader, v: unknown, at: string, spec: [string, FieldKind][]): Record<string, number | string>[] | undefined {
-  const list = r.arr(v, at)
+function listOf(r: Reader, v: unknown, at: string, spec: [string, FieldKind][], most: number, what: string): Record<string, number | string>[] | undefined {
+  const list = r.list(v, at, most, what)
   if (!list) return undefined
   const parsed = list.map((item, i) => fields(r, item, `${at}[${i}]`, spec))
   return parsed.every((x) => x !== undefined) ? (parsed as Record<string, number | string>[]) : undefined
@@ -754,7 +793,7 @@ function parseRun(r: Reader, item: unknown, at: string, cells: AicCell[] | undef
   const aic = r.num(r.field(run, 'aic', at), `${at}.aic`)
   const converged = r.bool(r.field(run, 'converged', at), `${at}.converged`)
   const iterations = r.int(r.field(run, 'iterations', at), `${at}.iterations`)
-  const visitedRaw = r.arr(r.field(run, 'visited', at), `${at}.visited`)
+  const visitedRaw = r.list(r.field(run, 'visited', at), `${at}.visited`, MAX_VISITED, 'fits')
   const visited: PmdarimaRun['visited'] = []
   if (visitedRaw) {
     if (visitedRaw.length === 0) r.errors.push(`${at}.visited: must not be empty: the chosen model is its first entry`)
@@ -771,7 +810,7 @@ function parseRun(r: Reader, item: unknown, at: string, cells: AicCell[] | undef
       if (vorder && vint !== undefined && vaic !== undefined) visited.push({ order: vorder, with_intercept: vint, aic: vaic })
     })
   }
-  const warns = r.arr(r.field(run, 'warnings', at), `${at}.warnings`)
+  const warns = r.list(r.field(run, 'warnings', at), `${at}.warnings`, MAX_WARNINGS, 'warnings')
   ;(warns ?? []).forEach((w, j) => {
     const wo = r.obj(w, `${at}.warnings[${j}]`)
     if (wo) r.str(r.field(wo, 'category', `${at}.warnings[${j}]`), `${at}.warnings[${j}].category`)
@@ -811,6 +850,11 @@ function parseRun(r: Reader, item: unknown, at: string, cells: AicCell[] | undef
 export function parseAicGrid(data: unknown): AicGridResult {
   if (!isRecord(data)) return { ok: false, errors: [`data: expected an object, got ${typeName(data)}`] }
   const r = new Reader()
+  return capped(r.errors, 'data', () => readAicGrid(r, data))
+}
+
+/** parseAicGrid's body, stopped by `capped` at MAX_PROBLEMS problems. */
+function readAicGrid(r: Reader, data: Record<string, unknown>): AicGridResult {
   const sample = r.literal(r.field(data, 'sample', 'data'), 'train', 'data.sample')
   const nTrain = r.int(r.field(data, 'n_train', 'data'), 'data.n_train', 1)
   const criterion = r.literal(r.field(data, 'criterion', 'data'), 'aic', 'data.criterion')
@@ -824,7 +868,7 @@ export function parseAicGrid(data: unknown): AicGridResult {
     if (gd) {
       ps = axis(r, r.field(gd, 'p', 'data.grid'), 'data.grid.p')
       qs = axis(r, r.field(gd, 'q', 'data.grid'), 'data.grid.q')
-      const rawSpecs = r.arr(r.field(gd, 'specs', 'data.grid'), 'data.grid.specs')
+      const rawSpecs = r.list(r.field(gd, 'specs', 'data.grid'), 'data.grid.specs', GRID_MAX_D + 1, 'specs')
       if (rawSpecs) {
         const out: { d: number; trends: TrendCode[] }[] = []
         const start = r.errors.length
@@ -833,8 +877,8 @@ export function parseAicGrid(data: unknown): AicGridResult {
           const at = `data.grid.specs[${i}]`
           const sp = r.obj(item, at)
           if (!sp) return
-          const d = r.int(r.field(sp, 'd', at), `${at}.d`)
-          const trends = r.arr(r.field(sp, 'trends', at), `${at}.trends`)
+          const d = upTo(r, r.field(sp, 'd', at), `${at}.d`, GRID_MAX_D)
+          const trends = r.list(r.field(sp, 'trends', at), `${at}.trends`, TREND_CODES.length, 'trends')
           const codes = (trends ?? []).map((t, j) => r.choice(t, TREND_CODES, `${at}.trends[${j}]`))
           if (trends && (codes.length === 0 || codes.some((c) => !c) || codes.some((c, j) => j > 0 && (c as string) <= (codes[j - 1] as string)))) {
             r.errors.push(`${at}.trends: must be a non-empty list of trend codes in alphabetical order, got ${show(trends)}`)
@@ -879,7 +923,7 @@ export function parseAicGrid(data: unknown): AicGridResult {
   }
 
   let cells: AicCell[] | undefined
-  const rawCells = r.arr(r.field(data, 'cells', 'data'), 'data.cells')
+  const rawCells = r.list(r.field(data, 'cells', 'data'), 'data.cells', MAX_GRID_CELLS, 'cells')
   if (rawCells) {
     const parsed = rawCells.map((item, i) => parseCell(r, item, `data.cells[${i}]`, nTrain, threshold))
     if (parsed.every((c) => c !== undefined)) cells = parsed as AicCell[]
@@ -932,9 +976,9 @@ export function parseAicGrid(data: unknown): AicGridResult {
       const bic = r.num(r.field(sl, 'bic', at), `${at}.bic`)
       const k = r.int(r.field(sl, 'k_params', at), `${at}.k_params`, 1)
       const rule = r.str(r.field(sl, 'rule', at), `${at}.rule`)
-      const within = listOf(r, r.field(sl, 'within_2_aic', at), `${at}.within_2_aic`, NEAR_TIE_FIELDS)
+      const within = listOf(r, r.field(sl, 'within_2_aic', at), `${at}.within_2_aic`, NEAR_TIE_FIELDS, MAX_GRID_CELLS, 'cells')
       const bicChoice = fields(r, r.field(sl, 'bic_choice', at), `${at}.bic_choice`, BIC_FIELDS)
-      const perDRaw = r.arr(r.field(sl, 'best_per_d', at), `${at}.best_per_d`)
+      const perDRaw = r.list(r.field(sl, 'best_per_d', at), `${at}.best_per_d`, GRID_MAX_D + 1, 'entries') // one per d at most
       let perD: { d: number; cell: Record<string, number | string> | null }[] | undefined
       if (perDRaw) {
         const start = r.errors.length
@@ -949,7 +993,7 @@ export function parseAicGrid(data: unknown): AicGridResult {
         })
         perD = r.errors.length === start ? out : undefined
       }
-      const counts = listOf(r, r.field(sl, 'status_counts', at), `${at}.status_counts`, COUNT_FIELDS)
+      const counts = listOf(r, r.field(sl, 'status_counts', at), `${at}.status_counts`, COUNT_FIELDS, GRID_MAX_D + 1, 'entries')
       if (order && dSel !== undefined && order[1] !== dSel) r.errors.push(`${at}.order: has d = ${order[1]}, but d_selected is ${dSel}`)
       if (specs && dSel !== undefined && !specs.some((s) => s.d === dSel)) r.errors.push(`${at}.d_selected: ${dSel} is not a d of the grid`)
       else if (cells && specs && dSel !== undefined) {
@@ -1017,7 +1061,7 @@ export function parseAicGrid(data: unknown): AicGridResult {
       const status = r.choice(r.field(pc, 'status', at), CHECK_STATUSES, `${at}.status`)
       const reason = r.field(pc, 'reason', at)
       const version = r.field(pc, 'version', at)
-      const runsRaw = r.arr(r.field(pc, 'runs', at), `${at}.runs`)
+      const runsRaw = r.list(r.field(pc, 'runs', at), `${at}.runs`, MAX_PMDARIMA_RUNS, 'runs')
       if (status === 'ok') {
         if (reason !== MISSING && reason !== null) r.errors.push(`${at}.reason: must be null when status is ok, got ${show(reason)}`)
         if (version !== MISSING) r.str(version, `${at}.version`)

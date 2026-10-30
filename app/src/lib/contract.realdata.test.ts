@@ -15,6 +15,7 @@ import { parseEnvelope, parseMeta } from './contract'
 import { parseEda, parsePrices } from './contract.payloads'
 import { parseAcfPacf, parseAicGrid, parseStationarity } from './contract.order'
 import { MODEL_IDS, parseFit, parseResiduals } from './contract.fit'
+import { artifactName, FORECASTS, parseEvaluation, parseForecast } from './contract.forecast'
 
 // Every committed file, as raw text exactly as the browser receives it; JSON.parse below plays
 // the part of `res.json()`, so a bare NaN token in a file fails here too.
@@ -33,6 +34,9 @@ const PAYLOAD_PARSERS: Record<string, (data: unknown) => PayloadResult> = {
   fit: parseFit,
   // One file per model; the file name says which model_id it must hold.
   ...Object.fromEntries(MODEL_IDS.map((id) => [`residuals_${id}`, (data: unknown) => parseResiduals(data, id)])),
+  // One file per model and method; the file name says which model_id and method it must hold.
+  ...Object.fromEntries(FORECASTS.map(([id, method]) => [artifactName(id, method), (data: unknown) => parseForecast(data, id, method)])),
+  evaluation: parseEvaluation,
 }
 
 const stemOf = (path: string) => path.replace(/^.*\//, '').replace(/\.json$/, '')

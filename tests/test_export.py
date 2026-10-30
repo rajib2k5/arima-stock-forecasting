@@ -27,6 +27,7 @@ from synthetic import FIXED_NOW, NOT_RUN, SMALL_GRID, write_synthetic_snapshot
 from arima_forecasting import config, selection
 from arima_forecasting.contract import SCHEMA_VERSION, dumps, validate_envelope
 from arima_forecasting.data import read_snapshot
+from arima_forecasting.forecasting import FORECASTS
 from arima_forecasting.export import ARTIFACTS, build_payloads, meta_payload, order_selection_payloads
 from arima_forecasting.payloads import PAYLOAD_VALIDATORS
 from arima_forecasting.prep import price_table
@@ -64,8 +65,8 @@ EXPECTED_META = {
         {"id": 0, "slug": "scaffold", "title": "Scaffold, contract and design", "status": "done"},
         {"id": 1, "slug": "data-eda", "title": "Data and EDA", "status": "done"},
         {"id": 2, "slug": "stationarity", "title": "Stationarity and identification", "status": "done"},
-        {"id": 3, "slug": "fit-diagnostics", "title": "Fit and diagnostics", "status": "current"},
-        {"id": 4, "slug": "forecast-eval", "title": "Forecast and evaluation", "status": "planned"},
+        {"id": 3, "slug": "fit-diagnostics", "title": "Fit and diagnostics", "status": "done"},
+        {"id": 4, "slug": "forecast-eval", "title": "Forecast and evaluation", "status": "current"},
         {
             "id": 5,
             "slug": "where-it-goes-wrong",
@@ -73,7 +74,7 @@ EXPECTED_META = {
             "status": "planned",
         },
     ],
-    "artifacts": ["meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid", "fit", "residuals_aic", "residuals_bic", "residuals_course"],
+    "artifacts": ["meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid", "fit", "residuals_aic", "residuals_bic", "residuals_course", "forecast_aic_static", "forecast_aic_walk_forward", "forecast_aic_refit", "forecast_bic_static", "forecast_bic_walk_forward", "forecast_course_static", "forecast_course_walk_forward", "evaluation"],
     "held_artifacts": [],  # none since the owner's decision of 2026-10-29: every export is committed
 }
 
@@ -144,7 +145,7 @@ def payloads(snapshot_root):
 
 
 def test_build_payloads_returns_every_artifact_in_order(payloads):
-    assert tuple(payloads) == ARTIFACTS == ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid", "fit", "residuals_aic", "residuals_bic", "residuals_course")
+    assert tuple(payloads) == ARTIFACTS == ("meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid", "fit", "residuals_aic", "residuals_bic", "residuals_course", "forecast_aic_static", "forecast_aic_walk_forward", "forecast_aic_refit", "forecast_bic_static", "forecast_bic_walk_forward", "forecast_course_static", "forecast_course_walk_forward", "evaluation")
     assert payloads["meta"]["artifacts"] == list(ARTIFACTS)
 
 
@@ -286,7 +287,7 @@ def test_tool_writes_every_artifact_as_a_valid_envelope(tmp_path, snapshot_root)
         envelope = json.loads(text)
         assert validate_envelope(envelope) == []
         assert envelope["artifact"] == name
-        assert envelope["schema_version"] == "1.4.0" == SCHEMA_VERSION
+        assert envelope["schema_version"] == "1.5.0" == SCHEMA_VERSION
         # SOURCE_DATE_EPOCH=0 must reach every file as the Unix epoch.
         assert envelope["generated_at"] == "1970-01-01T00:00:00Z"
         # The file is in the canonical text form: sorted keys, indent 2, one trailing newline.
@@ -358,7 +359,7 @@ def test_check_passes_on_a_fresh_export_and_writes_nothing(exported, snapshot_ro
     before = {p.name: p.read_bytes() for p in exported.iterdir()}
     done = run_tool(exported, "--check", data_root=snapshot_root)
     assert done.returncode == 0, done.stdout + done.stderr
-    assert "app data is current: meta, prices, eda, stationarity, acf_pacf, aic_grid, fit, residuals_aic, residuals_bic, residuals_course (" in done.stdout
+    assert "app data is current: meta, prices, eda, stationarity, acf_pacf, aic_grid, fit, residuals_aic, residuals_bic, residuals_course, forecast_aic_static, forecast_aic_walk_forward, forecast_aic_refit, forecast_bic_static, forecast_bic_walk_forward, forecast_course_static, forecast_course_walk_forward, evaluation (" in done.stdout
     assert {p.name: p.read_bytes() for p in exported.iterdir()} == before
 
 
@@ -388,7 +389,7 @@ def test_check_fails_on_a_changed_schema_version(exported, snapshot_root):
     (exported / "eda.json").write_text(json.dumps(eda))
     done = run_tool(exported, "--check", data_root=snapshot_root)
     assert done.returncode == 1
-    assert 'stale: eda: schema_version: "1.0.0" != "1.4.0"' in done.stdout
+    assert "stale: eda: schema_version: '1.0.0' != '1.5.0'" in done.stdout
 
 
 def test_check_says_when_the_snapshot_itself_changed(exported, tmp_path):
@@ -424,7 +425,7 @@ def test_check_fails_on_missing_extra_or_broken_files(exported, snapshot_root, d
         (lambda env: env.update(generated_at="yesterday"), "generated_at 'yesterday' must be a real UTC time"),
         (lambda env: env.pop("generated_at"), "missing key: generated_at"),
         (lambda env: env.update(source_commit="HEAD"), "source_commit 'HEAD' must be"),
-        (lambda env: env.update(extra=1), "unexpected key: extra"),
+        (lambda env: env.update(extra=1), "unexpected key: 'extra'"),
     ],
     ids=["garbage generated_at", "missing generated_at", "garbage source_commit", "extra top-level key"],
 )
@@ -487,7 +488,7 @@ def test_only_fit_refuses_to_write_beside_residual_files_that_contradict_it(expo
     (out / "fit.json").unlink()
     done = run_tool(out, "--only", "fit", data_root=snapshot_root)
     assert done.returncode == 1
-    assert "refusing to write: fit.json and the residuals files would disagree" in done.stderr
+    assert "refusing to write: the fit, residuals, forecast and evaluation files would disagree" in done.stderr
     assert "residuals_bic: nlags is 40, but fit.json says 50" in done.stderr
     assert not (out / "fit.json").exists()
     # With the residual files in --only too, the set agrees again.
@@ -511,7 +512,7 @@ def test_only_meta_into_a_folder_without_fit_files_writes_meta_as_before(exporte
     (out / "fit.json").write_bytes((exported / "fit.json").read_bytes())
     done = run_tool(out, "--only", "meta", data_root=snapshot_root)
     assert done.returncode == 1
-    assert "keeps a fit or residuals file that is not valid" in done.stderr and "residuals_aic.json" in done.stderr
+    assert "keeps a fit, residuals, forecast or evaluation file that is not valid" in done.stderr and "residuals_aic.json" in done.stderr
 
 
 def test_only_meta_into_a_folder_holding_only_a_residuals_file_still_runs_the_cross_file_check(exported, snapshot_root, tmp_path):
@@ -524,7 +525,7 @@ def test_only_meta_into_a_folder_holding_only_a_residuals_file_still_runs_the_cr
     (out / "residuals_aic.json").write_bytes((exported / "residuals_aic.json").read_bytes())
     done = run_tool(out, "--only", "meta", data_root=snapshot_root)
     assert done.returncode == 1
-    assert "keeps a fit or residuals file that is not valid" in done.stderr
+    assert "keeps a fit, residuals, forecast or evaluation file that is not valid" in done.stderr
     assert not (out / "meta.json").exists()
 
 
@@ -535,7 +536,34 @@ def test_the_tool_checks_the_fit_and_residual_files_again_after_writing(tmp_path
     monkeypatch.setattr(tool, "validate_fit_residuals", lambda fit, residuals: calls.append(sorted(residuals)) or ([] if len(calls) == 1 else ["disagree on purpose"]))
     assert tool.main(["--out", str(tmp_path / "out")]) == 1
     assert calls == [["residuals_aic", "residuals_bic", "residuals_course"]] * 2
-    assert "after writing, fit.json and the residuals files" in capsys.readouterr().err
+    assert "after writing, the fit, residuals, forecast and evaluation files" in capsys.readouterr().err
+
+
+def test_the_tool_checks_the_forecasts_against_prices_before_writing(tmp_path, monkeypatch, capsys, snapshot_env):
+    # The forecasts' actuals must be prices.json's rows: the tool runs validate_forecast_prices on the
+    # set it would leave, and a disagreement stops it before any file is written.
+    tool = load_tool()
+    calls = []
+    monkeypatch.setattr(tool, "validate_forecast_prices", lambda prices, forecasts: calls.append((len(prices["rows"]), sorted(forecasts))) or ["stale on purpose"])
+    assert tool.main(["--out", str(tmp_path / "out")]) == 1
+    assert len(calls) == 1 and calls[0][1] == sorted(f"forecast_{m}_{k}" for m, k in FORECASTS)
+    assert "stale on purpose" in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()
+
+
+def test_check_runs_the_cross_file_check_on_the_fresh_export(exported, monkeypatch, capsys, snapshot_env):
+    # --check once returned before the family check: a rebuild whose evaluation disagreed with its own
+    # forecasts was "current" as long as the committed files equalled it.
+    tool = load_tool()
+    calls = []
+    monkeypatch.setattr(tool, "validate_forecast_evaluation", lambda evaluation, forecasts: calls.append(sorted(forecasts)) or ["disagree on purpose"])
+    before = {p.name: p.read_bytes() for p in exported.iterdir()}
+    assert tool.main(["--out", str(exported), "--check"]) == 1
+    assert calls == [sorted(f"forecast_{m}_{k}" for m, k in FORECASTS)]
+    out = capsys.readouterr().out
+    assert "the fresh export's fit, residuals, forecast and evaluation files disagree:\n  - disagree on purpose" in out
+    assert "app data is current" not in out
+    assert {p.name: p.read_bytes() for p in exported.iterdir()} == before
 
 
 @pytest.mark.parametrize("args", [("--only", "nope"), ("--only", ""), ("--only", "fit", "--check")])
@@ -590,7 +618,7 @@ def test_tool_never_writes_nan_to_disk_and_writes_no_file_at_all(tmp_path, monke
 
     def with_nan(snapshot, **kwargs):
         payloads = real(snapshot, **kwargs)
-        payloads[ARTIFACTS[-1]]["t_fit"]["df"] = float("nan")
+        payloads[ARTIFACTS[-1]]["alpha"] = float("nan")
         return payloads
 
     monkeypatch.setattr(tool, "build_payloads", with_nan)

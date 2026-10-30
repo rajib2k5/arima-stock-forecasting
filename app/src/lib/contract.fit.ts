@@ -14,8 +14,8 @@
  *
  * In its own module so that only the fit page bundles it.
  */
-import { isRecord, typeName } from './contract'
-import { MISSING, Reader } from './contract.reader'
+import { capped, isRecord, MAX_LIST, MAX_NAMES, tooMany, typeName } from './contract'
+import { MISSING, Reader, shown } from './contract.reader'
 
 export const MODEL_IDS = ['aic', 'bic', 'course'] as const
 export type ModelId = (typeof MODEL_IDS)[number]
@@ -42,6 +42,8 @@ const INFERENCE = ['std_err', 'z', 'p_value', 'ci_low', 'ci_high'] as const
  */
 export const MAX_PQ = 10
 export const MAX_D = 2
+/** p + q coefficients, a trend term and sigma2: the most parameters a bounded order has (payloads.MAX_FIT_PARAMS). */
+const MAX_FIT_PARAMS = 2 * MAX_PQ + 2
 /**
  * The refit's log-likelihood tolerance and the cancelling distance (fitting.LLF_TOLERANCE and
  * fitting.CANCEL_DISTANCE; payloads.LLF_TOLERANCE and payloads.CANCEL_DISTANCE), pinned, never read
@@ -60,6 +62,8 @@ export const LJUNG_BOX_LAGS: readonly number[] = [5, 10, 20]
 export const ARCH_LM_LAGS: readonly number[] = [5, 10]
 export const ARCH_LM_DDOF = 0
 export const NLAGS = 50
+/** The most warnings one fit's list may hold (payloads.MAX_WARNINGS), checked before the list is read. */
+export const MAX_WARNINGS = 100
 /** statsmodels 0.15.0 labels ARIMA's drift as an exogenous "x1" (payloads.LIBRARY_NAMES). */
 const LIBRARY_NAMES: ReadonlyMap<string, string> = new Map([['drift', 'x1']])
 
@@ -217,7 +221,8 @@ export interface Residuals {
 export type FitResult = { ok: true; fit: Fit } | { ok: false; errors: string[] }
 export type ResidualsResult = { ok: true; residuals: Residuals } | { ok: false; errors: string[] }
 
-const show = (v: unknown) => JSON.stringify(v) ?? typeName(v)
+// Messages quote values through `shown`, so a value of any size gives a short message.
+const show = shown
 
 /** Our parameter names in statsmodels' order: the trend term, the AR lags, the MA lags, sigma2. */
 export function expectedParamNames(p: number, q: number, trend: TrendCode): string[] {
@@ -297,7 +302,7 @@ export function defaultTrend(d: number): TrendCode {
 
 /** A non-empty, strictly ascending list of lags >= 1. */
 function lagList(r: Reader, v: unknown, at: string): number[] | undefined {
-  const list = r.arr(v, at)
+  const list = r.list(v, at, MAX_NAMES, 'lags')
   if (!list) return undefined
   const out = list.map((x, i) => r.int(x, `${at}[${i}]`, 1))
   if (out.some((x) => x === undefined)) return undefined
@@ -309,8 +314,12 @@ function lagList(r: Reader, v: unknown, at: string): number[] | undefined {
   return values
 }
 
+/**
+ * Every warning a fit raised, at most MAX_WARNINGS (payloads.MAX_WARNINGS): a longer list is one short
+ * error, never a loop over it (3.3 million warnings once made 324 MB of messages).
+ */
 function warnings(r: Reader, v: unknown, at: string): Warning[] | undefined {
-  const list = r.arr(v, at)
+  const list = r.list(v, at, MAX_WARNINGS, 'warnings')
   if (!list) return undefined
   const start = r.errors.length
   const out = list.map((item, i) => {
@@ -324,7 +333,7 @@ function warnings(r: Reader, v: unknown, at: string): Warning[] | undefined {
 
 /** One row per parameter, named as `names` says; the five inference fields all numbers or all null. */
 function parseParams(r: Reader, v: unknown, at: string, names: string[] | undefined): FitParam[] | undefined {
-  const rows = r.arr(v, at)
+  const rows = r.list(v, at, MAX_FIT_PARAMS, 'rows')
   if (!rows) return undefined
   if (names && rows.length !== names.length) r.errors.push(`${at}: has ${rows.length} rows, but the order and trend have ${names.length} parameters: ${names.join(', ')}`)
   const out: FitParam[] = []
@@ -366,14 +375,22 @@ function parseParams(r: Reader, v: unknown, at: string, names: string[] | undefi
 function parseRoots(r: Reader, v: unknown, at: string, count: number | undefined): InvRoot[] | undefined {
   const rows = r.arr(v, at)
   if (!rows) return undefined
-  if (count !== undefined && rows.length !== count) r.errors.push(`${at}: has ${rows.length} roots, expected ${count}`)
+  if (count !== undefined && rows.length !== count) {
+    r.errors.push(`${at}: has ${rows.length} roots, expected ${count}`)
+    return undefined
+  }
+  if (rows.length > MAX_PQ) {
+    // No count (the order was refused): the list is bounded all the same (payloads._check_roots).
+    r.errors.push(tooMany(at, rows.length, 'roots', MAX_PQ))
+    return undefined
+  }
   const out = rows.map((item, i) => numbers(r, item, `${at}[${i}]`, ['re', 'im', 'modulus'] as const))
   return out.every((x) => x !== undefined) ? (out as InvRoot[]) : undefined
 }
 
 /** Pairs of root indices, each in range and each used at most once. Which roots pair up is Python's rule. */
 function parsePairs(r: Reader, v: unknown, at: string, ar: InvRoot[] | undefined, ma: InvRoot[] | undefined): CancellingPair[] | undefined {
-  const rows = r.arr(v, at)
+  const rows = r.list(v, at, MAX_PQ, 'pairs') // one root of each kind per pair at most
   if (!rows) return undefined
   const start = r.errors.length
   const out: CancellingPair[] = []
@@ -408,7 +425,7 @@ interface LagFacts {
 }
 
 function parseLjungBox(r: Reader, v: unknown, at: string, pq: number | undefined, lags: number[] | undefined): LjungBoxRow[] | undefined {
-  const rows = r.arr(v, at)
+  const rows = r.list(v, at, LJUNG_BOX_LAGS.length, 'rows')
   if (!rows) return undefined
   if (lags && rows.length !== lags.length) r.errors.push(`${at}: has ${rows.length} rows, but ljung_box_lags has ${lags.length}`)
   const start = r.errors.length
@@ -440,7 +457,7 @@ function parseLjungBox(r: Reader, v: unknown, at: string, pq: number | undefined
 }
 
 function parseArchLm(r: Reader, v: unknown, at: string, lags: number[] | undefined): Diagnostics['arch_lm'] | undefined {
-  const rows = r.arr(v, at)
+  const rows = r.list(v, at, ARCH_LM_LAGS.length, 'rows')
   if (!rows) return undefined
   if (lags && rows.length !== lags.length) r.errors.push(`${at}: has ${rows.length} rows, but arch_lm_lags has ${lags.length}`)
   const start = r.errors.length
@@ -464,7 +481,7 @@ function parseDiagnostics(r: Reader, v: unknown, at: string, facts: ModelFacts, 
   const burn = bounded(r, r.field(dg, 'burn_excluded', at), `${at}.burn_excluded`, MAX_D)
   if (burn !== undefined && facts.burn !== undefined && burn !== facts.burn) r.errors.push(`${at}.burn_excluded: is ${burn}, but the fit's loglikelihood_burn is ${facts.burn}`)
   if (n !== undefined && burn !== undefined && facts.nobs !== undefined && n !== facts.nobs - burn) r.errors.push(`${at}.n: is ${n}, but nobs - burn_excluded is ${facts.nobs - burn}`)
-  const burnedRaw = r.arr(r.field(dg, 'burned', at), `${at}.burned`)
+  const burnedRaw = r.list(r.field(dg, 'burned', at), `${at}.burned`, MAX_D, 'rows') // burn_excluded is at most MAX_D
   let burned: Diagnostics['burned'] | undefined
   if (burnedRaw) {
     if (burn !== undefined && burnedRaw.length !== burn) r.errors.push(`${at}.burned: has ${burnedRaw.length} rows, but burn_excluded is ${burn}`)
@@ -597,7 +614,7 @@ function parseCourseTrack(r: Reader, v: unknown, nTrain: number | undefined, cou
     if (order && course?.order && !sameValues(order, course.order)) r.errors.push(`${fat}.order: is ${show(order)}, but the course model's order is ${show(course.order)}`)
     const nobs = r.int(r.field(f, 'nobs', fat), `${fat}.nobs`, 2)
     if (nobs !== undefined && nCourse !== undefined && nobs !== nCourse) r.errors.push(`${fat}.nobs: is ${nobs}, but n_course is ${nCourse}`)
-    const paramsRaw = r.arr(r.field(f, 'params', fat), `${fat}.params`)
+    const paramsRaw = r.list(r.field(f, 'params', fat), `${fat}.params`, MAX_FIT_PARAMS, 'rows')
     const params = paramsRaw?.map((item, i) => {
       const pat = `${fat}.params[${i}]`
       const row = r.obj(item, pat)
@@ -686,6 +703,11 @@ function parseCourseTrack(r: Reader, v: unknown, nTrain: number | undefined, cou
 export function parseFit(data: unknown): FitResult {
   if (!isRecord(data)) return { ok: false, errors: [`data: expected an object, got ${typeName(data)}`] }
   const r = new Reader()
+  return capped(r.errors, 'data', () => readFit(r, data))
+}
+
+/** parseFit's body, stopped by `capped` at MAX_PROBLEMS problems. */
+function readFit(r: Reader, data: Record<string, unknown>): FitResult {
   const sample = r.literal(r.field(data, 'sample', 'data'), 'train', 'data.sample')
   const nTrain = r.int(r.field(data, 'n_train', 'data'), 'data.n_train', 2)
   const primary = r.literal(r.field(data, 'primary', 'data'), PRIMARY, 'data.primary')
@@ -742,7 +764,7 @@ export function parseFit(data: unknown): FitResult {
     })
   }
 
-  const list = r.arr(r.field(data, 'models', 'data'), 'data.models')
+  const list = r.list(r.field(data, 'models', 'data'), 'data.models', MODEL_IDS.length, 'models')
   const models: (FitModel | undefined)[] = []
   const byId = new Map<ModelId, ReturnType<typeof parseModel>>()
   if (list) {
@@ -804,7 +826,7 @@ function parseCorrelogram(r: Reader, v: unknown, at: string, nlags: number | und
   const band = r.num(r.field(g, 'band', at), `${at}.band`)
   if (band !== undefined && band <= 0) r.errors.push(`${at}.band: must be positive, got ${band}`)
   const count = r.int(r.field(g, 'outside_count', at), `${at}.outside_count`)
-  const rowsRaw = r.arr(r.field(g, 'rows', at), `${at}.rows`)
+  const rowsRaw = r.list(r.field(g, 'rows', at), `${at}.rows`, MAX_LIST, 'rows')
   if (!rowsRaw) return undefined
   if (nlags !== undefined && rowsRaw.length !== nlags) r.errors.push(`${at}.rows: has ${rowsRaw.length} rows, but lags 1 to ${nlags} make ${nlags}`)
   const flags: (boolean | undefined)[] = []
@@ -834,6 +856,11 @@ function parseCorrelogram(r: Reader, v: unknown, at: string, nlags: number | und
 export function parseResiduals(data: unknown, modelId: ModelId): ResidualsResult {
   if (!isRecord(data)) return { ok: false, errors: [`data: expected an object, got ${typeName(data)}`] }
   const r = new Reader()
+  return capped(r.errors, 'data', () => readResiduals(r, data, modelId))
+}
+
+/** parseResiduals's body, stopped by `capped` at MAX_PROBLEMS problems. */
+function readResiduals(r: Reader, data: Record<string, unknown>, modelId: ModelId): ResidualsResult {
   const sample = r.literal(r.field(data, 'sample', 'data'), 'train', 'data.sample')
   const id = r.literal(r.field(data, 'model_id', 'data'), modelId, 'data.model_id')
   const n = r.int(r.field(data, 'n', 'data'), 'data.n', 2)
@@ -842,7 +869,7 @@ export function parseResiduals(data: unknown, modelId: ModelId): ResidualsResult
   if (z !== undefined && z !== Z95) r.errors.push(`data.z: is ${z}, expected ${Z95}`)
   const nlags = r.int(r.field(data, 'nlags', 'data'), 'data.nlags', 1)
 
-  const rowsRaw = r.arr(r.field(data, 'rows', 'data'), 'data.rows')
+  const rowsRaw = r.list(r.field(data, 'rows', 'data'), 'data.rows', MAX_LIST, 'rows')
   let rows: Residuals['rows'] | undefined
   if (rowsRaw) {
     if (n !== undefined && rowsRaw.length !== n) r.errors.push(`data.rows: has ${rowsRaw.length} rows, but n is ${n}`)
@@ -863,7 +890,7 @@ export function parseResiduals(data: unknown, modelId: ModelId): ResidualsResult
   const acf = parseCorrelogram(r, r.field(data, 'acf', 'data'), 'data.acf', nlags)
   const acfSquared = parseCorrelogram(r, r.field(data, 'acf_squared', 'data'), 'data.acf_squared', nlags)
 
-  const qqRaw = r.arr(r.field(data, 'qq', 'data'), 'data.qq')
+  const qqRaw = r.list(r.field(data, 'qq', 'data'), 'data.qq', MAX_LIST, 'points')
   let qq: Residuals['qq'] | undefined
   if (qqRaw) {
     if (n !== undefined && qqRaw.length !== n) r.errors.push(`data.qq: has ${qqRaw.length} points, but n is ${n}`)

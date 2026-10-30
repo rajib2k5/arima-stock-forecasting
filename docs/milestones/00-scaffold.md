@@ -161,7 +161,7 @@ calling it from a notebook or test would create folders in your home directory. 
 
 #### `contract.py`: the envelope
 
-**The regexes, and `fullmatch` instead of `$`** (`contract.py:36-42`)
+**The regexes, and `fullmatch` instead of `$`** (`contract.py:37-43`)
 
 ```python
 # We match with fullmatch(), never with "^...$" and match(). In Python, "$" also matches just
@@ -173,8 +173,8 @@ _TIMESTAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 _SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 ```
 
-- *What.* Four patterns, always applied with `fullmatch` (`contract.py:52`, `:56`, `:60`,
-  `:126`). `fullmatch` succeeds only if the pattern consumes the whole string. A commit id is
+- *What.* Four patterns, always applied with `fullmatch` (`contract.py:104`, `:108`, `:112`,
+  `:180`). `fullmatch` succeeds only if the pattern consumes the whole string. A commit id is
   40 hex characters in a SHA-1 repository and 64 in a SHA-256 one (`git init
   --object-format=sha256`); both are accepted, with or without `-dirty`.
 - *Why.* In Python, `$` matches at the end of the string *or just before a final newline*. So
@@ -187,9 +187,9 @@ _SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
   `test_validate_catches_bad_formats` and two cases of the shared corpus.
 - *The JavaScript side differs.* Without the `m` flag, JavaScript's `$` matches only at the true
   end of input: `/^[a-z]+$/.test("abc\n")` is `false` (measured). That is why
-  `app/src/lib/contract.ts:58-65` can safely use `^...$`.
+  `app/src/lib/contract.ts:150-157` can safely use `^...$`.
 
-**`make_envelope`** (`contract.py:70-104`)
+**`make_envelope`** (`contract.py:122-156`)
 
 ```python
     # A naive datetime has no zone, so it could mean any hour of the day. We refuse to guess.
@@ -204,9 +204,9 @@ _SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 (lines 84-86, then 93-96)
 
-- *What.* Checks every input and raises `ValueError` naming the problem (`contract.py:78-91`).
+- *What.* Checks every input and raises `ValueError` naming the problem (`contract.py:130-143`).
   Converts the time to UTC, writes it as `YYYY-MM-DDTHH:MM:SSZ`, and returns a new dict with a
-  copy of `data` (`contract.py:98-104`).
+  copy of `data` (`contract.py:150-156`).
 - *Why pure.* The caller passes the time and the commit (`contract.py:18`). The function never
   reads the clock or runs git, so a test can give it any instant and check the exact output
   (`test_make_envelope_converts_aware_datetimes_to_utc` has four hand-worked cases).
@@ -223,7 +223,7 @@ _SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 - *Naive version.* `datetime.now().isoformat() + "Z"` labels local time as UTC, keeps
   microseconds, and fails the timestamp pattern.
 
-**`validate_envelope`** (`contract.py:107-149`)
+**`validate_envelope`** (`contract.py:159-205`)
 
 ```python
     if "schema_version" in obj:
@@ -238,7 +238,7 @@ _SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 (lines 124-130)
 
 - *What.* Returns a list of *every* problem, or `[]` if the envelope is valid. It reports missing
-  keys and **unexpected** keys (`contract.py:119-122`): the envelope's top level is closed, here
+  keys and **unexpected** keys (`contract.py:171-176`): the envelope's top level is closed, here
   and in the app (`contract.py:11-13`). The export tool runs it; the app does not (it has its
   own parser, below).
 - *Why a list.* One run shows everything to fix (`test_validate_returns_all_problems_not_just_the_first`).
@@ -247,10 +247,10 @@ _SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
   `100.0.0` cases of `test_validate_rejects_other_major_versions`, and the corpus case for
   `10.0.0`; measured).
 - *Why validate after `make_envelope`.* `make_envelope` checks its *inputs*;
-  `validate_envelope` checks the *finished object* against `ENVELOPE_KEYS` (`contract.py:34`).
+  `validate_envelope` checks the *finished object* against `ENVELOPE_KEYS` (`contract.py:35`).
   Two independent statements of one rule catch drift between them.
 
-**`dumps`** (`contract.py:173-191`)
+**`dumps`** (`contract.py:229-247`)
 
 ```python
     text = json.dumps(envelope, sort_keys=True, indent=2, allow_nan=False) + "\n"
@@ -271,8 +271,8 @@ _SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 - *Why `sort_keys=True`.* Output no longer depends on dict insertion order, so the same data
   gives the same bytes and git diffs show only real changes. Turning it off makes 2 tests fail:
   `test_dumps_exact_text` and `test_dumps_is_independent_of_insertion_order` (measured).
-- *Why `_check_safe_integers`* (`contract.py:152-170`, limit `MAX_SAFE_INTEGER = 2**53 - 1` at
-  `:48`). Python writes any integer exactly, but the browser's `JSON.parse` turns every number
+- *Why `_check_safe_integers`* (`contract.py:208-226`, limit `MAX_SAFE_INTEGER = 2**53 - 1` at
+  `:49`). Python writes any integer exactly, but the browser's `JSON.parse` turns every number
   into a 64-bit float, which holds integers exactly only up to 2^53 − 1. Measured in Node 22:
   `JSON.parse("9007199254740993")` gives `9007199254740992`, and a 310-digit `10**309` gives
   `Infinity`. So `dumps` raises `ValueError` for any integer beyond ±(2^53 − 1), naming its path
@@ -421,8 +421,8 @@ tampers with one result and checks the next. `test_meta_payload_takes_ticker_and
 monkeypatches the constants and checks the payload follows.
 
 **The exporter** (`tools/export_app_data.py:25-62`) is a thin wrapper. The clock and git are read
-once, at the edge (`export_app_data.py:36-41`), then handed to the pure code. It validates the
-finished envelope and exits 1 with every problem listed if it fails (`export_app_data.py:48-53`).
+once, at the edge (`export_app_data.py:38-43`), then handed to the pure code. It validates the
+finished envelope and exits 1 with every problem listed if it fails (`export_app_data.py:50-55`).
 Then:
 
 ```python
@@ -525,13 +525,13 @@ The kernel is built inside `tmp_path` (`tests/test_notebooks.py:120-150`):
 
 #### `contract.ts`: `parseEnvelope` and `parseMeta`
 
-**The Result type** (`app/src/lib/contract.ts:55-56`):
+**The Result type** (`app/src/lib/contract.ts:147-148`):
 `{ ok: true; envelope: Envelope } | { ok: false; errors: string[] }`. This is a *discriminated
 union*: TypeScript lets you read `envelope` only after checking `ok`. The naive alternative,
 `JSON.parse(text) as Envelope`, is a type assertion. It has no effect at run time, so a `2.0.0`
 file would sail through and be drawn wrongly.
 
-**`parseEnvelope`** (`contract.ts:132-180`)
+**`parseEnvelope`** (`contract.ts:224-277`)
 
 ```ts
   const schemaVersion = readString(raw, 'schema_version', '', errors)
@@ -548,43 +548,43 @@ file would sail through and be drawn wrongly.
 (lines 136-144)
 
 - *Collecting every error.* Each check pushes onto one `errors` array and carries on. Only at the
-  end does it decide (`contract.ts:173-175`). Test: "reports every problem in one pass, not just
+  end does it decide (`contract.ts:270-272`). Test: "reports every problem in one pass, not just
   the first" (five problems, five errors).
 - *Refusing major ≠ 1.* `Number(m[1])` compares the major as a number. Replacing it with a
   first-character check makes 2 app tests fail, "refuses major 10.0.0" and the shared corpus's
   `10.0.0` case (measured).
-- *`Object.hasOwn`* (`contract.ts:116`). A key inherited through the prototype does not count as
+- *`Object.hasOwn`* (`contract.ts:208`). A key inherited through the prototype does not count as
   present (test: "does not count inherited properties as present"). `key in obj` would count it.
 - *A closed top level, an open `data`.* Any top-level key outside the five is an error
-  (`contract.ts:166-171`, keys listed at `:66`), exactly as in `contract.py:121-122`, so a new
+  (`contract.ts:263-268`, keys listed at `:158`), exactly as in `contract.py:175-176`, so a new
   envelope field is a major bump. `Object.keys` lists own keys only, so a key the file calls
   `"__proto__"` or `"constructor"` is reported like any other. Inside `data` the reader stays
   tolerant: the payload parsers build a **new** object from the keys they know and ignore the
   rest, which is what lets a minor version add fields
   (`docs/architecture/contract.md:43-47`). The success value is a new object built from the five
-  known keys (`contract.ts:176-179`). The [concept note](../concepts/01-reproducibility-and-contracts.md)
+  known keys (`contract.ts:273-276`). The [concept note](../concepts/01-reproducibility-and-contracts.md)
   explains the trade-off.
 - *The artifact name.* `parseEnvelope` applies the same pattern as Python, `^[a-z][a-z0-9_]*$`
-  (`contract.ts:146-149`, pattern at `:65`). The loader adds the "is this the file I asked for"
+  (`contract.ts:238-241`, pattern at `:157`). The loader adds the "is this the file I asked for"
   check.
-- *The calendar, by plain arithmetic.* `isUtcTimestamp` (`contract.ts:102-107`) and `isIsoDate`
-  (`:96-99`) call `isCalendarDay` (`:91-94`), which uses a month-length table (`:78`) and the
-  Gregorian leap-year rule (`isLeapYear`, `:81-83`). It does not use `Date.UTC`, because that
+- *The calendar, by plain arithmetic.* `isUtcTimestamp` (`contract.ts:194-199`) and `isIsoDate`
+  (`:188-191`) call `isCalendarDay` (`:183-186`), which uses a month-length table (`:170`) and the
+  Gregorian leap-year rule (`isLeapYear`, `:173-175`). It does not use `Date.UTC`, because that
   function reads the years 0–99 as 1900–1999 (measured in Node 22: `Date.UTC(1, 0, 1)` is in
   1901), so a `Date`-based check wrongly rejected every day in the years 0001–0099 that Python
   accepts. Years run 0001–9999, hours 00–23, minutes and seconds 00–59, so a leap second (a seconds
   field of 60) is refused.
 
-**`parseMeta`** (`contract.ts:226-273`) validates the `meta` payload in the same style. Errors
+**`parseMeta`** (`contract.ts:324-380`) validates the `meta` payload in the same style. Errors
 carry a path such as `data.milestones[1].status`. It enforces the closed status enum
-(`contract.ts:218-220`), unique milestone ids (`:210`) and `start < end_exclusive` for each window
-(`:194`; ISO dates compare correctly as strings). It requires exactly one milestone with status
-`current` (`:251-259`), as `docs/architecture/contract.md:118` says; the check runs only once
+(`contract.ts:316-318`), unique milestone ids (`:308`) and `start < end_exclusive` for each window
+(`:292`; ISO dates compare correctly as strings). It requires exactly one milestone with status
+`current` (`:353-365`), as `docs/architecture/contract.md:118` says; the check runs only once
 every milestone parsed, so one bad status does not also produce a "no current milestone" error.
 Tests: 'rejects a payload with no "current" milestone, including an empty milestone list' and
 'rejects two "current" milestones and names their ids'. The Python side has the same rule in
-`test_meta_payload_milestones_are_numbered_in_order_with_one_current` (`tests/test_export.py:84-89`).
-It returns a fresh object (`contract.ts:272`), so extra payload keys are ignored.
+`test_meta_payload_milestones_are_numbered_in_order_with_one_current` (`tests/test_export.py:85-90`).
+It returns a fresh object (`contract.ts:379`), so extra payload keys are ignored.
 
 **The shared corpus** (`app/src/test/fixtures/envelope_cases.json`) is the main guard against
 the two readers drifting apart. It is one list of 142 envelopes (34 valid, 108 invalid), each with
@@ -780,17 +780,17 @@ One artifact, end to end.
 
 | # | Hop | Where |
 |---|---|---|
-| 1 | `meta_payload()` builds the `data` dict from `config.py` constants | `src/arima_forecasting/export.py:34-50`, called at `tools/export_app_data.py:38` |
-| 2 | `build_time()` and `source_commit(REPO_ROOT)` read the clock and git, once | `src/arima_forecasting/provenance.py:93`, `:43`; called at `tools/export_app_data.py:39-40` |
-| 3 | `make_envelope` checks inputs, converts to UTC, wraps the dict | `src/arima_forecasting/contract.py:70-104`, called at `tools/export_app_data.py:36` |
-| 4 | `validate_envelope` checks the finished envelope; exit 1 if any problem | `contract.py:107-149`, called at `tools/export_app_data.py:48` |
-| 5 | `dumps` serialises, refusing NaN and integers beyond ±(2^53 − 1) | `contract.py:173-191`, called at `tools/export_app_data.py:57` |
-| 6 | The text is written to `app/public/data/meta.json` | `tools/export_app_data.py:58-60` (default folder at `:22`) |
+| 1 | `meta_payload()` builds the `data` dict from `config.py` constants | `src/arima_forecasting/export.py:34-50`, called at `tools/export_app_data.py:40` |
+| 2 | `build_time()` and `source_commit(REPO_ROOT)` read the clock and git, once | `src/arima_forecasting/provenance.py:93`, `:43`; called at `tools/export_app_data.py:41-42` |
+| 3 | `make_envelope` checks inputs, converts to UTC, wraps the dict | `src/arima_forecasting/contract.py:122-156`, called at `tools/export_app_data.py:38` |
+| 4 | `validate_envelope` checks the finished envelope; exit 1 if any problem | `contract.py:159-205`, called at `tools/export_app_data.py:50` |
+| 5 | `dumps` serialises, refusing NaN and integers beyond ±(2^53 − 1) | `contract.py:229-247`, called at `tools/export_app_data.py:59` |
+| 6 | The text is written to `app/public/data/meta.json` | `tools/export_app_data.py:60-62` (default folder at `:22`) |
 | 7 | Vite serves `app/public/` in dev and copies it into `app/dist/` at build (measured: `app/dist/data/meta.json` exists after `npm run build`) | `app/vite.config.ts:7` |
 | 8 | `useMeta` calls `loadMeta`, which calls `loadArtifact('meta')` | `app/src/data/useMeta.ts:26`, `:15` |
 | 9 | `fetch` of `${BASE_URL}data/meta.json`, then `res.json()` | `app/src/data/loadArtifact.ts:21`, `:25`, `:33` |
-| 10 | `parseEnvelope` checks the five keys and refuses any other; the loader checks the artifact name | `loadArtifact.ts:38-42` → `app/src/lib/contract.ts:132-180` |
-| 11 | `parseMeta` checks the payload; state becomes `ready` | `useMeta.ts:17-19` → `contract.ts:226-273` |
+| 10 | `parseEnvelope` checks the five keys and refuses any other; the loader checks the artifact name | `loadArtifact.ts:38-42` → `app/src/lib/contract.ts:224-277` |
+| 11 | `parseMeta` checks the payload; state becomes `ready` | `useMeta.ts:17-19` → `contract.ts:324-380` |
 | 12 | `App` passes the state to `AboutView` | `app/src/App.tsx:9`, `:16` |
 | 13 | `present.ts` formats for display: `formatWindow`, `statusLabel`, `shortCommit` | `app/src/views/AboutView.tsx:118`, `:122`, `:133`, `:77` → `app/src/lib/present.ts:26-28`, `:32-34`, `:8-12` |
 | 14 | The About page shows `2015-01-01 to 2023-12-31` and `2024-01-01 to 2026-09-30` | asserted by "loads data/meta.json through the contract and renders the study facts on About" (`app/src/App.test.tsx:28-39`) |
@@ -830,7 +830,7 @@ Python re-exports. See also the fuller diagram in `docs/architecture/README.md:4
 - *Failure.* `json.dumps(float("nan"))` returns `'NaN'` by default (measured). In Node 22,
   `JSON.parse('{"x": NaN}')` throws `SyntaxError: Unexpected token 'N', "{"x": NaN}" is not
   valid JSON` (measured). One bad float blanks a whole view, far from its cause.
-- *Guard.* `allow_nan=False` at `src/arima_forecasting/contract.py:189`; serialise before writing
+- *Guard.* `allow_nan=False` at `src/arima_forecasting/contract.py:245`; serialise before writing
   at `tools/export_app_data.py:55-60`; in the app, a parse failure becomes a `json` error panel
   (`app/src/data/loadArtifact.ts:32-36`).
 - *Tests.* `test_dumps_refuses_non_finite_floats`, `test_dumps_refuses_non_finite_floats_nested_in_lists`,
@@ -841,7 +841,7 @@ Python re-exports. See also the fuller diagram in `docs/architecture/README.md:4
 **2. Naive datetimes.**
 - *Failure.* A datetime without `tzinfo` is read as local time: `astimezone()` gave `-05:00` on
   this machine (measured), so the stamp depends on where you run.
-- *Guard.* `src/arima_forecasting/contract.py:85-86` raises; `provenance.py:106` and `:112` only
+- *Guard.* `src/arima_forecasting/contract.py:137-138` raises; `provenance.py:106` and `:112` only
   ever produce UTC-aware times.
 - *Tests.* `test_make_envelope_rejects_naive_datetime`, and
   `test_make_envelope_rejects_a_tzinfo_that_gives_no_offset` for a `tzinfo` whose `utcoffset()`
@@ -850,7 +850,7 @@ Python re-exports. See also the fuller diagram in `docs/architecture/README.md:4
 **3. `$` matching before a trailing newline.**
 - *Failure.* `re.match(r"^[a-z]+$", "abc\n")` returns `<re.Match object; span=(0, 3), match='abc'>`
   (measured), so `"meta\n"` or a SHA plus newline would pass.
-- *Guard.* `fullmatch` everywhere (`contract.py:52`, `:56`, `:60`, `:126`; comment at `:36-38`),
+- *Guard.* `fullmatch` everywhere (`contract.py:104`, `:108`, `:112`, `:180`; comment at `:37-39`),
   and the same idea for `SOURCE_DATE_EPOCH` (`provenance.py:107`), which now rejects `"5\n"`.
 - *Tests.* `test_make_envelope_rejects_bad_artifact_names` (`"meta\n"`),
   `test_make_envelope_rejects_bad_commits` (`"a"*40 + "\n"`, `"a"*40 + "-dirty\n"`),
@@ -942,7 +942,7 @@ author thought of and wrong on an input nobody had tried.
   the two readers disagreed on 6,459, every one in those years (measured on the code before the
   fix; the fixed readers disagree on none).
 - *Guard.* Plain calendar arithmetic: `isCalendarDay` with a month-length table and the
-  Gregorian leap-year rule (`app/src/lib/contract.ts:78-94`). The display helper `dayBefore`
+  Gregorian leap-year rule (`app/src/lib/contract.ts:170-186`). The display helper `dayBefore`
   uses `setUTCFullYear` instead (`app/src/lib/present.ts:15-23`). On the same grid the two
   readers now agree on every string (measured).
 - *Tests.* "calendar arithmetic" in `app/src/lib/contract.test.ts` ("agrees with the Date oracle
@@ -959,9 +959,9 @@ author thought of and wrong on an input nobody had tried.
   and `méta`, and three extra top-level keys, `extra`, `__proto__` and `constructor` (the code
   review's count). Two hand-written test suites had each tested its own reader and never
   compared them.
-- *Guard.* The envelope's top level is now closed on both sides (`contract.ts:166-171`,
-  `src/arima_forecasting/contract.py:121-122`) and both apply `^[a-z][a-z0-9_]*$`
-  (`contract.ts:65`, `contract.py:39`). One shared list of 142 envelopes with their expected
+- *Guard.* The envelope's top level is now closed on both sides (`contract.ts:263-268`,
+  `src/arima_forecasting/contract.py:175-176`) and both apply `^[a-z][a-z0-9_]*$`
+  (`contract.ts:157`, `contract.py:40`). One shared list of 142 envelopes with their expected
   verdicts, `app/src/test/fixtures/envelope_cases.json`, runs through both readers. Re-run on the
   current code, the review's 82 envelopes give 0 disagreements (measured).
 - *Tests.* `tests/test_contract_corpus.py::test_validate_envelope_agrees_with_the_corpus` and, in
@@ -989,7 +989,7 @@ author thought of and wrong on an input nobody had tried.
   them as `Infinity`; `9007199254740993` comes back as `9007199254740992` (both measured). JSON
   numbers become 64-bit floats in the browser, exact for integers only up to 2^53 − 1.
 - *Guard.* `dumps` refuses any integer beyond ±(2^53 − 1) after serialising
-  (`src/arima_forecasting/contract.py:189-190`, the walk at `:152-170`, the limit at `:48`).
+  (`src/arima_forecasting/contract.py:245-246`, the walk at `:208-226`, the limit at `:49`).
 - *Tests.* `test_dumps_refuses_integers_a_browser_would_round`,
   `test_dumps_accepts_integers_up_to_the_largest_a_browser_reads_exactly`,
   `test_dumps_does_not_print_a_huge_integer_in_full`,
@@ -1009,7 +1009,7 @@ author thought of and wrong on an input nobody had tried.
   prints 64 hex characters. The old contract accepted only 40, so `make_envelope` raised
   `ValueError` and the export aborted (measured).
 - *Guard.* Both readers accept 40 or 64 hex, optionally with `-dirty`
-  (`src/arima_forecasting/contract.py:40`, `app/src/lib/contract.ts:62`), and `shortCommit`
+  (`src/arima_forecasting/contract.py:41`, `app/src/lib/contract.ts:154`), and `shortCommit`
   shortens either (`app/src/lib/present.ts:8-12`).
 - *Tests.* `test_a_sha256_repository_gives_a_commit_the_envelope_accepts`,
   `test_validate_accepts_a_sha256_commit`, and the 64-hex cases of the shared corpus.
@@ -1398,22 +1398,22 @@ for some rows, because the corpus and the review-round tests now also catch them
 
 | Mutation | First round | Today's suite: what fails |
 |---|---|---|
-| `allow_nan=False` → `True` (`contract.py:189`) | 4 failed | 6: `test_dumps_refuses_non_finite_floats[nan, inf, -inf]`, `…_nested_in_lists`, `test_tool_never_writes_nan_to_disk`, `test_project_tour_prints_the_values_it_explains` |
-| `_COMMIT.fullmatch` → `match` with `^…$` (`contract.py:56`) | 3 failed | 6: three newline cases of `test_make_envelope_rejects_bad_commits`, one of `test_validate_catches_bad_formats`, two corpus cases |
-| `^…$` added to `_COMMIT` but `fullmatch` kept (`contract.py:40`); *equivalent* | 0 failed | 0 (it changes nothing) |
-| delete the naive-datetime check (`contract.py:85-86`) | 1 failed | 2: `test_make_envelope_rejects_naive_datetime`, `test_make_envelope_rejects_a_tzinfo_that_gives_no_offset` |
-| `sort_keys=True` → `False` (`contract.py:189`) | 2 failed | 2: `test_dumps_exact_text`, `test_dumps_is_independent_of_insertion_order` |
-| major compared as a string prefix (`contract.py:129`) | 3 failed | 4: `test_validate_rejects_other_major_versions[10.0.0, 11.2.3, 100.0.0]`, one corpus case |
+| `allow_nan=False` → `True` (`contract.py:245`) | 4 failed | 6: `test_dumps_refuses_non_finite_floats[nan, inf, -inf]`, `…_nested_in_lists`, `test_tool_never_writes_nan_to_disk`, `test_project_tour_prints_the_values_it_explains` |
+| `_COMMIT.fullmatch` → `match` with `^…$` (`contract.py:108`) | 3 failed | 6: three newline cases of `test_make_envelope_rejects_bad_commits`, one of `test_validate_catches_bad_formats`, two corpus cases |
+| `^…$` added to `_COMMIT` but `fullmatch` kept (`contract.py:41`); *equivalent* | 0 failed | 0 (it changes nothing) |
+| delete the naive-datetime check (`contract.py:137-138`) | 1 failed | 2: `test_make_envelope_rejects_naive_datetime`, `test_make_envelope_rejects_a_tzinfo_that_gives_no_offset` |
+| `sort_keys=True` → `False` (`contract.py:245`) | 2 failed | 2: `test_dumps_exact_text`, `test_dumps_is_independent_of_insertion_order` |
+| major compared as a string prefix (`contract.py:183`) | 3 failed | 4: `test_validate_rejects_other_major_versions[10.0.0, 11.2.3, 100.0.0]`, one corpus case |
 | `>=` → `>` in `StudyWindow` (`config.py:63`) | 1 failed | 1: `test_study_window_rejects_equal_dates` |
 | drop `id=cell_id` for code cells (`build_notebooks.py:209`) | 4 failed | 4: the four sync and CLI tests named in pitfall 4 |
 | delete `--untracked-files=normal` (`provenance.py:79`) | **0 failed** | 1: `test_untracked_file_is_dirty_even_when_git_config_hides_untracked_files` |
 | ignore a failing `git status` (`provenance.py:88`) | **0 failed** | 1: `test_a_failing_git_status_counts_as_dirty` |
-| major compared as its first character (`contract.ts:141`) | 1 failed | 2: "refuses major 10.0.0", and the corpus case for `10.0.0` |
+| major compared as its first character (`contract.ts:233`) | 1 failed | 2: "refuses major 10.0.0", and the corpus case for `10.0.0` |
 | drop the artifact-name check (`loadArtifact.ts:40`) | 1 failed | 1: "rejects an envelope whose artifact name is not the one requested" |
 | `SOURCE_DATE_EPOCH` back to plain `int()` (`provenance.py:107-112`) | (new) | 6: every case of `test_build_time_rejects_what_int_accepts_but_the_spec_does_not` |
 | `/data/` → `data/` in `.gitignore:4` | (new) | 4: all of `test_gitignore.py` |
 | two `current` milestones in `meta_payload` (`export.py:19`) | (new) | 4: `test_meta_payload_matches_the_agreed_contract_exactly`, `…_milestones_are_numbered_in_order_with_one_current`, `…_returns_a_fresh_object_each_call`, `test_tool_writes_a_valid_meta_envelope` |
-| drop the exactly-one-current check (`contract.ts:255`) | (new) | 2: 'rejects a payload with no "current" milestone…', 'rejects two "current" milestones…' |
+| drop the exactly-one-current check (`contract.ts:357`) | (new) | 2: 'rejects a payload with no "current" milestone…', 'rejects two "current" milestones…' |
 | rename `ticker` → `symbol` in the real `public/data/meta.json` | (new) | 2: both per-file tests in `contract.realdata.test.ts` |
 | a bare `NaN` in the real `public/data/meta.json` | (new) | 2: same |
 | add `public/data/aic_grid.json` with no registered payload parser | (new) | 2: its per-file test, and "are exactly the artifacts that meta.json lists" |

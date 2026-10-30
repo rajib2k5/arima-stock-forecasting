@@ -166,27 +166,27 @@ Read in this order. Each step names one file and line.
    with the burned rows for display (`:162`). `:190` `residual_payloads` adds them to `fit`, writes one
    `residuals_<id>` payload per model, and tests concept note 07's prediction on the primary model
    (`:212`).
-10. `src/arima_forecasting/payloads.py:1687` is `validate_fit` and `:1936` `validate_residuals`. Both
-    readers bound the orders first (`:1339`, p and q ≤ 10, d ≤ 2), so a huge order gives one short
-    problem. Python re-derives what the app does not: each parameter's p-value from z (`:1426`),
-    each test's p-value from its statistic (`:1364`, with the chi-squared tail in closed form at
-    `:1268`), AIC, BIC and AICc from llf (`:1668`), the cancelling rule (`:1464`), the llf gap
-    against its tolerance (`:1776`), each band (`:1905`) and every outside flag (`:1929`).
+10. `src/arima_forecasting/payloads.py:1832` is `validate_fit` and `:2082` `validate_residuals`. Both
+    readers bound the orders first (`:1480`, p and q ≤ 10, d ≤ 2), so a huge order gives one short
+    problem. Python re-derives what the app does not: each parameter's p-value from z (`:1567`),
+    each test's p-value from its statistic (`:1505`, with the chi-squared tail in closed form at
+    `:1404`), AIC, BIC and AICc from llf (`:1812`), the cancelling rule (`:1608`), the llf gap
+    against its tolerance (`:1921`), each band (`:2050`) and every outside flag (`:2074`).
     `tests/test_payloads_fit.py:103` breaks one statistical rule per case and expects the named
-    refusal. `src/arima_forecasting/payloads.py:1991` is `validate_fit_residuals`, the fit against
+    refusal. `src/arima_forecasting/payloads.py:2137` is `validate_fit_residuals`, the fit against
     the residual files.
-11. `tools/export_app_data.py:81` is `--only`; it reads the grid from `--out` (`:102`) and writes only
+11. `tools/export_app_data.py:83` is `--only`; it reads the grid from `--out` (`:104`) and writes only
     the named files. Before writing it checks the fit and residual files the folder will hold
-    (`:165`), and after writing it checks them again as read back (`:186`);
-    `tests/test_export.py:472` shows `--only fit` refusing to write beside stale residual files. `tests/test_committed_artifacts.py:231` rebuilds all four milestone-3 files from
+    (`:175`), and after writing it checks them again as read back (`:196`);
+    `tests/test_export.py:473` shows `--only fit` refusing to write beside stale residual files. `tests/test_committed_artifacts.py:231` rebuilds all four milestone-3 files from
     the committed `prices.json` and `aic_grid.json` and compares them exactly; `:240` and `:252` are
     the cross-file checks (the fit names the grid's choices; each residuals file matches its model and
     the training dates).
 12. `app/src/App.tsx:14` loads `FitView` through `lazy()`, offered only when `meta.json` lists the four
     files (`app/src/lib/gate.ts:18`). `app/src/data/useFitData.ts:36` fetches one model's file and
     parses it for that model's id; a parser that throws becomes an error state (`:50`), and a failed
-    file is fetched again on the next pick (`:67`). `app/src/lib/contract.fit.ts:686` is `parseFit`,
-    `:282` bounds an order before anything is built from it, and `:838` is where `parseResiduals`
+    file is fetched again on the next pick (`:67`). `app/src/lib/contract.fit.ts:703` is `parseFit`,
+    `:287` bounds an order before anything is built from it, and `:865` is where `parseResiduals`
     refuses another model's file.
 13. `app/src/views/FitView.tsx:111` is the page body. `PValue` (`:49`) sets a power of ten in a
     superscript and an underflowed 0 as "< 1e-300". The unit circle (`:242`) rings Python's pairs
@@ -256,13 +256,13 @@ sequenceDiagram
 | **A p-value can underflow to 0** | Jarque–Bera for the BIC and course models, and the BIC choice's `ar.L1` (z −74.8), give p = 0.0 in double precision | 0.0 is a valid number in the contract; the app prints it as "< 1e-300", never "0", and sets other powers of ten in a superscript (`pParts`, `app/src/lib/fitText.ts:33`) |
 | **`sigma2`'s z-test is a boundary null** | The first build exported `sigma2`'s z (49.5) and p (0.0); its null value 0 is on the edge of what a variance can be, where z is not normal | `parameter_rows` exports its z and p as null (`src/arima_forecasting/fitting.py:130`); both readers refuse a `sigma2` with them; the table shows a dash and a note (`app/src/views/FitView.tsx:224`) |
 | **The refit reproduces the grid's point; it does not prove a maximum** | Restarted at the BIC choice's recorded point, Nelder–Mead gains 1.27e-4 in llf, 127 times the tolerance | The docs and `fitting.py` say "reproduces"; the gains are measured (`m3_fix_probe.py`, Review fix round) |
-| **Closest-first pairing misses pairs** | AR {0.5, 0.6} and MA {0.51, 0.41}: closest first gives one pair, two exist within 0.1 | A maximum matching (`src/arima_forecasting/fitting.py:110`); `tests/test_fitting.py:69`; Python's validator restates it by dynamic programming (`src/arima_forecasting/payloads.py:1464`) |
-| **A stated order is used before it is bounded** | order [10⁸, 1, 0] in a file: Python's validator raised `MemoryError` and the app's parser ran out of heap; 2³² gave a `RangeError`, and the page stayed on "loading" | Both readers bound p, q ≤ 10 and d ≤ 2 first (`src/arima_forecasting/payloads.py:1339`, `app/src/lib/contract.fit.ts:282`); corpus cases; a parser that throws is an error state (`app/src/data/useFitData.ts:50`) |
-| **A root list longer than its order** (second review) | k equal roots a side, the order unchanged: the validator's matching ran over 2^k subsets, 7.8 s at k = 18 (`roots_probe.py`, Second review fix round) | `_check_roots` returns no roots on a count mismatch (`src/arima_forecasting/payloads.py:1437`) and `_check_pairs` matches at most `MAX_PQ` roots a side (`:1515`); `tests/test_payloads_fit.py:414`, `:424`, `:431` |
-| **A file set its own tolerances** (second review) | `llf_tolerance` 1.0 in a self-consistent file let a refit 0.5 from the grid's llf pass; `cancel_distance` was read from the file too | Both readers pin 1e-6 and 0.1 (`src/arima_forecasting/payloads.py:1243`, `app/src/lib/contract.fit.ts:50`) and refuse another stated value; `tests/test_payloads_fit.py:359`; corpus cases |
-| **`--only fit` beside stale residual files** | After a code change, `--only fit` wrote a `fit.json` whose `nlags` (40) contradicted the residual files' (50); only pytest noticed | `validate_fit_residuals` before and after writing (`tools/export_app_data.py:165`, `:186`); `tests/test_export.py:472` |
+| **Closest-first pairing misses pairs** | AR {0.5, 0.6} and MA {0.51, 0.41}: closest first gives one pair, two exist within 0.1 | A maximum matching (`src/arima_forecasting/fitting.py:110`); `tests/test_fitting.py:69`; Python's validator restates it by dynamic programming (`src/arima_forecasting/payloads.py:1608`) |
+| **A stated order is used before it is bounded** | order [10⁸, 1, 0] in a file: Python's validator raised `MemoryError` and the app's parser ran out of heap; 2³² gave a `RangeError`, and the page stayed on "loading" | Both readers bound p, q ≤ 10 and d ≤ 2 first (`src/arima_forecasting/payloads.py:1480`, `app/src/lib/contract.fit.ts:287`); corpus cases; a parser that throws is an error state (`app/src/data/useFitData.ts:50`) |
+| **A root list longer than its order** (second review) | k equal roots a side, the order unchanged: the validator's matching ran over 2^k subsets, 7.8 s at k = 18 (`roots_probe.py`, Second review fix round) | `_check_roots` returns no roots on a count mismatch (`src/arima_forecasting/payloads.py:1578`) and `_check_pairs` matches at most `MAX_PQ` roots a side (`:1659`); `tests/test_payloads_fit.py:414`, `:424`, `:431` |
+| **A file set its own tolerances** (second review) | `llf_tolerance` 1.0 in a self-consistent file let a refit 0.5 from the grid's llf pass; `cancel_distance` was read from the file too | Both readers pin 1e-6 and 0.1 (`src/arima_forecasting/payloads.py:1377`, `app/src/lib/contract.fit.ts:52`) and refuse another stated value; `tests/test_payloads_fit.py:359`; corpus cases |
+| **`--only fit` beside stale residual files** | After a code change, `--only fit` wrote a `fit.json` whose `nlags` (40) contradicted the residual files' (50); only pytest noticed | `validate_fit_residuals` before and after writing (`tools/export_app_data.py:175`, `:196`); `tests/test_export.py:473` |
 | **Sizes that only a real browser shows** | The three legend icons drew at 300 × 300 px and the QQ plot at 927 × 579 px with its text scaled up (`.plot svg` is 100% wide) | `.plot svg.legend-mark` and `.qq-plot` in `app/src/index.css:216`; measured in headless Chromium: 12 × 12 px and 560 × 350 px (Review fix round) |
-| **One model's residual file shown for another** | App mutant (b): a parser that accepted any id would draw the BIC series under the AIC label | `parseResiduals` checks `model_id` (`app/src/lib/contract.fit.ts:838`); Python's `validate_residuals(data, model_id)`; corpus case "residuals_aic: the model_id of another model" |
+| **One model's residual file shown for another** | App mutant (b): a parser that accepted any id would draw the BIC series under the AIC label | `parseResiduals` checks `model_id` (`app/src/lib/contract.fit.ts:865`); Python's `validate_residuals(data, model_id)`; corpus case "residuals_aic: the model_id of another model" |
 | **The app recomputing a flag** | App mutant (a): comparing \|acf\| with the band in the view | `FitView.tsx` passes Python's `outside` (`app/src/views/FitView.tsx:460`); the view test flips a flag and expects the bar to follow |
 
 ---
@@ -1024,7 +1024,7 @@ mutant (the table after the list).
    `[]` for it and `parseFit` returned `ok` with the verdicts `not_tested, found, not_found`
    (measured on a copy of the tree before this round). Both readers now hold `ALPHA` 0.05,
    `LJUNG_BOX_LAGS` (5, 10, 20), `ARCH_LM_LAGS` (5, 10), `ARCH_LM_DDOF` 0 and `NLAGS` 50 themselves
-   (`src/arima_forecasting/payloads.py:1249`, `app/src/lib/contract.fit.ts:58`), compare a stated value
+   (`src/arima_forecasting/payloads.py:1383`, `app/src/lib/contract.fit.ts:60`), compare a stated value
    exactly (one 1e-12 away is another value) and judge the rows against their own values whatever the
    file says. `tests/test_diagnostics.py:189` ties the Python pins to `diagnostics.py` and to the
    settings `residual_payloads` writes, and the real `fit.json` still has 0 problems. The made-up
@@ -1043,8 +1043,8 @@ mutant (the table after the list).
    the file. Measured on the old tree with the re-review's `dos_probe.py`: the three tiny-statistic
    cases raised; a Ljung–Box lag of 1e7 took 2.457 s and ARCH-LM lags of 1e7 took 2.492 s; the
    re-review's lag of 1e9 ran past `timeout 60`. Now the tail is computed only for a pinned lag with
-   the df that lag gives (`payloads.py:1587` and `:1637`), so a row off the pins is a problem and its
-   p-value is not tied, and a halved statistic of 0.0 gives a tail of 1 (`:1276`). After: all eight
+   the df that lag gives (`payloads.py:1731` and `:1781`), so a row off the pins is a problem and its
+   p-value is not tied, and a halved statistic of 0.0 gives a tail of 1 (`:1412`). After: all eight
    probe cases take 0.001 s or less, the tiny statistics give one "gives p = 1.0" problem each, and
    the lag of 1e9 gives its lag problems in 0.000 s.
 3. **Six mutants survived**, each now killed by a test that states what it tests: O1 (the Jarque–Bera

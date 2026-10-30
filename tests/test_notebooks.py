@@ -36,7 +36,7 @@ NAMES = sorted(builder.NOTEBOOKS)
 
 
 def test_the_builder_knows_the_project_tour_and_the_milestone_notebooks():
-    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb", "02_stationarity_and_identification.ipynb", "03_fit_and_diagnostics.ipynb"]
+    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb", "02_stationarity_and_identification.ipynb", "03_fit_and_diagnostics.ipynb", "04_forecast_and_evaluation.ipynb"]
 
 
 # --- (a) committed notebooks equal the in-memory build -----------------------------------
@@ -379,6 +379,40 @@ def test_fit_notebook_prints_the_values_in_the_committed_files(kernel_name):
     assert f"test rows the search saw: {fit['course_track']['test_rows_seen']} of {fit['course_track']['n_course']}" in printed
     if (app_data / "prices.json").is_file():
         for name in ("fit", "residuals_aic", "residuals_bic", "residuals_course"):
+            assert f"{name}.json matches a fresh computation: True" in printed, name
+    else:
+        assert "prices.json is not in this copy - skipped" in printed
+
+
+def test_forecast_notebook_prints_the_values_in_the_committed_files(kernel_name):
+    # Notebook 04 reads committed files only. The expected lines are built here from the same files,
+    # read independently with json.
+    notebook = execute(NOTEBOOK_DIR / "04_forecast_and_evaluation.ipynb", kernel_name)
+    printed = "".join(
+        output.get("text", "")
+        for cell in notebook.cells
+        if cell.cell_type == "code"
+        for output in cell.outputs
+        if output.output_type == "stream" and output.name == "stdout"
+    )
+    app_data = REPO / "app" / "public" / "data"
+    ev = json.loads((app_data / "evaluation.json").read_text())["data"]
+    for w in ev["windows"]:
+        assert f"{w['id']:>4}: {w['start']} to {w['end']}, {w['n']} days, forecast from {w['origin_date']}" in printed
+    rw = {(r["kind"], r["window"]): r for r in ev["random_walk"]}
+    kinds = {m["id"]: m["kind"] for m in ev["methods"]}
+    for row in ev["metrics"]:
+        base = rw[(kinds[row["method"]], row["window"])]
+        assert f"{row['model_id']:>6} {row['method']:>12} {row['window']:>4}: RMSE ${row['usd_median']['rmse']:7.3f} (random walk ${base['usd']['rmse']:7.3f}, ratio {row['ratio_to_rw']['usd_median']['rmse']:.4f})" in printed
+    lines = printed.splitlines()
+    for r in ev["dm"]:
+        tested = "not tested" if r["p_value"] is None else f"DM* {r['statistic_hln']: .3f} on {r['df']} df, p {r['p_value']:.4f}"
+        assert f"{r['model_id']:>6} {r['method']:>12} {r['window']:>4} {r['loss']:>8}: mean d {r['mean_diff']: .3e}; {tested}; {r['verdict']}" in lines
+    for c in ev["coverage"]:
+        if c["model_id"] == "aic":
+            assert f"aic {c['method']:>12} {c['window']:>4} {c['distribution']:>6} {c['level']:.0%}: {c['inside']:>3} of {c['n']} inside ({c['rate']:.3f}); {c['verdict']}" in lines
+    if (app_data / "prices.json").is_file():
+        for name in ("forecast_aic_static", "forecast_aic_walk_forward", "forecast_bic_static", "forecast_bic_walk_forward", "forecast_course_static", "forecast_course_walk_forward", "evaluation"):
             assert f"{name}.json matches a fresh computation: True" in printed, name
     else:
         assert "prices.json is not in this copy - skipped" in printed

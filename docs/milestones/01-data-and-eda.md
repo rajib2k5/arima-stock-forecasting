@@ -172,19 +172,19 @@ Read in this order. Each step names one file and line.
 15. `src/arima_forecasting/export.py:50` is `HELD_ARTIFACTS`, the owner gate; `meta_payload`
     (`:58`) lists it. `:104` is `prices_payload`, `:135` is `eda_payload` (training rows only,
     `:137`), and `:150` is `build_payloads`, which turns one snapshot into all three payloads.
-16. `src/arima_forecasting/payloads.py:148` is `validate_prices`, `:291` is `validate_eda` and `:378`
+16. `src/arima_forecasting/payloads.py:238` is `validate_prices`, `:392` is `validate_eda` and `:480`
     is `validate_meta`: the Python copy of contract §3.1-3.3 (`validate_meta` mirrors `parseMeta`,
-    including the `held_artifacts` rule at `:443`). The integer rule (`:99`) accepts `4.0` and refuses anything
-    beyond ±(2^53 − 1); the number rule (`:113`) refuses an integer too big for a double; "blank"
-    is the explicit class `BLANK` (`:40`); `log_return.n` must be `summary.n − 1` (`:314`); the
-    trend is null on exactly the first and last `period // 2` rows (`:357`).
-17. `tools/export_app_data.py:43` is the exporter. It exits 2 without a usable snapshot or with a
-    data root inside the repo (`:58-62`), validates every envelope and payload before writing
-    anything (`:78-87`), serialises every file before writing any (`:91`), and in `--check` mode
-    compares instead of writing (`:93-105`).
-18. `src/arima_forecasting/artifacts.py:115` is `compare_exports`: extra files, missing files,
-    broken JSON, a committed envelope or payload the app would refuse (`:141`), then
-    `schema_version`, `artifact` and `data` through `first_difference` (`:83`), which treats `1`
+    including the `held_artifacts` rule at `:547`). The integer rule (`:106`) accepts `4.0` and refuses anything
+    beyond ±(2^53 − 1); the number rule (`:120`) refuses an integer too big for a double; "blank"
+    is the explicit class `BLANK` (`:42`); `log_return.n` must be `summary.n − 1` (`:415`); the
+    trend is null on exactly the first and last `period // 2` rows (`:458`).
+17. `tools/export_app_data.py:45` is the exporter. It exits 2 without a usable snapshot or with a
+    data root inside the repo (`:60-64`), validates every envelope and payload before writing
+    anything (`:80-89`), serialises every file before writing any (`:93`), and in `--check` mode
+    compares instead of writing (`:95-107`).
+18. `src/arima_forecasting/artifacts.py:117` is `compare_exports`: extra files, missing files,
+    broken JSON, a committed envelope or payload the app would refuse (`:143`), then
+    `schema_version`, `artifact` and `data` through `first_difference` (`:90`), which treats `1`
     and `1.0` as different, as JSON does.
 19. `src/arima_forecasting/provenance.py:43` is `source_commit`. It now asks
     `git log -1 -- ':(top)' ':(exclude)app/public/data'` (`:69`) for the last commit outside the
@@ -214,13 +214,13 @@ One trading day, 2020-08-31, followed from Yahoo to the screen.
 | 1 | `yfinance.download(**DOWNLOAD_REQUEST)` | DataFrame, 2,953 rows × 5 columns, columns a `(Price, Ticker)` MultiIndex | `data.py:347-361`, called by `tools/fetch_prices.py` |
 | 2 | `normalize_download` | Flat DataFrame, columns Open, High, Low, Close, Volume, index `Date` | `data.py:120` |
 | 3 | `snapshot_bytes` → `write_snapshot` | A CSV file plus a JSON manifest under `$VOL_DATA_DIR/.../raw/` (size and SHA-256: see your local manifest) | `data.py:188`, `:249` |
-| 4 | `read_snapshot` in the exporter | The same flat DataFrame, after the manifest, request, SHA-256 and row checks | `data.py:259`, `tools/export_app_data.py:59` |
+| 4 | `read_snapshot` in the exporter | The same flat DataFrame, after the manifest, request, SHA-256 and row checks | `data.py:259`, `tools/export_app_data.py:61` |
 | 5 | `clean_close` | A float Series `close_usd`, plus `filled_dates = ()` | `prep.py:40` |
 | 6 | `price_table` | DataFrame indexed by `date`: `close_usd`, `log_close` and, for this day, `segment` `"train"` | `prep.py:119` |
 | 7 | `prices_payload` | One dict per row: `{"date": "2020-08-31", "close_usd": …, "log_close": …, "segment": "train"}`, each float written at full precision | `export.py:104` |
 | 8 | `eda_payload` (train rows only) | The day is one of 2,037 decomposition rows and one of the 2,037 values in the log-close KDE | `export.py:135` |
-| 9 | `make_envelope`, `validate_envelope`, `validate_prices`, `dumps` | Three JSON texts, sorted keys, no NaN | `tools/export_app_data.py:67-91` |
-| 10 | Written to `app/public/data/` | `prices.json` 456,025 bytes, git-ignored (owner gate); `meta.json` committed | `tools/export_app_data.py:107-111` |
+| 9 | `make_envelope`, `validate_envelope`, `validate_prices`, `dumps` | Three JSON texts, sorted keys, no NaN | `tools/export_app_data.py:69-93` |
+| 10 | Written to `app/public/data/` | `prices.json` 456,025 bytes, git-ignored (owner gate); `meta.json` committed | `tools/export_app_data.py:109-113` |
 | 11 | The reader opens **Price explorer**; `loadExplorer` fetches both files | Two envelopes, or a 404 in a fresh clone (then "not built in this copy") | `app/src/data/useExplorerData.ts` |
 | 12 | `parseEnvelope`, then `parsePrices` and `parseEda` | Typed `Prices` and `Eda` objects | `app/src/lib/contract.payloads.ts` |
 | 13 | `pricePlot(prices, axis)` | `xs` = row positions, `ys` = `close_usd` or `log_close`, bands from `segment` runs | `app/src/lib/explorer.ts` |
@@ -267,16 +267,16 @@ shows the raw snapshot and the EDA step too.
 | **A float split point** | `int(n * 0.9)` vs `n * 9 // 10` | `prep.py:113`; `test_train_size_equals_exact_integer_arithmetic_for_every_n_up_to_200000` |
 | **NaN from a degenerate sample** | Constant prices give sd 0 and an undefined skew | `eda.py:39-44` (`_number`) raises; `test_summary_refuses_to_write_a_nan` |
 | **A trading-day index has no frequency** for statsmodels | `seasonal_decompose` needs a period | `eda.py:145-148` passes a plain array and `period=252` |
-| **The centred trend is undefined at the ends** | 126 NaN at each end | `eda.py:151-170` writes `null`; both readers pin the exact pattern (`payloads.py:357`, `parseDecomposition`); `gapPath` breaks the line |
+| **The centred trend is undefined at the ends** | 126 NaN at each end | `eda.py:151-170` writes `null`; both readers pin the exact pattern (`payloads.py:458`, `parseDecomposition`); `gapPath` breaks the line |
 | **VOL_DATA_DIR set to the repo's parent** (re-review) | With the checkout named `arima-stock-forecasting`, raw data landed in `<repo>/raw`, which git could stage | `config.py:60-62` checks `realpath(<root>/arima-stock-forecasting)`; `.gitignore` `/raw/` and `/cache/`; `test_data_root_refuses_the_repos_parent_when_the_repo_is_named_after_the_project`, `test_data_root_refuses_a_symlink_that_leads_into_the_repo` |
 | **A manifest `request` that is not an object** (re-review) | `"request": null`, `"1d"` or `[]` crashed the exporter with a traceback (exit 1) | `data.py:277-282`; `test_a_manifest_field_of_the_wrong_type_is_a_snapshot_error`, `test_tool_with_a_manifest_request_that_is_not_an_object_exits_2` |
-| **Python did not check `meta`** (re-review) | `read_artifact` accepted `held_artifacts` of `5`, `["nope"]` and `[1]`, which the app refused | `validate_meta` (`payloads.py:378`), registered for `meta`; 24 meta cases in the corpus; `test_read_artifact_refuses_a_meta_whose_held_artifacts_the_app_would_refuse` |
+| **Python did not check `meta`** (re-review) | `read_artifact` accepted `held_artifacts` of `5`, `["nope"]` and `[1]`, which the app refused | `validate_meta` (`payloads.py:480`), registered for `meta`; 24 meta cases in the corpus; `test_read_artifact_refuses_a_meta_whose_held_artifacts_the_app_would_refuse` |
 | **Real vendor values in committed text** (hub rule) | The scanner flagged 9 price lines and 4 provenance lines (a raw file size, the snapshot hash) in docs, tests and a ledger | Made-up values in tests; derived statistics or "see your local `data/` manifest" in docs; `tools/licensing/scan_real_rows.py` before each commit |
-| **The two payload readers disagree** (review) | 12 of 34 edge payloads: `4.0`, `2**53`-scale and 401-digit integers, U+001C, U+0085 and U+FEFF tickers, null patterns, empty rows; Python crashed with `OverflowError` on `1e400` | `payload_cases.json` run by both suites; `payloads.py:99`, `:113`, `:40`; `BLANK` and `Number.isSafeInteger` in `contract.payloads.ts` |
-| **A Python float that is a whole number** | `1` and `1.0` compare equal in Python but are different JSON | `artifacts.py:88-89`; `test_first_difference_names_the_path_of_the_first_change` |
-| **`--check` passes a file the app would refuse** (review) | A garbage or missing `generated_at`, or an extra top-level key, gave "app data is current" | `artifacts.py:141-147`; `test_check_fails_on_a_committed_envelope_the_app_would_refuse` |
+| **The two payload readers disagree** (review) | 12 of 34 edge payloads: `4.0`, `2**53`-scale and 401-digit integers, U+001C, U+0085 and U+FEFF tickers, null patterns, empty rows; Python crashed with `OverflowError` on `1e400` | `payload_cases.json` run by both suites; `payloads.py:106`, `:120`, `:42`; `BLANK` and `Number.isSafeInteger` in `contract.payloads.ts` |
+| **A Python float that is a whole number** | `1` and `1.0` compare equal in Python but are different JSON | `artifacts.py:95-96`; `test_first_difference_names_the_path_of_the_first_change` |
+| **`--check` passes a file the app would refuse** (review) | A garbage or missing `generated_at`, or an extra top-level key, gave "app data is current" | `artifacts.py:143-149`; `test_check_fails_on_a_committed_envelope_the_app_would_refuse` |
 | **Provenance never settles** (review) | Committing the JSON and re-exporting at that commit rewrote `source_commit` in all three files | `provenance.py:69-74`; `test_the_json_commit_reexports_byte_identically`, `test_a_commit_that_only_changes_exported_files_does_not_move_the_source_commit` |
-| **Writing half an export** | A NaN in the last payload | `tools/export_app_data.py:91` serialises all before writing any; `test_tool_never_writes_nan_to_disk_and_writes_no_file_at_all` |
+| **Writing half an export** | A NaN in the last payload | `tools/export_app_data.py:93` serialises all before writing any; `test_tool_never_writes_nan_to_disk_and_writes_no_file_at_all` |
 | **`JSON.parse("1e999")` is `Infinity`** | A finite-looking number in the file | `Reader.num` in `app/src/lib/contract.payloads.ts`; corpus cases "close_usd 1e400" and "close_usd as a 401-digit integer" |
 | **The main chunk grows with every parser** | +10.27 kB when the parsers sat in `contract.ts` (measured before the review) | Parsers in `contract.payloads.ts`; the explorer behind `lazy()`; `App.lazy.test.tsx` |
 | **yfinance writes caches to the home folder** | Its default is `~/.cache/py-yfinance` | `data.py:347-361` points it at `cache_dir()` |
@@ -460,13 +460,13 @@ mutated line sits now):
 | P12 | sd with `ddof=0` (`eda.py:79`) | 4: both summary tests, the committed-`eda.json` test, the notebook test |
 | P13 | biased skew g1 instead of G1 (`eda.py:80`) | 3: the bias-corrected test, the committed-`eda.json` test, the notebook test |
 | P14 | KDE grid without the 3-bandwidth pad (`eda.py:25`) | 3: the grid test, the committed-`eda.json` test, the notebook test |
-| P15 | Python validator skips the segment order (`payloads.py:215`) | 1: `test_validate_prices_names_each_broken_rule[segment order]` |
+| P15 | Python validator skips the segment order (`payloads.py:305`) | 1: `test_validate_prices_names_each_broken_rule[segment order]` |
 | P16 | `--check` also compares `generated_at` (`artifacts.py:22`) | 3: `test_check_ignores_generated_at_and_source_commit`, `test_check_passes_on_a_fresh_export_and_writes_nothing`, the `compare_exports` test |
 | P17 | `--check` no longer compares `data` (`artifacts.py:22`) | 3: `test_check_fails_on_a_changed_value_and_names_where`, `test_check_says_when_the_snapshot_itself_changed`, the `compare_exports` test |
-| P18 | `first_difference` treats `1` and `1.0` as equal (`artifacts.py:88`) | 1: the `d.a: 1 != 1.0` case |
-| P19 | `--check` ignores an extra file (`artifacts.py:123`) | 1: `test_check_fails_on_missing_extra_or_broken_files[extra file]` |
-| P20 | write each file as soon as it is serialised (`tools/export_app_data.py:91`) | 8: the NaN test and seven `--check` tests |
-| P21 | Python validator no longer pins the 126-row null ends (`payloads.py:357`) | 2: the "null in the middle" and "no nulls at the end" cases |
+| P18 | `first_difference` treats `1` and `1.0` as equal (`artifacts.py:95`) | 1: the `d.a: 1 != 1.0` case |
+| P19 | `--check` ignores an extra file (`artifacts.py:125`) | 1: `test_check_fails_on_missing_extra_or_broken_files[extra file]` |
+| P20 | write each file as soon as it is serialised (`tools/export_app_data.py:93`) | 8: the NaN test and seven `--check` tests |
+| P21 | Python validator no longer pins the 126-row null ends (`payloads.py:458`) | 2: the "null in the middle" and "no nulls at the end" cases |
 
 App round 1 (an unchanged copy gave `Tests 552 passed (552)`): A1 (no segment order), A2 (no
 splits-vs-rows check), A3 (`Infinity` accepted), A4 (gate `some` instead of `every`), A5 (the log
@@ -486,12 +486,12 @@ mutants added with a test fix (below), were killed.
 | Q3 | reuse ignores the manifest's request (`data.py:283`) | 3: every case of `test_reuse_refuses_a_manifest_made_with_another_request` |
 | Q4 | a truncated manifest raises `JSONDecodeError` (`data.py:271`) | 2: the "truncated" damaged-manifest case, `test_tool_with_a_truncated_manifest_exits_2_with_a_message` |
 | Q5 | no limit on how far a fill carries (`prep.py:60`) | 2: `test_a_long_run_of_missing_closes_is_refused_not_filled`, `test_a_missing_tail_is_refused_not_filled` |
-| Q6 | Python refuses `4.0` where JavaScript reads 4 (`payloads.py:97`) | 4 corpus cases (`4.0`, `6.0`, `2.0`, summary.n `4.0`) |
-| Q7 | Python's own `strip` decides "blank" (`payloads.py:72`) | 1: the U+FEFF corpus case |
-| Q8 | `log_return.n` not tied to `summary.n` (`payloads.py:314`) | 1 corpus case |
+| Q6 | Python refuses `4.0` where JavaScript reads 4 (`payloads.py:104`) | 4 corpus cases (`4.0`, `6.0`, `2.0`, summary.n `4.0`) |
+| Q7 | Python's own `strip` decides "blank" (`payloads.py:79`) | 1: the U+FEFF corpus case |
+| Q8 | `log_return.n` not tied to `summary.n` (`payloads.py:415`) | 1 corpus case |
 | Q9 | empty decomposition rows skip the summary check (the review's defect) | 1 corpus case |
-| Q10 | a 401-digit integer crashes the validator (`payloads.py:113`) | 1 corpus case |
-| Q11 | `--check` does not validate the committed envelope (`artifacts.py:141`) | 4: every case of `test_check_fails_on_a_committed_envelope_the_app_would_refuse` |
+| Q10 | a 401-digit integer crashes the validator (`payloads.py:120`) | 1 corpus case |
+| Q11 | `--check` does not validate the committed envelope (`artifacts.py:143`) | 4: every case of `test_check_fails_on_a_committed_envelope_the_app_would_refuse` |
 | Q12 | `source_commit` is HEAD again (`provenance.py:70`) | 3: `test_the_json_commit_reexports_byte_identically`, `test_a_commit_that_only_changes_exported_files_does_not_move_the_source_commit`, `test_a_repo_whose_commits_only_touch_the_export_folder_is_uncommitted` |
 | Q13 | `HELD_ARTIFACTS = ()` (`export.py:50`) | 6: the gitignore test, two committed-artifact tests, three export tests |
 | B1 | `Reader.int` ignores its minimum (the review's surviving OA4) | 3: two corpus cases, the unit test of integer minimums |
@@ -519,8 +519,8 @@ skip is the parent-of-repo test, because the copy's folder is not named after th
 | # | Mutation (`file`) | What fails |
 |---|---|---|
 | R1 | check the root's own path, not `realpath(<root>/arima-stock-forecasting)` (`config.py:60`) | 2: `test_data_root_refuses_the_repos_parent_when_the_repo_is_named_after_the_project`, `test_data_root_refuses_a_symlink_that_leads_into_the_repo` |
-| R2 | `validate_meta` accepts any `held_artifacts` array (`payloads.py:443`) | 8: four `read_artifact` cases, four meta corpus cases |
-| R3 | `meta` not registered in `PAYLOAD_VALIDATORS` (`payloads.py:448`) | 7: five `read_artifact` held cases, the `data.project: missing` case, the validator-set test |
+| R2 | `validate_meta` accepts any `held_artifacts` array (`payloads.py:547`) | 8: four `read_artifact` cases, four meta corpus cases |
+| R3 | `meta` not registered in `PAYLOAD_VALIDATORS` (`payloads.py:552`) | 7: five `read_artifact` held cases, the `data.project: missing` case, the validator-set test |
 | R4 | no type check of `request`, `rows` and `sha256` (`data.py:277`) | 9: six wrong-type cases, three exporter cases (`null`, string, list) |
 | C1 | `parseMeta` accepts a held name twice, or `meta` itself | 3: two meta corpus cases, the `parseMeta` held test |
 | C2 | `parseMeta` decides "blank" with `trim` again | 1: the U+001C title corpus case |

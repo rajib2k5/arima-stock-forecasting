@@ -20,6 +20,98 @@
 
 export const SUPPORTED_MAJOR = 1
 
+/**
+ * Every list in a payload is bounded before it is walked, in both readers (payloads.MAX_LIST and
+ * MAX_NAMES, the same values; contract.md, "Bounds"): a longer one is one short error and is not read.
+ * Lists of days and points take MAX_LIST (no list of trading days can be longer than the download
+ * window's 4,291 calendar days; the KDE grids have 200 points). Short lists of names (meta's
+ * milestones and artifacts, eda's KDEs, the fit's lag lists) take MAX_NAMES. A list that enumerates a
+ * pinned set or an order takes that set's size, where it is read.
+ */
+export const MAX_LIST = 10_000
+export const MAX_NAMES = 100
+
+/** "has 12 rows, more than the 10 a reader takes": the bound's one error, the same text as payloads._list. */
+export function tooMany(at: string, count: number, what: string, most: number): string {
+  return `${at}: has ${count} ${what}, more than the ${most} a reader takes`
+}
+
+/**
+ * A reader reports at most MAX_PROBLEMS problems per file, then one more that says it stopped
+ * (moreProblems), and stops reading (contract.MAX_PROBLEMS and more_problems in Python, the same number
+ * and words; contract.md, "Bounds"). The bound is on the file, not on each list, so lists inside lists
+ * cannot multiply it: 100 KDEs of 10,000 empty points made 3,000,000 problems before it.
+ */
+export const MAX_PROBLEMS = 200
+
+/** The problem that ends a list cut at MAX_PROBLEMS. */
+export function moreProblems(root: string): string {
+  return `${root}: more than ${MAX_PROBLEMS} problems; a reader reports the first ${MAX_PROBLEMS} and stops`
+}
+
+/** Thrown by a problem list's push in place of problem MAX_PROBLEMS + 1; `capped` catches it. */
+class ProblemsFull extends Error {}
+
+/**
+ * An empty problem list that holds at most MAX_PROBLEMS: pushing one more throws, which stops the parser
+ * where it is (`capped` turns that into the list plus moreProblems). An ordinary array otherwise, so the
+ * parsers' `errors.length > before` bookkeeping still works.
+ */
+export function problemList(): string[] {
+  const list: string[] = []
+  // Not enumerable, so the list still compares equal to a plain array of the same problems.
+  Object.defineProperty(list, 'push', {
+    value: (...items: string[]): number => {
+      for (const item of items) {
+        if (list.length >= MAX_PROBLEMS) throw new ProblemsFull()
+        Array.prototype.push.call(list, item)
+      }
+      return list.length
+    },
+  })
+  return list
+}
+
+/** Runs a parser's body over `errors` (a problemList); a body stopped at MAX_PROBLEMS gives the list plus moreProblems(root). */
+export function capped<T>(errors: string[], root: string, body: () => T): T | { ok: false; errors: string[] } {
+  try {
+    return body()
+  } catch (e) {
+    if (!(e instanceof ProblemsFull)) throw e
+    return { ok: false, errors: [...errors, moreProblems(root)] }
+  }
+}
+
+/** Longest string, and most elements or keys, a message quotes in full (contract.SHOWN_CHARS and SHOWN_ITEMS in Python). */
+const SHOWN_CHARS = 80
+const SHOWN_ITEMS = 8
+
+const small = (x: unknown) => x === null || typeof x === 'number' || typeof x === 'boolean' || (typeof x === 'string' && x.length <= SHOWN_CHARS / 2)
+
+/**
+ * A value as an error message quotes it, the only way a message shows a value read from a file (Python's
+ * contract.shown is the same rule): JSON text, but never the whole of a long string or a large array or
+ * object, and never by walking into a nested value, so a wrong value of any size or depth gives a short
+ * message, and a quick one (JSON.stringify of a million-element array alone takes tens of milliseconds and
+ * makes megabytes of text; of a 100,000-deep array it throws RangeError).
+ */
+export function shown(v: unknown): string {
+  if (typeof v === 'string') return v.length > SHOWN_CHARS ? `${JSON.stringify(v.slice(0, SHOWN_CHARS))}… (${v.length} characters)` : JSON.stringify(v)
+  if (Array.isArray(v)) return v.length <= SHOWN_ITEMS && v.every(small) ? JSON.stringify(v) : `an array of ${v.length}`
+  if (isRecord(v)) {
+    const keys = Object.keys(v)
+    return keys.length <= SHOWN_ITEMS && keys.every((k) => k.length <= SHOWN_CHARS / 2) && Object.values(v).every(small) ? JSON.stringify(v) : `an object with ${keys.length} keys`
+  }
+  return JSON.stringify(v) ?? typeName(v)
+}
+
+/**
+ * The out-of-sample window, a project constant (config.OOS_WINDOW; payloads.OOS_START and
+ * OOS_END_EXCLUSIVE hold the same dates): pinned, never read from a file. meta.windows.oos must state
+ * it, and prices.json's oos rows must lie inside it (contract.payloads.ts).
+ */
+export const OOS_WINDOW = { start: '2024-01-01', end_exclusive: '2026-10-01' } as const
+
 export const MILESTONE_STATUSES = ['done', 'current', 'planned'] as const
 export type MilestoneStatus = (typeof MILESTONE_STATUSES)[number]
 
@@ -147,31 +239,36 @@ function readString(obj: Record<string, unknown>, key: string, path: string, err
 
 export function parseEnvelope(raw: unknown): EnvelopeResult {
   if (!isRecord(raw)) return { ok: false, errors: [`envelope: expected an object, got ${typeName(raw)}`] }
-  const errors: string[] = []
+  const errors = problemList()
+  return capped(errors, 'envelope', () => readEnvelope(raw, errors))
+}
+
+function readEnvelope(raw: Record<string, unknown>, errors: string[]): EnvelopeResult {
 
   const schemaVersion = readString(raw, 'schema_version', '', errors)
   if (schemaVersion !== undefined) {
     const m = SEMVER.exec(schemaVersion)
     if (m === null) {
-      errors.push(`schema_version: "${schemaVersion}" is not a semantic version (MAJOR.MINOR.PATCH)`)
-    } else if (Number(m[1]) !== SUPPORTED_MAJOR) {
-      errors.push(`schema_version: major version ${m[1]} is not supported (this app reads ${SUPPORTED_MAJOR}.x.y)`)
+      errors.push(`schema_version: ${shown(schemaVersion)} is not a semantic version (MAJOR.MINOR.PATCH)`)
+    } else if (m[1] !== String(SUPPORTED_MAJOR)) {
+      // The whole major, as text: the pattern allows no leading zero, so this is exact for a major of any length.
+      errors.push(`schema_version: ${shown(schemaVersion)} has a major version other than ${SUPPORTED_MAJOR} (this app reads ${SUPPORTED_MAJOR}.x.y)`)
     }
   }
 
   const artifact = readString(raw, 'artifact', '', errors)
   if (artifact !== undefined && !ARTIFACT.test(artifact)) {
-    errors.push(`artifact: "${artifact}" must match [a-z][a-z0-9_]*`)
+    errors.push(`artifact: ${shown(artifact)} must match [a-z][a-z0-9_]*`)
   }
 
   const generatedAt = readString(raw, 'generated_at', '', errors)
   if (generatedAt !== undefined && !isUtcTimestamp(generatedAt)) {
-    errors.push(`generated_at: "${generatedAt}" is not a UTC timestamp (YYYY-MM-DDTHH:MM:SSZ)`)
+    errors.push(`generated_at: ${shown(generatedAt)} is not a UTC timestamp (YYYY-MM-DDTHH:MM:SSZ)`)
   }
 
   const sourceCommit = readString(raw, 'source_commit', '', errors)
   if (sourceCommit !== undefined && !isSourceCommit(sourceCommit)) {
-    errors.push(`source_commit: "${sourceCommit}" is not <40 or 64 hex>, <40 or 64 hex>-dirty or "uncommitted"`)
+    errors.push(`source_commit: ${shown(sourceCommit)} is not <40 or 64 hex>, <40 or 64 hex>-dirty or "uncommitted"`)
   }
 
   let data: Record<string, unknown> | undefined
@@ -182,8 +279,9 @@ export function parseEnvelope(raw: unknown): EnvelopeResult {
   // The top level is closed. Object.keys lists own keys only: a key that the JSON calls
   // "__proto__" or "constructor" is an own key and is reported like any other, while anything
   // inherited through the prototype chain was never in the file.
+  // Each one is a problem, so a file with a million stops at MAX_PROBLEMS (capped). A key from the file is quoted.
   for (const key of Object.keys(raw)) {
-    if (!(ENVELOPE_KEYS as readonly string[]).includes(key)) errors.push(`${key}: unexpected key`)
+    if (!(ENVELOPE_KEYS as readonly string[]).includes(key)) errors.push(`${shown(key)}: unexpected key`)
   }
 
   if (errors.length > 0 || schemaVersion === undefined || artifact === undefined || generatedAt === undefined || sourceCommit === undefined || data === undefined) {
@@ -203,8 +301,8 @@ function parseWindow(raw: unknown, path: string, errors: string[]): DateWindow |
   const before = errors.length
   const start = readString(raw, 'start', path, errors)
   const end = readString(raw, 'end_exclusive', path, errors)
-  if (start !== undefined && !isIsoDate(start)) errors.push(`${path}.start: "${start}" is not a calendar date (YYYY-MM-DD)`)
-  if (end !== undefined && !isIsoDate(end)) errors.push(`${path}.end_exclusive: "${end}" is not a calendar date (YYYY-MM-DD)`)
+  if (start !== undefined && !isIsoDate(start)) errors.push(`${path}.start: ${shown(start)} is not a calendar date (YYYY-MM-DD)`)
+  if (end !== undefined && !isIsoDate(end)) errors.push(`${path}.end_exclusive: ${shown(end)} is not a calendar date (YYYY-MM-DD)`)
   if (errors.length > before || start === undefined || end === undefined) return undefined
   // ISO dates order lexicographically
   if (start >= end) {
@@ -222,7 +320,7 @@ function parseMilestone(raw: unknown, path: string, seenIds: Set<number>, errors
   const before = errors.length
   let id: number | undefined
   if (!Object.hasOwn(raw, 'id')) errors.push(`${path}.id: missing`)
-  else if (typeof raw.id !== 'number' || !Number.isSafeInteger(raw.id) || raw.id < 0) errors.push(`${path}.id: expected a non-negative integer, got ${JSON.stringify(raw.id)}`)
+  else if (typeof raw.id !== 'number' || !Number.isSafeInteger(raw.id) || raw.id < 0) errors.push(`${path}.id: expected a non-negative integer, got ${shown(raw.id)}`)
   else if (seenIds.has(raw.id)) errors.push(`${path}.id: duplicate id ${raw.id}`)
   else {
     id = raw.id
@@ -232,7 +330,7 @@ function parseMilestone(raw: unknown, path: string, seenIds: Set<number>, errors
   const title = readString(raw, 'title', path, errors, { nonEmpty: true })
   const status = readString(raw, 'status', path, errors)
   if (status !== undefined && !(MILESTONE_STATUSES as readonly string[]).includes(status)) {
-    errors.push(`${path}.status: expected one of ${MILESTONE_STATUSES.join(', ')}, got "${status}"`)
+    errors.push(`${path}.status: expected one of ${MILESTONE_STATUSES.join(', ')}, got ${shown(status)}`)
   }
   if (errors.length > before || id === undefined || slug === undefined || title === undefined || status === undefined) return undefined
   return { id, slug, title, status: status as MilestoneStatus }
@@ -241,7 +339,11 @@ function parseMilestone(raw: unknown, path: string, seenIds: Set<number>, errors
 /** Validates the `data` payload of the `meta` artifact. Same Result style as parseEnvelope. */
 export function parseMeta(data: unknown): MetaResult {
   if (!isRecord(data)) return { ok: false, errors: [`data: expected an object, got ${typeName(data)}`] }
-  const errors: string[] = []
+  const errors = problemList()
+  return capped(errors, 'data', () => readMeta(data, errors))
+}
+
+function readMeta(data: Record<string, unknown>, errors: string[]): MetaResult {
 
   const project = readString(data, 'project', 'data', errors, { nonEmpty: true })
   const title = readString(data, 'title', 'data', errors, { nonEmpty: true })
@@ -254,11 +356,16 @@ export function parseMeta(data: unknown): MetaResult {
   else {
     course = parseWindow(data.windows.course, 'data.windows.course', errors)
     oos = parseWindow(data.windows.oos, 'data.windows.oos', errors)
+    if (oos && (oos.start !== OOS_WINDOW.start || oos.end_exclusive !== OOS_WINDOW.end_exclusive)) {
+      errors.push(`data.windows.oos: is ${oos.start} to ${oos.end_exclusive}, but this reader's out-of-sample window is ${OOS_WINDOW.start} to ${OOS_WINDOW.end_exclusive} (exclusive)`)
+      oos = undefined
+    }
   }
 
   let milestones: Milestone[] | undefined
   if (!Object.hasOwn(data, 'milestones')) errors.push('data.milestones: missing')
   else if (!Array.isArray(data.milestones)) errors.push(`data.milestones: expected an array, got ${typeName(data.milestones)}`)
+  else if (data.milestones.length > MAX_NAMES) errors.push(tooMany('data.milestones', data.milestones.length, 'milestones', MAX_NAMES))
   else {
     const seenIds = new Set<number>()
     const parsed = data.milestones.map((m, i) => parseMilestone(m, `data.milestones[${i}]`, seenIds, errors))
@@ -278,9 +385,10 @@ export function parseMeta(data: unknown): MetaResult {
   let artifacts: string[] | undefined
   if (!Object.hasOwn(data, 'artifacts')) errors.push('data.artifacts: missing')
   else if (!Array.isArray(data.artifacts)) errors.push(`data.artifacts: expected an array, got ${typeName(data.artifacts)}`)
+  else if (data.artifacts.length > MAX_NAMES) errors.push(tooMany('data.artifacts', data.artifacts.length, 'artifacts', MAX_NAMES))
   else {
     const bad = data.artifacts.findIndex((a) => typeof a !== 'string' || BLANK.test(a))
-    if (bad >= 0) errors.push(`data.artifacts[${bad}]: expected a non-empty string, got ${JSON.stringify(data.artifacts[bad])}`)
+    if (bad >= 0) errors.push(`data.artifacts[${bad}]: expected a non-empty string, got ${shown(data.artifacts[bad])}`)
     else artifacts = data.artifacts as string[]
   }
 
@@ -289,13 +397,16 @@ export function parseMeta(data: unknown): MetaResult {
     if (!Array.isArray(data.held_artifacts)) {
       errors.push(`data.held_artifacts: expected an array, got ${typeName(data.held_artifacts)}`)
       held = undefined
+    } else if (data.held_artifacts.length > MAX_NAMES) {
+      errors.push(tooMany('data.held_artifacts', data.held_artifacts.length, 'artifacts', MAX_NAMES))
+      held = undefined
     } else {
       // Each held name is a listed artifact, named once, and never meta itself: the app reads
       // meta.json to learn what is held, so meta cannot be missing on purpose.
       const list = data.held_artifacts
       const bad = list.findIndex((a, i) => typeof a !== 'string' || !(artifacts ?? []).includes(a) || a === 'meta' || list.indexOf(a) !== i)
       if (bad >= 0) {
-        errors.push(`data.held_artifacts[${bad}]: ${JSON.stringify(list[bad])} must be a listed artifact other than meta, named once`)
+        errors.push(`data.held_artifacts[${bad}]: ${shown(list[bad])} must be a listed artifact other than meta, named once`)
         held = undefined
       } else held = list as string[]
     }

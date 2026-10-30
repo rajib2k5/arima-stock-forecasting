@@ -159,12 +159,12 @@ Read in this order. Each step names one file and line.
     mapping pmdarima's intercept to our trend code (`:773`). `:840` is `aic_grid_payload`; it reads
     the grid from module attributes when it runs, which is how the tool tests shrink it, and refuses a
     d outside the grid before fitting anything (`:857`).
-12. `src/arima_forecasting/payloads.py:570`, `:666` and `:935` are the three Python readers. The rule
-    for d is re-applied at `:627`, each delta re-computed at `:1024`; `:785` re-derives each cell's
-    status (`:859`); `:873` checks the start labels and `:906` the nesting rule; `:754` is the table
-    that ties z to alpha; `:1114` type-checks each small object before comparing, so `true` cannot
+12. `src/arima_forecasting/payloads.py:675`, `:772` and `:1068` are the three Python readers. The rule
+    for d is re-applied at `:732`, each delta re-computed at `:1157`; `:910` re-derives each cell's
+    status (`:985`); `:1005` checks the start labels and `:1038` the nesting rule; `:867` is the table
+    that ties z to alpha; `:1247` type-checks each small object before comparing, so `true` cannot
     pass for 1. `src/arima_forecasting/artifacts.py:33` is `loads_strict`, which every file reader uses.
-13. `tools/export_app_data.py:26` sets one BLAS thread before numpy loads; `:79` builds the payloads
+13. `tools/export_app_data.py:26` sets one BLAS thread before numpy loads; `:81` builds the payloads
     and turns a `ModelSearchError` into exit 1 with a message. `app/src/lib/contract.order.ts` mirrors
     every rule; the shared corpus runs both readers on 273 cases, 187 of them added in this milestone.
 14. `app/src/App.tsx` offers **Stationarity** and **AIC landscape** only when `meta.json` lists their
@@ -229,7 +229,7 @@ the ACF and PACF step and the three new artifacts.
 | **The plots' defaults are not the functions' defaults** | `plot_pacf` uses `'ywm'`, `pacf` `'ywadjusted'`; on the eight-point test series they give −0.75 and −1.00 | `identification.py:36-39`; `test_the_settings_are_the_defaults_of_the_plots_the_course_calls` |
 | **statsmodels refuses a constant with d ≥ 1** | `ValueError: In models with integration …` | A failed cell, never a crash (`selection.py:248`, `:375`); `test_a_constant_with_d_1_is_a_failed_cell_with_statsmodels_message` |
 | **"Not converged" is not always the iteration limit** | In the first export, (1, 1, 0) with and without a drift, (5, 1, 0) with a drift and (2, 2, 0) stopped after 0 or 1 iterations with warnflag 2 (four cells). After the second fix round three remain, all at d = 1: (0, 1, 2) without a drift (24 iterations) and (4, 1, 4) and (5, 1, 4) with one (0 iterations): each kept the highest likelihood it found from a point where the line search stopped. ARIMA(4, 1, 4) with a drift would sit at ΔAIC 1.806 if it counted; the rule excludes it | The warnflag, iteration count and start in each cell and its reason (`selection.py:327-329`) |
-| **One start per cell stops at local optima** | The first export has 94 pairs (99 at zero tolerance) of `ok` d = 1 cells in which a model scored below a smaller model it nests, by up to 21.8 | Several starts (`selection.py:364`), the highest likelihood kept (`:253`); the nesting rule in both readers (`payloads.py:906`, `checkNesting` in `contract.order.ts`); `test_no_cell_of_the_grid_scores_below_a_model_it_nests` and its control, `test_with_one_default_start_per_cell_the_same_grid_has_local_optima` |
+| **One start per cell stops at local optima** | The first export has 94 pairs (99 at zero tolerance) of `ok` d = 1 cells in which a model scored below a smaller model it nests, by up to 21.8 | Several starts (`selection.py:364`), the highest likelihood kept (`:253`); the nesting rule in both readers (`payloads.py:1038`, `checkNesting` in `contract.order.ts`); `test_no_cell_of_the_grid_scores_below_a_model_it_nests` and its control, `test_with_one_default_start_per_cell_the_same_grid_has_local_optima` |
 | **A stalled padded start can be marked converged** (second review) | Seven cells, among them (3, 1, 4) with a drift, kept a zero-padded start at exactly the smaller model's likelihood with `converged: true`; from other starts (3, 1, 4) reached AIC −10440.245, below the then choice | `perturbed_starts` and `polish_stage` in `selection.py`; `test_no_cell_is_left_at_the_optimum_of_a_model_it_nests` |
 | **A file set its own nesting tolerance** (second review) | Both readers took `fit_settings.nesting_tolerance` from the file, so `100` let a 21.8 drop pass | The readers compare with their own 2e-3 (`NESTING_TOLERANCE` in `payloads.py` and `contract.order.ts`) and refuse any other stated value; corpus cases |
 | **A padded start can stop where it began** | (4, 1, 5) with a drift, started from (3, 1, 5) padded with zeros, ended after 0 iterations at exactly (3, 1, 5)'s likelihood, flagged not converged; a rule of "converged first" then kept a worse converged run, so 7 nesting breaks survived | `choose` keeps the highest likelihood (`selection.py:253`); a converged run wins only within 1e-4; `test_choose_keeps_the_highest_likelihood_even_from_a_run_that_did_not_converge` |
@@ -244,7 +244,7 @@ the ACF and PACF step and the three new artifacts.
 | **OpenBLAS threads on tiny matrices** | In one sequential timing the grid took 352 s with 20 threads and 84 s with one; a 12-process pool at default threads took 373 s | `tools/export_app_data.py:26`, `tests/conftest.py`; `test_the_tool_limits_openblas_to_one_thread_before_numpy_loads` |
 | **A helper named `test_pair` would be collected by pytest** | Any test module importing it would run it as a test | Renamed `run_pair` (`stationarity.py:140`) |
 | **Re-serialising the corpus breaks it** | Python reads the literal `1e400` as `inf` and would write `Infinity`, which JavaScript's JSON import refuses | New cases are spliced into the file as text (the generator script refuses to run twice) |
-| **`True == 1` in Python** | A `within_2_aic` entry with `p: true` compared equal in Python, not in JavaScript | Typed fields before any comparison (`payloads.py:1114`, `fields()` in `contract.order.ts`); a corpus case |
+| **`True == 1` in Python** | A `within_2_aic` entry with `p: true` compared equal in Python, not in JavaScript | Typed fields before any comparison (`payloads.py:1247`, `fields()` in `contract.order.ts`); a corpus case |
 | **A delta measured across d** | Would rank d = 0 cells against d = 1 | `selection.py:704`; both readers re-compute every delta; corpus case "delta_aic measured from another d's best" |
 | **A tie broken the wrong way survived in TypeScript** | Mutants A4 and A5 passed 858 tests | Four tie cases added to the corpus; both killed on re-run |
 | **The app counted bars past the band itself** | `correlogram.ts` compared each value with its band; the page counted them | Python exports `acf_outside`, `pacf_outside` and the counts; both readers check them; `correlogram.test.ts` flips the flags and expects the bars to follow |
@@ -467,9 +467,9 @@ where each mutated line sits after the fix round. The fix round's own mutants fo
 | P8 | PACF with `pacf()`'s `'ywadjusted'` (`identification.py:39`) | 5: the hand-worked PACF, the ywm/ywadjusted test, the defaults test, the payload test, the committed `acf_pacf.json` test |
 | P9 | ACF with `fft=True` (`identification.py:36`) | 2: the defaults test, the committed `acf_pacf.json` test (the values differ in the last bits) |
 | P10 | order selection on train + test (`export.py:159`) | 1: `test_the_order_selection_payloads_use_the_training_rows_only` |
-| P11 | the Python reader skips the delta check (`payloads.py:1024`) | 2 corpus cases |
-| P12 | the Python reader skips the rule for d (`payloads.py:627`) | 2 corpus cases |
-| P13 | the Python reader skips the KPSS bound (`payloads.py:546`) | 2 corpus cases |
+| P11 | the Python reader skips the delta check (`payloads.py:1157`) | 2 corpus cases |
+| P12 | the Python reader skips the rule for d (`payloads.py:732`) | 2 corpus cases |
+| P13 | the Python reader skips the KPSS bound (`payloads.py:650`) | 2 corpus cases |
 | P14 | near ties strictly under 2 (`selection.py:719`) | 1: the select test (a cell at exactly ΔAIC 2.0) |
 | P15 | ties broken by p + q before parameters (`selection.py:696`) | 0: **equivalent**. k = p + q + (0 or 1) + 1, so a smaller p + q never comes with a larger k, and the two orders always agree |
 | P16 | the tool leaves OpenBLAS alone (`tools/export_app_data.py:26`) | 1: `test_the_tool_limits_openblas_to_one_thread_before_numpy_loads` |
@@ -513,12 +513,12 @@ too (`220 passed` in `tests/test_payload_corpus.py`).
 | F3 | a padded start pads with 0.1, not 0 (`selection.py:168`) | 1 failed, 2 errors: the padded-start test, and the grid fixture, which crashed; that crash found the NaN-parameter pitfall above |
 | F4 | random starts not seeded by the cell (`selection.py:207`) | 3: the refit, the worker-count and the seeding tests |
 | F5 | no polish (`selection.py:292`) | 2: the two polish tests |
-| F6 | the Python reader skips the nesting rule (`payloads.py:1014`) | 6 corpus cases |
-| F7 | the Python reader skips the start labels (`payloads.py:1012`) | 7 corpus cases |
-| F8 | the file readers use plain `json.loads` (`artifacts.py:41`) | 6: every token case |
+| F6 | the Python reader skips the nesting rule (`payloads.py:1147`) | 6 corpus cases |
+| F7 | the Python reader skips the start labels (`payloads.py:1145`) | 7 corpus cases |
+| F8 | the file readers use plain `json.loads` (`artifacts.py:46`) | 6: every token case |
 | F9 | a bar on its band counted as outside (`identification.py:65`) | **survived** (36 passed): no real bar sits exactly on its band. Two tests added (`test_a_bar_is_past_its_band_only_when_strictly_beyond_it`, `test_the_payload_flags_each_bar_and_counts_the_flags`); on re-run 2 fail |
-| F10 | the Python reader skips the outside flags (`payloads.py:739`) | 4 corpus cases |
-| F11 | the Python reader does not tie z to alpha (`payloads.py:680`) | 4 corpus cases |
+| F10 | the Python reader skips the outside flags (`payloads.py:845`) | 4 corpus cases |
+| F11 | the Python reader does not tie z to alpha (`payloads.py:786`) | 4 corpus cases |
 | F12 | a cell's padded starts dropped (`selection.py:382`) | 2: `test_a_cell_started_from_a_nested_model_never_ends_below_it`, `test_no_cell_of_the_grid_scores_below_a_model_it_nests` |
 | G1 | the TS reader skips the nesting rule | 6 corpus cases |
 | G2 | the TS reader skips the start labels | 7 corpus cases |

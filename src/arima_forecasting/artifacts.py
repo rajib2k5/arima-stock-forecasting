@@ -14,7 +14,7 @@ from typing import Any
 
 import pandas as pd
 
-from arima_forecasting.contract import validate_envelope
+from arima_forecasting.contract import shown, validate_envelope
 from arima_forecasting.payloads import PAYLOAD_VALIDATORS
 
 # The parts of an envelope a check compares. generated_at and source_commit are left out on
@@ -37,8 +37,15 @@ def loads_strict(text: str) -> Any:
     cannot even parse could pass every Python check (an unknown key is ignored by both readers,
     so a NaN under one was the milestone-2 review's example). Raises ValueError, which includes
     json.JSONDecodeError.
+
+    json.loads recurses once per level of nesting and raises RecursionError past about 10,000 levels
+    (the app's JSON.parse reads 100,000). Such a file is refused with a ValueError like any other
+    unreadable one, so every caller reports it as one short problem instead of crashing.
     """
-    return json.loads(text, parse_constant=_refuse_constant)
+    try:
+        return json.loads(text, parse_constant=_refuse_constant)
+    except RecursionError:
+        raise ValueError("nested deeper than this reader follows (Python's json.loads stops at about 10,000 levels)") from None
 
 
 def find_app_data(start: Path | None = None) -> Path:
@@ -90,25 +97,20 @@ def table_from_prices(data: Mapping[str, Any]) -> pd.DataFrame:
     )
 
 
-def _short(value: object) -> str:
-    text = json.dumps(value, sort_keys=True)
-    return text if len(text) <= 60 else text[:57] + "..."
-
-
 def first_difference(old: object, new: object, path: str) -> str | None:
     """Where two JSON values first differ, as 'path: old != new', or None if they are equal.
 
     Types count: 1 and 1.0 are different JSON (an integer field turning into a float is a change).
     """
     if type(old) is not type(new):
-        return f"{path}: {_short(old)} != {_short(new)}"
+        return f"{path}: {shown(old)} != {shown(new)}"
     if isinstance(old, dict):
         assert isinstance(new, dict)
         for key in sorted(old.keys() | new.keys()):
             if key not in old:
                 return f"{path}.{key}: missing in the committed file"
-            if key not in new:
-                return f"{path}.{key}: no longer produced"
+            if key not in new:  # a key of the committed file: quoted, as any value read from a file is
+                return f"{path}[{shown(key)}]: no longer produced"
             found = first_difference(old[key], new[key], f"{path}.{key}")
             if found:
                 return found
@@ -123,7 +125,7 @@ def first_difference(old: object, new: object, path: str) -> str | None:
             return f"{path}: {len(old)} items committed, {len(new)} regenerated"
         return None
     if old != new:
-        return f"{path}: {_short(old)} != {_short(new)}"
+        return f"{path}: {shown(old)} != {shown(new)}"
     return None
 
 

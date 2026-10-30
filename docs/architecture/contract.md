@@ -7,10 +7,9 @@ the order-selection rules that the `stationarity` and `aic_grid` artifacts expos
 
 **Status by artifact:** `meta` (milestone 0), `prices` and `eda` (milestone 1, schema `1.1.0`),
 `stationarity`, `acf_pacf` and `aic_grid` (milestone 2, schema `1.2.0`, extended in `1.3.0`), and
-`fit`, `residuals_aic`, `residuals_bic` and `residuals_course` (milestone 3, schema `1.4.0`) are
-implemented, and their sections describe the shipped fields. Every other section is the
-**planned** shape. It is fixed enough to build against, and each milestone may refine it under
-the versioning policy below.
+`fit`, `residuals_aic`, `residuals_bic` and `residuals_course` (milestone 3, schema `1.4.0`), and
+the seven `forecast_<model>_<method>` files and `evaluation` (milestone 4, schema `1.5.0`) are
+implemented, and their sections describe the shipped fields.
 
 ---
 
@@ -87,6 +86,7 @@ change to it is not reported as dirty.
 | **Enumerations** | Each enum is marked **closed** (the app may switch over it exhaustively; adding a value is a major bump) or **open** (the app must render unknown values generically; adding a value is a minor bump). |
 | **Samples** | Any block of estimated numbers says which data it used: `"sample": "train" \| "course" \| "test" \| "oos"` (closed). `train` and `test` are the 90/10 split of the course window by position, `course` is train + test, and `oos` is the frozen out-of-sample window. |
 | **Determinism** | No wall-clock values in `data` (no fit timings, no "downloaded 3 minutes ago"). The only clock value in a file is `generated_at`. |
+| **Bounds** | Every list in `data` is bounded before it is walked, in both readers (`payloads._list`, `Reader.list`): a longer one is one short problem, "`<path>: has N <items>, more than the M a reader takes`", the same words in both, and is not read. Lists of days and points: `MAX_LIST` = 10,000 (no list of trading days can be longer than the download window's 4,291 calendar days; the KDE grids have 200 points). Short lists of names (meta's milestones and artifacts, eda's KDEs, the fit's lag lists): `MAX_NAMES` = 100. A list that enumerates a pinned set takes that set's size (transforms and correlogram series 3, fit models 3, Ljung–Box rows 3, ARCH-LM rows 2); the AIC grid takes its dimensions (p and q axes 6 values each from 0 to 5, specs 3 with d from 0 to 2, trends 3, cells and `within_2_aic` 324, `best_per_d` and `status_counts` 3, a cell's `params` object walked only up to 12 entries) and pmdarima's (2 runs, 72 visited fits each); the fit's lists take its order (parameters 22, roots and pairs 10, burned rows 2); every warning list 100 (`MAX_WARNINGS`); the forecast windows `MAX_ROWS` (§3.9). The shared corpus's `size_cases` put each list one past its bound, at its bound, and (for the grid) at 2,000,000 items, in both readers. **One bound per file, not per list:** a reader reports at most `MAX_PROBLEMS` = 200 problems for a file and then one more, "`data: more than 200 problems; a reader reports the first 200 and stops`" ("`envelope: …`" for the envelope's own problems), and stops reading (`contract.MAX_PROBLEMS` and `more_problems` in Python, `MAX_PROBLEMS` and `moreProblems` in `contract.ts`), so lists inside lists cannot multiply the count (100 KDEs of 10,000 empty points gave 3,000,000 problems before it). The corpus's `cap_cases` hold both readers to the same first 200 problems, word for word, and the same last line. **One quoting function:** a message shows a value read from a file only through `contract.shown` (Python) or `shown` (`contract.ts`): up to 80 characters of a string and its length, a list or object only when it has at most 8 small, flat entries, anything else by its size, and never by walking into a nested value; a key read from a file is quoted the same way (`params['ar.L1']`). A value the reader has already checked to be a date, a finite number or one of a pinned set is written as it is (at most 24 characters, or the pinned text). So a 60 MB string or a 100,000-deep array gives a short problem, quickly, in both readers (Python's `json.loads` stops near 10,000 levels; `read_artifact` and `--check` report such a file as one problem). In Python an integer too big for a double (400 digits; JSON.parse reads it as Infinity) is a problem, never an exception: every conversion of a number from a file to a float catches the overflow (`_finite`, `_Checker.number`), and no `int()` reads a run of digits from a file that could pass the 4,300 digits Python allows. `tests/test_payloads_hostile.py` puts such an integer in every numeric field of every artifact, in turn, and runs the per-file readers, the checks across files and `--check`'s family check on each |
 
 ### Versioning policy
 
@@ -105,7 +105,9 @@ grid cell's `start` and `starts_tried`, the multi-start `fit_settings`, the corr
 flags and counts). M3 added `fit` and one residuals artifact per fitted model, `residuals_aic`,
 `residuals_bic` and `residuals_course` (1.4.0). In that export the five earlier data artifacts
 changed only their envelopes; `meta.data` lists the four new names and marks milestone 3 current.
-M4 adds `forecasts` and `metrics` (1.5.0). The 1.3.0 readers require the new fields: a 1.2.0 `aic_grid` or `acf_pacf` is refused, and
+M4 added the seven `forecast_<model>_<method>` artifacts and `evaluation` (1.5.0); in that export the
+earlier artifacts changed only their envelopes, and `meta.data` lists the eight new names and marks
+milestone 4 current. The 1.3.0 readers require the new fields: a 1.2.0 `aic_grid` or `acf_pacf` is refused, and
 the app ships with its data, so no older file reaches it. `meta.data.artifacts` always lists exactly the artifacts written by that
 export, so the app knows which views can be switched on.
 
@@ -136,13 +138,24 @@ decimal.
 | `residuals_aic.json` | 2,036 residual rows, 2 × 50 ACF rows, 2,036 QQ points | 483,331 | 48.3% | 93,437 |
 | `residuals_bic.json` | the same | 483,320 | 48.3% | 93,397 |
 | `residuals_course.json` | the same | 483,398 | 48.3% | 93,578 |
+| `forecast_aic_static.json` | 916 forecast rows (227 test, 689 oos), 15 numbers each | 652,916 | 65.3% | 142,160 |
+| `forecast_aic_walk_forward.json` | the same | 654,568 | 65.5% | 138,653 |
+| `forecast_aic_refit.json` | the same, and 43 refits | 700,824 | 70.1% | 145,013 |
+| `forecast_bic_static.json` | 916 forecast rows | 653,233 | 65.3% | 135,141 |
+| `forecast_bic_walk_forward.json` | the same | 654,114 | 65.4% | 135,918 |
+| `forecast_course_static.json` | the same | 653,590 | 65.4% | 123,794 |
+| `forecast_course_walk_forward.json` | the same | 654,966 | 65.5% | 135,783 |
+| `evaluation.json` | 4 random-walk, 14 metric, 16 DM and 56 coverage rows | 44,965 | 4.5% | 7,077 |
 
 The three residual series in one file would be 1,450,049 bytes, past the budget; that is why they
 are three artifacts (§3.8). On the milestone-2 export (schema 1.3.0) the first six files had the
 same byte counts except `meta.json` (1,531), and `aic_grid.json`'s share was listed as 15.3%, a
 truncation of 15.38%.
 
-`forecasts` (about 2,700 rows) is still an estimate; it is measured when it ships.
+The eight milestone-4 rows were measured the same way on the milestone-4 export (schema 1.5.0, the
+same snapshot, `source_commit` ending in `-dirty`), where `meta.json` is 1,856 bytes (631 gzipped).
+A model's static and walk-forward paths in one file would be about 1.3 MB, past the budget: that is
+why the forecasts are one file per model and method (§3.9).
 
 ## 3. Artifacts by milestone
 
@@ -162,7 +175,7 @@ progress bar), and the gate that switches on views whose artifact exists.
 | `title` | string | display title |
 | `ticker` | string | `"AAPL"` |
 | `windows.course` | `{start: date, end_exclusive: date}` | `2015-01-01` → `2024-01-01` |
-| `windows.oos` | `{start: date, end_exclusive: date}` | `2024-01-01` → `2026-10-01` |
+| `windows.oos` | `{start: date, end_exclusive: date}` | `2024-01-01` → `2026-10-01`, pinned in both readers (`config.OOS_WINDOW`; `payloads.OOS_START` and `OOS_END_EXCLUSIVE`, `OOS_WINDOW` in `contract.ts`; added in the milestone-4 third review pass): any other window is refused. The course window is not pinned |
 | `milestones[]` | `{id: int, slug: string, title: string, status}` | `status` is a **closed** enum: `"done"`, `"current"`, `"planned"`. Exactly one is `"current"`. Sorted by `id`. |
 | `artifacts[]` | string[] | slugs written by this export, for example `["meta"]` |
 | `held_artifacts[]` | string[] | added in 1.1.0: the subset of `artifacts` that the export writes but the repository does not commit (git-ignored). `["prices", "eda"]` in milestone 1; **`[]` since the owner's decision of 2026-10-29** (ADR-0001, `DATA.md`): every exported file is committed. The field stays, because removing it would be a major bump. The real-data tests still skip a held file that is absent, with a message that says how to build it; the app no longer has a "not built in this copy" panel (removed in the milestone-2 fix round, as nothing is held), so a missing file is shown as an error like any other. Each entry must be one of `artifacts`, named once, and never `meta` itself (the app learns what is held from meta). Both readers check this (`validate_meta`, `parseMeta`). The app reads a 1.0.x file, which has no such key, as `[]` |
@@ -188,8 +201,8 @@ explorer (dollar or log axis, segments shaded).
 | `source.request` | `{start: date, end_exclusive: date, interval: string, auto_adjust: true}` | the yfinance request that made the snapshot (`start`, `end`, `interval`, `auto_adjust` in the manifest's `request`). Added in 1.1.0 with the artifact itself. |
 | `fill.method` | string, closed enum | `"ffill"`, done with `.ffill()` (pandas 3.1 removed `fillna(method=...)`) |
 | `fill.filled_dates` | date[] | dates whose close was missing in the snapshot and forward-filled, sorted; each is one of `rows[].date`. A fill may carry a close at most 7 calendar days (`prep.MAX_GAP_DAYS`); a longer run of missing closes, or a missing tail, stops the export instead. Usually empty, because yfinance already drops rows whose price and volume columns are all NaN or zero, unless `keepna=True` (`yfinance/scrapers/history.py:621-625`). Empty in the 2026-10-29 snapshots. |
-| `splits.train_fraction` | number | `0.9`. The course window's first `int(n × 0.9)` rows are `train` (truncation, as the course does it), the rest `test` |
-| `splits.train` / `.test` / `.oos` | `{start: date, end: date, n: int}` | the **actual** first and last trading dates in each segment (inclusive) and the row count. Both readers check them against `rows[]` |
+| `splits.train_fraction` | number | must be `0.9` (`config.TRAIN_FRACTION`), pinned in both readers (`TRAIN_FRACTION`). The course window's first `int(n × 0.9)` rows are `train` (truncation, as the course does it), the rest `test`: both readers count the rows' segments and refuse any other split (`prep.train_size`, applied with the pinned fraction, never the file's), so a boundary moved by one row with the split counts rewritten to match is refused |
+| `splits.train` / `.test` / `.oos` | `{start: date, end: date, n: int}` | the **actual** first and last trading dates in each segment (inclusive) and the row count. Both readers check them against `rows[]`, and against the pinned out-of-sample window (§3.1): the oos segment lies inside it, and train and test end before it starts. The oos rows must also cover the window as the producer's own check does (`prep.check_coverage` with `prep.MAX_GAP_DAYS` = 7; `OOS_MAX_GAP_DAYS` in both readers): the first at most 7 calendar days after 2024-01-01, the last at most 7 before 2026-10-01 (exclusive), and no two consecutive ones more than 7 apart, so rows dropped at either end or inside are refused. (The first and last trading days, 2024-01-02 and 2026-09-30, are not pinned: the synthetic snapshot the tests export trades every weekday, so its oos rows start on 2024-01-01.) |
 | `rows[]` | see below | sorted by `date` strictly ascending; course window then OOS window; segments in one block each, in the order `train`, `test`, `oos` |
 
 `rows[]`:
@@ -524,69 +537,211 @@ Readers: Python's `validate_residuals(data, model_id)` and the app's `parseResid
 
 ---
 
-### 3.9 `forecasts` [M4]
+### 3.9 `forecast_<model>_<method>` [M4, implemented]
 
-Every forecast, as rows keyed by method, segment and date. **View:** animated walk-forward
-forecast fan vs actuals; static-forecast panel.
-
-| Field | Type | Notes |
-|---|---|---|
-| `interval_level` | number | `0.95` |
-| `point_forecast` | closed enum `"median"` | `mean_usd = exp(mean_log)`, which is the **median** of the implied log-normal price, not its mean. The mean would be `exp(mean_log + var/2)`. The ratio is `exp(var/2)`: with a daily σ of 0.018, about 0.016% one day ahead and about 3.7% at the end of a 226-day static horizon (var ≈ hσ²). |
-| `methods[]` | see below | |
-| `segments[]` | see below | |
-| `rows[]` | see below | sorted by `method`, `segment`, `date` |
-
-`methods[]`:
+One forecast path per model and method, on both windows. Seven files: `forecast_aic_static`,
+`forecast_aic_walk_forward`, `forecast_aic_refit`, `forecast_bic_static`, `forecast_bic_walk_forward`,
+`forecast_course_static`, `forecast_course_walk_forward` (`forecasting.FORECASTS`). One file per
+(model, method) because a model's paths together pass the 1 MB budget (two methods with the
+Student-t bands are about 1.3 MB) and the page shows one at a time; each file is about 0.65 MB.
+Built by `src/arima_forecasting/forecasting.py`. **View:** the "Forecast and evaluation" page (fan
+chart, walk-forward animation); it fetches only the file of the model and method on show.
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | **open** enum | `"static"`, `"walk_forward"`, `"random_walk"`; a later milestone may add `"course"` (the course-faithful pipeline) |
-| `label` | string | display name |
-| `kind` | closed enum `"multi_step"`, `"one_step"` | |
-| `model_id` | string, **nullable** | `fit.models[].id`; `null` for `random_walk` |
-| `description` | string | for example "one-step-ahead, parameters frozen at the fit, filter updated with each actual (`ARIMAResults.apply`/`append(refit=False)`)" |
+| `model_id` | closed enum `"aic"`, `"bic"`, `"course"` | the file's model; both readers refuse another (the parser is called with the id and method the file name gives) |
+| `label` | string | the model's display name (`fit.models[].label`), pinned per model id in both readers (`MODEL_LABELS`, `fitting.LABELS`): `"AIC choice (ADR-0002)"`, `"BIC choice"`, `"Course refit"` |
+| `method` | closed enum `"static"`, `"walk_forward"`, `"refit"` | the file's method; `"refit"` exists for `"aic"` only (`REFIT_MODELS`) |
+| `kind` | closed enum `"multi_step"`, `"one_step"` | `"multi_step"` exactly for `"static"` |
+| `order`, `trend` | `[p, d, q]`, closed enum `"n"`, `"c"`, `"t"` | as in `fit` (p, q ≤ 10, d ≤ 2, checked before use); equal to that model's (across files) |
+| `parameters` | closed enum `"train"`, `"expanding_refit"` | where the parameters come from: the training fit (`static`, `walk_forward`) or the refits below (`refit`) |
+| `refit_every` | int, **nullable** | 21 for `refit` (`REFIT_EVERY`, pinned in both readers), null otherwise |
+| `t_df` | number > 2 | the degrees of freedom of the model's residual t fit, `residuals_<id>.t_fit.df` exactly (across files). A t on 2 or fewer has no finite variance, so it cannot be scaled to the forecast's |
+| `intervals` | `{levels, normal_z, t_quantile, t_scale, t_multiplier}` | `levels` must be `[0.8, 0.95]` and `normal_z` `[1.2815515655446004, 1.959963984540054]` (scipy's `norm.ppf(0.9)` and `norm.ppf(0.975)`), both pinned in both readers (`LEVELS`, `NORMAL_Z`) and compared exactly; `t_quantile[i]` the Student-t quantile at (1 + level) / 2 on `t_df`; `t_scale` = √((t_df − 2) / t_df), the scale that gives the t a variance of 1; `t_multiplier[i]` = `t_quantile[i]` × `t_scale`. Two numbers each |
+| `windows[]` | see below | exactly two, ids `"test"` then `"oos"` |
+| `refits` | array, **nullable** | null except for `refit`; see below |
 
-`segments[]` (proposed; to be confirmed in M4):
+`windows[]`:
 
-| `id` | `fit_sample` | `origin_date` | Meaning |
-|---|---|---|---|
-| `"test"` | `"train"` | last train date | the course's evaluation: model fitted on train, forecasts over the last 10% |
-| `"oos"` | `"course"` | last course date | the true out-of-sample check: the **same order and trend** (no re-selection) refitted on the whole course window, forecasts over 2024-01-01 → 2026-09-30 |
-
-`rows[]`:
-
-| Field | Type | Unit / notes |
+| Field | Type | Notes |
 |---|---|---|
-| `method` | string (from `methods[].id`) | |
-| `segment` | closed enum `"test"`, `"oos"` | |
-| `date` | date | the date being forecast |
-| `step` | int | steps ahead of the origin: 1…h for `multi_step`, always 1 for `one_step` |
-| `actual_log`, `actual_usd` | number | ln $, $ (from `prices`) |
-| `mean_log` | number | ln $ |
-| `lower_log`, `upper_log` | number, **nullable** | ln $. `null` for `random_walk` (it has no fitted variance in v1) |
-| `mean_usd` | number | $, = exp(`mean_log`) |
-| `lower_usd`, `upper_usd` | number, **nullable** | $, = exp of the log bounds (exp is monotonic, so the bounds map exactly) |
+| `id` | closed enum `"test"`, `"oos"` | |
+| `start`, `end` | date | the first and last forecast date, both inclusive; the test window ends before the oos window starts |
+| `n` | int, 1 to 10,000 | rows; both readers check the bound (`MAX_ROWS`) before they read a row |
+| `origin` | `{date, log_close, close_usd}` | the last day before the window, `date` < `start`: where the static path starts and the random walk's first forecast. The static oos path starts from the last test day with the Kalman state filtered through the test window at the training parameters |
+| `rows[]` | see below | exactly `n`, dates strictly ascending, the first `start` and the last `end` |
+
+`rows[]` (every value a finite number; log values in natural-log points, `_usd` in dollars):
+
+| Field | Notes |
+|---|---|
+| `date` | the day forecast |
+| `actual_log`, `actual_usd` | the observed log close and close (`prices`) |
+| `mean_log`, `sd_log` | the model's forecast mean and standard deviation of the log price: from the origin (`static`, step = row index + 1), or from the day before with every earlier observation (`walk_forward`, `refit`). `sd_log` > 0; on a static path it does not fall from one row to the next (an h-step forecast variance is a running sum of non-negative terms). It is the variance given the parameters; their estimation error is not in it |
+| `median_usd` | exp(`mean_log`): the median of the implied log-normal price, which is what the course reports as "the forecast" |
+| `mean_usd` | exp(`mean_log` + `sd_log`² / 2): its mean |
+| `lower_80_usd`, `upper_80_usd`, `lower_95_usd`, `upper_95_usd` | exp(`mean_log` ∓ `normal_z[i]` × `sd_log`): the normal intervals (statsmodels' and the course's) |
+| `t_lower_80_usd`, `t_upper_80_usd`, `t_lower_95_usd`, `t_upper_95_usd` | exp(`mean_log` ∓ `t_multiplier[i]` × `sd_log`): the variance-matched Student-t intervals |
+
+`refits[]` (only for `refit`): one entry per re-estimation, in order. The forecasts of the first
+`refit_every` rows of the test and oos rows taken together use the training parameters; entry k
+(from 0) serves the next `refit_every` rows. So there are ⌈(n_test + n_oos) / 21⌉ − 1 entries.
+
+| Field | Type | Notes |
+|---|---|---|
+| `start_date` | date | the first forecast date its parameters serve: the date of row 21 (k + 1) of the test rows followed by the oos rows |
+| `n_obs` | int | the observations it was fitted on, every day before `start_date`: 21 more than the entry before it; the first is `fit.n_train` + 21 (across files) |
+| `params[]` | `{name, value}` | named as in `fit` for the order and trend (the trend term, `ar.L1`…, `ma.L1`…, `sigma2`); `sigma2` > 0 |
+| `llf` | number | |
+| `converged`, `iterations` | bool, int | the optimiser's `mle_retvals` |
+| `warnings[]` | `{category, message}[]` | every warning raised by the fit; at most `MAX_WARNINGS` = 100 (both readers, checked before the list is walked; the same bound applies to `fit`'s warning lists) |
+
+Readers: Python's `validate_forecast(data, model_id, method)` and the app's
+`parseForecast(data, modelId, method)`.
 
 ---
 
-### 3.10 `metrics` [M4]
+### 3.10 `evaluation` [M4, implemented]
 
-Forecast accuracy per method and segment. **View:** metrics table beside the forecast views.
+Every forecast scored against the random walk: metrics, Diebold–Mariano tests and interval
+coverage, with the verdicts the app keys its text by. Built by `src/arima_forecasting/evaluation.py`
+from the forecast payloads' rows, so every number in it can be recomputed from those files.
+**View:** the "Forecast and evaluation" page (metrics table, DM result, coverage table).
+
+No timings: the contract keeps wall-clock values out of `data` (§2, "Determinism"), so the times of
+the walk-forward and the refit are measured in the milestone-4 walkthrough instead.
 
 | Field | Type | Notes |
 |---|---|---|
-| `rows[]` | see below | sorted by `segment`, `method` |
+| `alpha` | number, must be 0.05 | pinned in both readers (`ALPHA`) |
+| `interval_levels` | must be `[0.8, 0.95]` | pinned (`LEVELS`) |
+| `refit_every` | must be 21 | pinned (`REFIT_EVERY`) |
+| `headline_usd` | closed enum `"median"` | the dollar point the headline metric uses: the median, exp(μ), as the course does; the mean's metrics are beside it |
+| `dm_settings` | `{horizon, errors, losses, correction, alternative, baseline, same_tolerance}` | must be `1`, `"log"`, `["squared", "absolute"]`, `"harvey_leybourne_newbold"`, `"two_sided"`, `"random_walk"`, `1e-9`; pinned in both readers and compared exactly. `same_tolerance` (log points, `evaluation.SAME_TOLERANCE`): one-step forecasts within it of the random walk's on every day are the random walk's (below) |
+| `windows[]` | `{id, start, end, n, origin_date}` | exactly `"test"` then `"oos"`; `n` 1 to 10,000 (bounded first); equal to every forecast file's windows (across files) |
+| `models[]` | `{id, label, methods, t_df}` | exactly `"aic"`, `"bic"`, `"course"`; `label`, the Model picker's text, pinned per id in both readers as the method labels are (`MODEL_LABELS`, the forecast files' labels); `methods` the model's methods in file order (`["static", "walk_forward", "refit"]` for aic, `["static", "walk_forward"]` otherwise); `t_df` > 2, equal to its forecast files' (across files) |
+| `methods[]` | `{id, kind, label}` | exactly `"static"` (`"multi_step"`), `"walk_forward"` and `"refit"` (`"one_step"`). `label`, the Method picker's text, is pinned per id in both readers (`evaluation.METHOD_LABELS`): `"Static multi-step (the course's)"`, `"Walk-forward one-step"`, `"Walk-forward one-step, refit every 21 days"` |
+| `random_walk[]` | `{kind, window, n, log: {rmse, mae}, usd: {rmse, mae, mape_pct}}` | the baseline on each window, static (`"multi_step"`: the origin's value every day) and one step (`"one_step"`: yesterday's value): four rows, multi_step test, multi_step oos, one_step test, one_step oos. It has no variance, so its median and mean are the price itself |
+| `metrics[]` | see below | one row per forecast file and window, in `FORECASTS` order, test before oos: 14 rows |
+| `dm[]` | see below | one row per one-step forecast file, window and loss (squared, then absolute): 16 rows |
+| `coverage[]` | see below | one row per forecast file, window, distribution (normal, then t) and level (0.8, then 0.95): 56 rows |
 
-| Field | Type | Unit / notes |
+`metrics[]`:
+
+| Field | Type | Notes |
 |---|---|---|
-| `method`, `segment` | as in `forecasts` | |
-| `n` | int | rows scored |
-| `rmse_usd`, `mae_usd` | number | $ (the course's metrics, on back-transformed median forecasts) |
-| `mape_pct` | number | percent, 0–100 |
-| `rmse_log`, `mae_log` | number | log points: scale-free, comparable between `test` and `oos` |
-| `rmse_ratio_to_random_walk` | number, **nullable** | `rmse_usd / rmse_usd(random_walk)` in the same segment and of the same `kind`; < 1 beats the baseline; `null` for `random_walk` itself |
-| `dm_vs_random_walk` | `{statistic, p_value, loss: "squared_error_usd", horizon}`, **nullable** | Diebold–Mariano test against the random walk; `null` for `random_walk` itself |
+| `model_id`, `method`, `window` | closed enums | |
+| `n` | int | the window's `n` |
+| `log` | `{rmse, mae}` | in log points, of `actual_log` − `mean_log` |
+| `usd_median`, `usd_mean` | `{rmse, mae, mape_pct}` | in dollars, of `actual_usd` − `median_usd` and − `mean_usd`; MAPE = 100 × mean(\|error\| / \|actual\|) |
+| `ratio_to_rw` | `{log: {rmse, mae}, usd_median: {rmse, mae, mape_pct}, usd_mean: {…}}` | each metric divided by the random walk's of the same kind and window (`usd` for both dollar blocks): below 1 the model is closer on that metric |
+| `back_transform` | `{max_pct, mean_pct}` | 100 × (`mean_usd` / `median_usd` − 1) = 100 × (exp(`sd_log`² / 2) − 1), its largest and mean value over the rows: how far the course's "forecast" (the median) sits below the mean |
+
+`dm[]` (Diebold–Mariano with the Harvey–Leybourne–Newbold correction; evaluation.py's docstring
+gives the sources):
+
+| Field | Type | Notes |
+|---|---|---|
+| `model_id`, `method`, `window` | closed enums | one-step methods only |
+| `loss` | closed enum `"squared"`, `"absolute"` | of the log errors |
+| `n` | int | the window's `n`; at least 2 |
+| `max_forecast_gap` | number ≥ 0 | the largest \|model forecast − random-walk forecast\| over the window, in log points |
+| `mean_diff` | number | the mean of d_t = loss(model error) − loss(random-walk error): negative when the model's loss is lower |
+| `var_diff` | number | γ₀, the variance of d_t with divisor n (the long-run variance for h = 1); > 0, or ≥ 0 where the verdict is `"same_as_rw"` |
+| `statistic` | number, **nullable** | DM = `mean_diff` / √(`var_diff` / n) |
+| `hln_factor` | number | √((n + 1 − 2h + h(h − 1) / n) / n) with h = 1, so √((n − 1) / n) |
+| `statistic_hln` | number, **nullable** | `statistic` × `hln_factor` |
+| `df` | int | n − 1 |
+| `p_value` | number in [0, 1], **nullable** | 2 × P(T > \|`statistic_hln`\|) for a Student T on `df` |
+| `verdict` | closed enum `"beats_rw"`, `"no_difference"`, `"worse_than_rw"`, `"same_as_rw"` | `"same_as_rw"` exactly when `max_forecast_gap` ≤ `same_tolerance`: the forecasts are the random walk's (an ARIMA(0, 1, 0) without a drift is the random walk), the differential is 0 or rounding noise, and `statistic`, `statistic_hln` and `p_value` are null (only there). Otherwise `"beats_rw"` when `p_value` < `alpha` and `mean_diff` < 0, `"worse_than_rw"` when `p_value` < `alpha` and `mean_diff` > 0, else `"no_difference"`. The app keys fixed text by it |
+
+`coverage[]`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `model_id`, `method`, `window` | closed enums | |
+| `distribution` | closed enum `"normal"`, `"t"` | |
+| `level` | number | the pinned level at that position, 0.8 or 0.95 |
+| `n`, `inside` | int | the window's `n`; the days with `mean_log` − m × `sd_log` ≤ `actual_log` ≤ `mean_log` + m × `sd_log`, m the file's multiplier for that distribution and level (0 to n) |
+| `rate` | number | `inside` / `n` |
+| `lr`, `p_value` | number, **nullable** | Kupiec's unconditional-coverage LR statistic and its χ²(1) tail; null exactly for `multi_step` (a static path's days are not independent) |
+| `verdict` | closed enum `"too_narrow"`, `"consistent"`, `"too_wide"`, `"not_tested"` | `"not_tested"` exactly for `multi_step`; otherwise `"consistent"` when `p_value` ≥ `alpha`, else `"too_narrow"` (rate below the level) or `"too_wide"` |
+
+Readers: Python's `validate_evaluation` and the app's `parseEvaluation`.
+
+**What each reader checks (1.5.0).** Both readers check shapes, types, closed enums, nulls (all the
+nullable fields above null exactly where stated), the pinned settings (`LEVELS`, `NORMAL_Z`,
+`REFIT_EVERY`, `ALPHA`, the DM settings), the window, model, method and row sets and their order, the
+bounds (order, `n` ≤ `MAX_ROWS` before any row is read, `t_df` > 2, `sd_log` > 0, p-values in
+[0, 1], `inside` from 0 to n, `max_forecast_gap` ≥ 0, `var_diff` > 0 (≥ 0 for `"same_as_rw"`), `n` ≥ 2
+for a DM row) and the integer and date
+bookkeeping (each row count equal to its window's `n`, dates ascending, the first and last equal to
+`start` and `end`, the origin before the window, the refit count, each refit's `n_obs` 21 above the
+one before, its `start_date` the date of its row, its parameter names, `df` = n − 1, `kind` and
+`parameters` from the method, the verdicts that are fixed by the method: `"not_tested"` exactly for
+`multi_step`; the DM nulls exactly for `"same_as_rw"`). They never recompute a number from others or compare one with `alpha` (ADR-0001).
+Python's validators also check: in each forecast file, every dollar value from `mean_log` and
+`sd_log` (median, mean and the eight bounds) and `actual_usd` from `actual_log`, to `_REL` = 1e-9
+relative; a static path's `sd_log` never falling; `t_scale` from `t_df`, `t_multiplier` = quantile ×
+scale, and each `t_quantile` by evaluating the t's CDF at it (a regularised incomplete beta function,
+no scipy) and comparing with (1 + level) / 2 to 1e-10, or, from `t_df` = 10⁴ on (`T_ASYMPTOTIC_DF`;
+a near-normal residual series gives such a df), against the Cornish–Fisher expansion in 1 / df
+(Abramowitz and Stegun 26.7.5) to 1e-12 relative; `sigma2` > 0 in each refit. In `evaluation`:
+each ratio = its metric / the random walk's, exactly (the same division of the same doubles); every
+RMSE ≥ its MAE ≥ 0 and MAPE ≥ 0; `back_transform.max_pct` ≥ `mean_pct` ≥ 0; each DM statistic from
+`mean_diff`, `var_diff` and n, the HLN factor from n, `statistic_hln` = statistic × factor, the p-value
+from `statistic_hln` and `df` (the t tail by the incomplete beta function, to `P_REL` = 1e-9 relative
+or within `P_FLOOR` = 1e-300; the t's incomplete beta function takes 0, a subnormal and a huge
+statistic, Python only), the verdict from the p-value, `alpha` and the
+sign of `mean_diff`, and `"same_as_rw"` exactly when `max_forecast_gap` ≤ `same_tolerance`;
+each coverage `rate` = `inside` / `n` exactly, `lr` from n, `inside` and the level (Kupiec), its
+p-value from `lr` (χ² on 1 df) and the verdict from the p-value, `alpha`, rate and level. Those rules
+are tested in `tests/test_payloads_forecast.py`.
+
+**Across files.** `payloads.validate_forecast_fit(fit, residuals, forecasts)`: each forecast file's
+order, trend and label equal its model's in `fit`, its `t_df` equals `residuals_<id>.t_fit.df`, a
+refit file's first `n_obs` is `fit.n_train` + 21, and each one-step row's `sd_log`² is the `sigma2`
+of the parameters it was made with (`fit`'s for a walk-forward file and the refit's first 21 rows,
+that refit's own after) to `SIGMA2_REL` = 1e-4 relative: statsmodels' steady-state switch leaves the
+one-step variance a constant fraction above `sigma2`, at most 2.67e-5 on AAPL (measured; the
+reason is in `payloads.py`), so a rescaled `sd_log` cannot pass with the evaluation rebuilt from it.
+The refit file's first block, whose origin is the end of training, has no `refits` entry: its
+parameters are the training fit's, so its rows are tied to `fit.json`'s aic `sigma2` (`refits[0]` is
+fitted 21 days later, on `n_train` + 21 observations, and serves the second block). Each later block
+is tied only to its own refit's `sigma2`: a refit's `sigma2` and its block's `sd_log` rescaled
+together (the re-review's `refit_consistent.py`: every refit's `sigma2` × 2.25 with the rows after
+the first 21 at `sd_log` × 1.5, the dollars and the evaluation rebuilt) pass every reader in both
+languages. `--check` catches it (it refits every block from the snapshot and compares the files), and
+so does `tests/test_committed_artifacts.py`, which refits two sampled blocks from the parameters before them.
+`payloads.validate_forecast_prices(prices, forecasts)`: each window's rows are that segment's rows of
+`prices` (date, log close and close, exactly), its origin is the row before, its start, end and n
+are the segment's, and its start, end, n and origin date are `prices.splits` (its segment's, and the
+end of the segment before). `payloads.validate_forecast_evaluation(evaluation, forecasts)`: every forecast file
+describes the same days and actuals as the first (ids, bounds, origins, dates and actuals, exactly),
+the windows, `t_df` and each model's label agree, forecasts made from the same state with the same
+parameters are the same numbers (each static path's first day and the refit's first 21 days equal
+the walk-forward's `mean_log` and `sd_log`, to `_REL`), and
+every metric, every random-walk metric, each DM `mean_diff`, `var_diff` and `max_forecast_gap`, each
+coverage `inside` and each `back_transform` is recomputed from the forecast rows (to `_REL`, relative
+with no absolute floor; `mean_diff` at the scale of its terms; counts and the gap exactly). A number
+that cannot be recomputed (an overflow, a zero actual under MAPE) is reported as a problem, never
+raised; a file that is not valid on its own (`validate_forecast`, `validate_evaluation`) is named
+once and left out of these checks, so a malformed file cannot make them raise. Every Python tolerance check refuses a value that is not finite on either side: a recomputed
+exp that overflowed to inf matches nothing (the review fix round found that `inf <= rel * inf` had
+let a row with `mean_log` 710 pass).
+
+**What no reader catches: a look-ahead.** A hand-edited forecast file whose `mean_log` is the day's
+own actual, its dollars, its intervals and the evaluation rebuilt from it, passes every reader, in
+both languages: a forecast that equals what happened is a valid number, and no reader can tell when
+it was made. `--check` catches it (it rebuilds every forecast from the snapshot and compares the
+files), and so do the tests: `tests/test_committed_artifacts.py` rebuilds the static and
+walk-forward files and samples the refit, and `tests/test_forecasting.py` changes every observation
+from day t on and requires every forecast of day t or earlier unchanged.
+`tools/export_app_data.py` runs all three, with `prices.json`, on the set the folder would hold
+before writing and on the files read back after, as it does for `fit` and the residual files.
+`tests/test_committed_artifacts.py` rebuilds the static and walk-forward files from `prices.json`,
+`fit.json` and the residual files (filters only, a second or two), refits two sampled blocks of the
+refit file from the parameters before them, and rebuilds `evaluation.json` from the forecast files.
 
 ## 4. Who checks what
 
@@ -595,9 +750,9 @@ Forecast accuracy per method and segment. **View:** metrics table beside the for
 | Envelope valid before writing | `export_app_data.py` → `contract.validate_envelope` | malformed envelope |
 | Both readers agree on every envelope | pytest and vitest each run `app/src/test/fixtures/envelope_cases.json` (§1) | a rule changed in `contract.py` or `contract.ts` but not in the other |
 | No NaN/Infinity, no unsafe integers | `contract.dumps` (`allow_nan=False`, plus the ±(2^53 − 1) integer check) | failed calculations leaking into JSON; integers the browser would round |
-| Payload shape per artifact | `src/arima_forecasting/payloads.py` (`validate_meta`, `validate_prices`, `validate_eda`, `validate_stationarity`, `validate_acf_pacf`, `validate_aic_grid`, `validate_fit`, and `validate_residuals` once per model id; for `fit` and the residuals also the statistical rules listed under §3.7, tested in `tests/test_payloads_fit.py`), run by the exporter on every payload before writing, by `read_artifact` and `--check`, and by pytest | Python-side shape drift |
-| `fit` against the residual files | `payloads.validate_fit_residuals`, run by `export_app_data.py` on the set it will leave in `--out` before writing (`--only` included) and on the files read back after writing (§3.7, "Across files") | a `fit.json` rebuilt alone that contradicts the residual files beside it |
+| Payload shape per artifact | `src/arima_forecasting/payloads.py` (`validate_meta`, `validate_prices`, `validate_eda`, `validate_stationarity`, `validate_acf_pacf`, `validate_aic_grid`, `validate_fit`, `validate_residuals` once per model id, `validate_forecast` once per forecast file and `validate_evaluation`; for `fit` and the residuals also the statistical rules listed under §3.7, tested in `tests/test_payloads_fit.py`, and for the milestone-4 files those under §3.10, tested in `tests/test_payloads_forecast.py`), run by the exporter on every payload before writing, by `read_artifact` and `--check`, and by pytest | Python-side shape drift |
+| `fit` against the residual files, the forecasts against both, `evaluation` against the forecasts | `payloads.validate_fit_residuals`, `validate_forecast_fit` and `validate_forecast_evaluation`, run by `export_app_data.py` on the set it will leave in `--out` before writing (`--only` included) and on the files read back after writing (§3.7 and §3.10, "Across files") | a file rebuilt alone that contradicts the others |
 | Both readers agree on every payload | pytest and vitest each run `app/src/test/fixtures/payload_cases.json` (§1): integral floats such as `4.0` count as integers (JavaScript cannot tell them apart), integers beyond ±(2^53 − 1) and numbers too big for a double are refused, and "blank" is one explicit whitespace class on both sides | a payload rule changed in `payloads.py` or `contract.payloads.ts` but not in the other |
-| App parses the **real** files | vitest, `app/src/lib/contract.realdata.test.ts`: every file in `app/public/data/` through the production `parseEnvelope`, its `artifact` equal to the file stem, its payload through that artifact's parser (`parseMeta`, `parsePrices`, `parseEda`, `parseStationarity`, `parseAcfPacf`, `parseAicGrid`, `parseFit`, and `parseResiduals` with the model id the file name gives; an artifact with no registered parser fails), and the set of files equal to `meta.data.artifacts` less the held ones that are absent (each such file gets a skipped test that says why) | Python changed, app not updated |
-| Files are current | `tools/export_app_data.py --check`: regenerate from the raw snapshot, compare `schema_version`, `artifact`, `data`, and the set of files, and refuse a file the app would refuse (its envelope and payload are validated too); exit 1 on a difference, 2 without a snapshot. It reruns the whole export, the 144-cell grid fitted from several starts included, so it takes about as long as an export: 8 to 10 minutes (on 2026-10-29, on a machine loaded by other jobs, milestone 2's export took 491 s and milestone 3's 582 s; `--check`'s own time is in the milestone-3 walkthrough's gate results). Without the snapshot, `tests/test_committed_artifacts.py` checks every step after it: `meta.json` = `meta_payload()`; `prices.json` and `eda.json`, where present, equal what the current code builds from `prices.json`'s own closes; where `prices.json` is present, `stationarity.json` and `acf_pacf.json` equal a fresh computation and a sample of grid cells refits exactly; `fit.json` and the three `residuals_<id>.json` files equal what the current code builds from `prices.json`'s rows and `aic_grid.json`'s recorded estimates (about a second); and in every copy the committed selection and d follow from the committed cells and tests | code changed, nobody re-exported |
-| Cross-artifact consistency | pytest (`tests/test_committed_artifacts.py`, in every copy): `aic_grid.selection.d_selected == stationarity.decision.d_selected`, and the three milestone-2 files describe the same training rows. Milestone 3: `fit`'s `aic` and `bic` models have the order and trend of `aic_grid`'s choice and BIC choice; `fit.n_train` equals `aic_grid.n_train` and the training count in `prices`; `course_track.train_only` equals `aic_grid`'s `"course"` pmdarima run; each `residuals_<id>` file holds its model's id, `n` and `burn_excluded`, its rows' dates are the training dates after the burn-in, the burned rows' dates are the ones before it, and its two outside counts equal that model's counts in `fit`. Planned: `forecasts` dates ⊂ `prices` dates, every `methods[].model_id` exists in `fit` | artifacts disagreeing with each other |
+| App parses the **real** files | vitest, `app/src/lib/contract.realdata.test.ts`: every file in `app/public/data/` through the production `parseEnvelope`, its `artifact` equal to the file stem, its payload through that artifact's parser (`parseMeta`, `parsePrices`, `parseEda`, `parseStationarity`, `parseAcfPacf`, `parseAicGrid`, `parseFit`, `parseResiduals` with the model id the file name gives, `parseForecast` with the model and method the file name gives, and `parseEvaluation`; an artifact with no registered parser fails), and the set of files equal to `meta.data.artifacts` less the held ones that are absent (each such file gets a skipped test that says why) | Python changed, app not updated |
+| Files are current | `tools/export_app_data.py --check`: regenerate from the raw snapshot, run the cross-file checks on the rebuild (since the milestone-4 third review pass), compare `schema_version`, `artifact`, `data`, and the set of files, and refuse a file the app would refuse (its envelope and payload are validated too); exit 1 on a difference, 2 without a snapshot. It reruns the whole export, the 144-cell grid fitted from several starts included, so it takes about as long as an export: 8 to 10 minutes (on 2026-10-29, on a machine loaded by other jobs, milestone 2's export took 491 s and milestone 3's 582 s; `--check`'s own time is in the milestone-3 walkthrough's gate results). Without the snapshot, `tests/test_committed_artifacts.py` checks every step after it: `meta.json` = `meta_payload()`; `prices.json` and `eda.json`, where present, equal what the current code builds from `prices.json`'s own closes; where `prices.json` is present, `stationarity.json` and `acf_pacf.json` equal a fresh computation and a sample of grid cells refits exactly; `fit.json` and the three `residuals_<id>.json` files equal what the current code builds from `prices.json`'s rows and `aic_grid.json`'s recorded estimates (about a second); and in every copy the committed selection and d follow from the committed cells and tests | code changed, nobody re-exported |
+| Cross-artifact consistency | pytest (`tests/test_committed_artifacts.py`, in every copy): `aic_grid.selection.d_selected == stationarity.decision.d_selected`, and the three milestone-2 files describe the same training rows. Milestone 3: `fit`'s `aic` and `bic` models have the order and trend of `aic_grid`'s choice and BIC choice; `fit.n_train` equals `aic_grid.n_train` and the training count in `prices`; `course_track.train_only` equals `aic_grid`'s `"course"` pmdarima run; each `residuals_<id>` file holds its model's id, `n` and `burn_excluded`, its rows' dates are the training dates after the burn-in, the burned rows' dates are the ones before it, and its two outside counts equal that model's counts in `fit`. Milestone 4: every forecast file's windows, dates, actuals and origins are `prices`' test and oos rows and the day before each; each file's order, trend, label and `t_df` agree with `fit` and `residuals_<id>` (`validate_forecast_fit`); `evaluation` follows from the forecast rows (`validate_forecast_evaluation`) | artifacts disagreeing with each other |
