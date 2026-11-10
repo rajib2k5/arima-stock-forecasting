@@ -1,0 +1,1682 @@
+{
+  "spec": {
+    "path": "docs/validation/m5-preregistration.md",
+    "sha256": "4a7e509014a412a06aa4ba5b41fb2479cb77d339f2000f77ae2b3d62f4f275db"
+  },
+  "label": "The metric is the log forecast loss on AAPL's adjusted close. It is the project's stated forecast metric, not a trading P&L, and no stake depends on it.",
+  "already_scored": "Both windows were scored once in milestone 4 (commit 800a0a8): one DM-HLN test per comparison, no correction. This is not a fresh holdout.",
+  "inputs": {
+    "forecast_aic_static.json": "9887aca71aed950496dca86b08237f7a0857775f3497b80ebb9621d45dcbc073",
+    "forecast_aic_walk_forward.json": "944750661f79bcf09926133bfa54bb61f3c6e7d4f645e3a8e1323f3f28ae3eb0",
+    "forecast_aic_refit.json": "6caf53bfb38619de50dcf05f70451d684a0fac5827bdf02eea8f10bce4bd23ab",
+    "forecast_bic_static.json": "1a3ff53ca7f1204b4aab3c0012e7a3044843ea7eeb0f400c403cb5a6950b2301",
+    "forecast_bic_walk_forward.json": "d3c99843338b7547837ea88dd7bc16ae1e8dbd45eec0ca83bfc34b1add601cb7",
+    "forecast_course_static.json": "4b627b18cfdb35df937dd445b0a559f81ad3db776ffb611af5f4b592789b3adc",
+    "forecast_course_walk_forward.json": "c3d1bcab03fbda0fa4f2e1c31e923adc2879d25b76bacc34c9655f22901f7cea",
+    "evaluation.json": "69799766383b1ea71d4248d1e0553e1ba2c1e18382ec0b8915d318bae4745be0"
+  },
+  "settings": {
+    "replicates": 19999,
+    "seed": 20261109,
+    "alpha": 0.05,
+    "k": 28,
+    "min_blocks": 8,
+    "band_z": 1.96,
+    "max_acf_lag": 100,
+    "run_inside_band": 3,
+    "z_test": 1.96,
+    "z_power": 0.84,
+    "gate_rel": 1e-12,
+    "gate_abs": 1e-18,
+    "block_starts": "rng.integers(0, n, size=(B, ceil(n / b)))",
+    "generator_order": "one generator per comparison, default_rng(seed + index): primary b, then 2b, then b = 1"
+  },
+  "family_order": "forecasts (aic static, aic walk_forward, aic refit, bic static, bic walk_forward, course static, course walk_forward), then windows (test, oos), then losses (squared, absolute)",
+  "gate": {
+    "passed": true,
+    "self_check_passed": true,
+    "missing": [],
+    "max_relative_error": 0.0,
+    "self_check_max_relative_error": 0.0,
+    "checks": [
+      {
+        "index": 0,
+        "quantity": "metrics.log.rmse",
+        "expected": 0.060812321013840445,
+        "got": 0.060812321013840445,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 1,
+        "quantity": "metrics.log.mae",
+        "expected": 0.04792546030949398,
+        "got": 0.04792546030949398,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 2,
+        "quantity": "metrics.log.rmse",
+        "expected": 0.13860144782759154,
+        "got": 0.13860144782759154,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 3,
+        "quantity": "metrics.log.mae",
+        "expected": 0.11157286963762068,
+        "got": 0.11157286963762068,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 4,
+        "quantity": "dm.n",
+        "expected": 227,
+        "got": 227,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 4,
+        "quantity": "dm.mean_diff",
+        "expected": 2.7642383805522765e-06,
+        "got": 2.7642383805522765e-06,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 5,
+        "quantity": "dm.n",
+        "expected": 227,
+        "got": 227,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 5,
+        "quantity": "dm.mean_diff",
+        "expected": 2.8633563154375443e-05,
+        "got": 2.8633563154375443e-05,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 6,
+        "quantity": "dm.n",
+        "expected": 689,
+        "got": 689,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 6,
+        "quantity": "dm.mean_diff",
+        "expected": 1.061374253242782e-05,
+        "got": 1.061374253242782e-05,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 7,
+        "quantity": "dm.n",
+        "expected": 689,
+        "got": 689,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 7,
+        "quantity": "dm.mean_diff",
+        "expected": 0.00026608029447546064,
+        "got": 0.00026608029447546064,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 8,
+        "quantity": "dm.n",
+        "expected": 227,
+        "got": 227,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 8,
+        "quantity": "dm.mean_diff",
+        "expected": 2.8920638670883406e-06,
+        "got": 2.8920638670883406e-06,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 9,
+        "quantity": "dm.n",
+        "expected": 227,
+        "got": 227,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 9,
+        "quantity": "dm.mean_diff",
+        "expected": 3.1174999453692533e-05,
+        "got": 3.1174999453692533e-05,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 10,
+        "quantity": "dm.n",
+        "expected": 689,
+        "got": 689,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 10,
+        "quantity": "dm.mean_diff",
+        "expected": 8.675731294320094e-06,
+        "got": 8.675731294320094e-06,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 11,
+        "quantity": "dm.n",
+        "expected": 689,
+        "got": 689,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 11,
+        "quantity": "dm.mean_diff",
+        "expected": 0.0002358079645465335,
+        "got": 0.0002358079645465335,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 12,
+        "quantity": "metrics.log.rmse",
+        "expected": 0.154170825291482,
+        "got": 0.154170825291482,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 13,
+        "quantity": "metrics.log.mae",
+        "expected": 0.1367828800653235,
+        "got": 0.1367828800653235,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 14,
+        "quantity": "metrics.log.rmse",
+        "expected": 0.2727458498091831,
+        "got": 0.2727458498091831,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 15,
+        "quantity": "metrics.log.mae",
+        "expected": 0.226778551622492,
+        "got": 0.226778551622492,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 16,
+        "quantity": "dm.n",
+        "expected": 227,
+        "got": 227,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 16,
+        "quantity": "dm.mean_diff",
+        "expected": 1.6059146080761978e-06,
+        "got": 1.6059146080761978e-06,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 17,
+        "quantity": "dm.n",
+        "expected": 227,
+        "got": 227,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 17,
+        "quantity": "dm.mean_diff",
+        "expected": 1.2670655889067963e-05,
+        "got": 1.2670655889067963e-05,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 18,
+        "quantity": "dm.n",
+        "expected": 689,
+        "got": 689,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 18,
+        "quantity": "dm.mean_diff",
+        "expected": 9.541216245215062e-06,
+        "got": 9.541216245215062e-06,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 19,
+        "quantity": "dm.n",
+        "expected": 689,
+        "got": 689,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 19,
+        "quantity": "dm.mean_diff",
+        "expected": 0.0003199933277388707,
+        "got": 0.0003199933277388707,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 20,
+        "quantity": "metrics.log.rmse",
+        "expected": 0.15552291906082638,
+        "got": 0.15552291906082638,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 21,
+        "quantity": "metrics.log.mae",
+        "expected": 0.13802716248972005,
+        "got": 0.13802716248972005,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 22,
+        "quantity": "metrics.log.rmse",
+        "expected": 0.27235548834770174,
+        "got": 0.27235548834770174,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 23,
+        "quantity": "metrics.log.mae",
+        "expected": 0.22641584940091752,
+        "got": 0.22641584940091752,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 24,
+        "quantity": "dm.n",
+        "expected": 227,
+        "got": 227,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 24,
+        "quantity": "dm.mean_diff",
+        "expected": 2.0193461719962414e-06,
+        "got": 2.0193461719962414e-06,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 25,
+        "quantity": "dm.n",
+        "expected": 227,
+        "got": 227,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 25,
+        "quantity": "dm.mean_diff",
+        "expected": 3.0671600745208575e-05,
+        "got": 3.0671600745208575e-05,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 26,
+        "quantity": "dm.n",
+        "expected": 689,
+        "got": 689,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 26,
+        "quantity": "dm.mean_diff",
+        "expected": 4.53045773872962e-06,
+        "got": 4.53045773872962e-06,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 27,
+        "quantity": "dm.n",
+        "expected": 689,
+        "got": 689,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 27,
+        "quantity": "dm.mean_diff",
+        "expected": 0.00011657803608996514,
+        "got": 0.00011657803608996514,
+        "relative_error": 0.0,
+        "ok": true
+      }
+    ],
+    "self_checks": [
+      {
+        "index": 0,
+        "quantity": "random_walk.multi_step.log.rmse",
+        "expected": 0.15370479963034367,
+        "got": 0.15370479963034367,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 1,
+        "quantity": "random_walk.multi_step.log.mae",
+        "expected": 0.13636625245221176,
+        "got": 0.13636625245221176,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 2,
+        "quantity": "random_walk.multi_step.log.rmse",
+        "expected": 0.27266850102367307,
+        "got": 0.27266850102367307,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 3,
+        "quantity": "random_walk.multi_step.log.mae",
+        "expected": 0.2267065558812879,
+        "got": 0.2267065558812879,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 12,
+        "quantity": "random_walk.multi_step.log.rmse",
+        "expected": 0.15370479963034367,
+        "got": 0.15370479963034367,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 13,
+        "quantity": "random_walk.multi_step.log.mae",
+        "expected": 0.13636625245221176,
+        "got": 0.13636625245221176,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 14,
+        "quantity": "random_walk.multi_step.log.rmse",
+        "expected": 0.27266850102367307,
+        "got": 0.27266850102367307,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 15,
+        "quantity": "random_walk.multi_step.log.mae",
+        "expected": 0.2267065558812879,
+        "got": 0.2267065558812879,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 20,
+        "quantity": "random_walk.multi_step.log.rmse",
+        "expected": 0.15370479963034367,
+        "got": 0.15370479963034367,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 21,
+        "quantity": "random_walk.multi_step.log.mae",
+        "expected": 0.13636625245221176,
+        "got": 0.13636625245221176,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 22,
+        "quantity": "random_walk.multi_step.log.rmse",
+        "expected": 0.27266850102367307,
+        "got": 0.27266850102367307,
+        "relative_error": 0.0,
+        "ok": true
+      },
+      {
+        "index": 23,
+        "quantity": "random_walk.multi_step.log.mae",
+        "expected": 0.2267065558812879,
+        "got": 0.2267065558812879,
+        "relative_error": 0.0,
+        "ok": true
+      }
+    ]
+  },
+  "null_controls": {
+    "passed": false,
+    "identical": {
+      "passed": true,
+      "rows": [
+        {
+          "index": 0,
+          "seed": 20261109,
+          "model_id": "aic",
+          "method": "static",
+          "window": "test",
+          "loss": "squared",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 1,
+          "seed": 20261110,
+          "model_id": "aic",
+          "method": "static",
+          "window": "test",
+          "loss": "absolute",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 2,
+          "seed": 20261111,
+          "model_id": "aic",
+          "method": "static",
+          "window": "oos",
+          "loss": "squared",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 3,
+          "seed": 20261112,
+          "model_id": "aic",
+          "method": "static",
+          "window": "oos",
+          "loss": "absolute",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 4,
+          "seed": 20261113,
+          "model_id": "aic",
+          "method": "walk_forward",
+          "window": "test",
+          "loss": "squared",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 5,
+          "seed": 20261114,
+          "model_id": "aic",
+          "method": "walk_forward",
+          "window": "test",
+          "loss": "absolute",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 6,
+          "seed": 20261115,
+          "model_id": "aic",
+          "method": "walk_forward",
+          "window": "oos",
+          "loss": "squared",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 7,
+          "seed": 20261116,
+          "model_id": "aic",
+          "method": "walk_forward",
+          "window": "oos",
+          "loss": "absolute",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 8,
+          "seed": 20261117,
+          "model_id": "aic",
+          "method": "refit",
+          "window": "test",
+          "loss": "squared",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 9,
+          "seed": 20261118,
+          "model_id": "aic",
+          "method": "refit",
+          "window": "test",
+          "loss": "absolute",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 10,
+          "seed": 20261119,
+          "model_id": "aic",
+          "method": "refit",
+          "window": "oos",
+          "loss": "squared",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 11,
+          "seed": 20261120,
+          "model_id": "aic",
+          "method": "refit",
+          "window": "oos",
+          "loss": "absolute",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 12,
+          "seed": 20261121,
+          "model_id": "bic",
+          "method": "static",
+          "window": "test",
+          "loss": "squared",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 13,
+          "seed": 20261122,
+          "model_id": "bic",
+          "method": "static",
+          "window": "test",
+          "loss": "absolute",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 14,
+          "seed": 20261123,
+          "model_id": "bic",
+          "method": "static",
+          "window": "oos",
+          "loss": "squared",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 15,
+          "seed": 20261124,
+          "model_id": "bic",
+          "method": "static",
+          "window": "oos",
+          "loss": "absolute",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 16,
+          "seed": 20261125,
+          "model_id": "bic",
+          "method": "walk_forward",
+          "window": "test",
+          "loss": "squared",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 17,
+          "seed": 20261126,
+          "model_id": "bic",
+          "method": "walk_forward",
+          "window": "test",
+          "loss": "absolute",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 18,
+          "seed": 20261127,
+          "model_id": "bic",
+          "method": "walk_forward",
+          "window": "oos",
+          "loss": "squared",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 19,
+          "seed": 20261128,
+          "model_id": "bic",
+          "method": "walk_forward",
+          "window": "oos",
+          "loss": "absolute",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 20,
+          "seed": 20261129,
+          "model_id": "course",
+          "method": "static",
+          "window": "test",
+          "loss": "squared",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 21,
+          "seed": 20261130,
+          "model_id": "course",
+          "method": "static",
+          "window": "test",
+          "loss": "absolute",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 22,
+          "seed": 20261131,
+          "model_id": "course",
+          "method": "static",
+          "window": "oos",
+          "loss": "squared",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 23,
+          "seed": 20261132,
+          "model_id": "course",
+          "method": "static",
+          "window": "oos",
+          "loss": "absolute",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 24,
+          "seed": 20261133,
+          "model_id": "course",
+          "method": "walk_forward",
+          "window": "test",
+          "loss": "squared",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 25,
+          "seed": 20261134,
+          "model_id": "course",
+          "method": "walk_forward",
+          "window": "test",
+          "loss": "absolute",
+          "n": 227,
+          "mean_diff": 0.0,
+          "b": 57,
+          "blocks": 3,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 56,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 114,
+              "blocks": 1,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 227,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 26,
+          "seed": 20261135,
+          "model_id": "course",
+          "method": "walk_forward",
+          "window": "oos",
+          "loss": "squared",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        },
+        {
+          "index": 27,
+          "seed": 20261136,
+          "model_id": "course",
+          "method": "walk_forward",
+          "window": "oos",
+          "loss": "absolute",
+          "n": 689,
+          "mean_diff": 0.0,
+          "b": 101,
+          "blocks": 6,
+          "unresolved": true,
+          "p_raw": null,
+          "mde": null,
+          "newey_west": {
+            "lag": 100,
+            "t": null,
+            "p": null
+          },
+          "sensitivity": [
+            {
+              "b": 202,
+              "blocks": 3,
+              "below_floor": true,
+              "p": 1.0
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 1.0
+            }
+          ],
+          "p_entry": 1.0,
+          "p_holm": 1.0,
+          "verdict": "unresolved"
+        }
+      ]
+    },
+    "shifted": {
+      "passed": true,
+      "shift": 0.02,
+      "k": 28,
+      "rows": [
+        {
+          "index": 6,
+          "seed": 20261115,
+          "model_id": "aic",
+          "method": "walk_forward",
+          "window": "oos",
+          "loss": "squared",
+          "n": 689,
+          "mean_diff": 0.00041450610937262145,
+          "b": 6,
+          "blocks": 114,
+          "unresolved": false,
+          "p_raw": 5e-05,
+          "mde": 8.591598372551722e-05,
+          "newey_west": {
+            "lag": 5,
+            "t": 13.503871649330776,
+            "p": 1.4836951014735502e-41
+          },
+          "sensitivity": [
+            {
+              "b": 12,
+              "blocks": 57,
+              "below_floor": false,
+              "p": 5e-05
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 5e-05
+            }
+          ],
+          "holm_bound": 0.0014,
+          "rejected": true
+        },
+        {
+          "index": 7,
+          "seed": 20261116,
+          "model_id": "aic",
+          "method": "walk_forward",
+          "window": "oos",
+          "loss": "absolute",
+          "n": 689,
+          "mean_diff": 0.0104479472278823,
+          "b": 1,
+          "blocks": 689,
+          "unresolved": false,
+          "p_raw": 5e-05,
+          "mde": 0.0015133047702109968,
+          "newey_west": {
+            "lag": 0,
+            "t": 19.306431504136036,
+            "p": 4.7422859527285355e-83
+          },
+          "sensitivity": [
+            {
+              "b": 2,
+              "blocks": 344,
+              "below_floor": false,
+              "p": 5e-05
+            },
+            {
+              "b": 1,
+              "blocks": 689,
+              "below_floor": false,
+              "p": 5e-05
+            }
+          ],
+          "holm_bound": 0.0014,
+          "rejected": true
+        }
+      ]
+    },
+    "size": {
+      "passed": false,
+      "n": 227,
+      "replicates": 999,
+      "rho": 0.3,
+      "band": [
+        0.03,
+        0.08
+      ],
+      "runs": {
+        "iid": {
+          "series": 2000,
+          "rejected": 97,
+          "rate": 0.0485,
+          "unresolved": 0,
+          "b_counts": {
+            "1": 1707,
+            "2": 100,
+            "3": 78,
+            "4": 87,
+            "5": 14,
+            "6": 8,
+            "7": 3,
+            "8": 3
+          },
+          "in_band": true,
+          "decisive": true
+        },
+        "ar1": {
+          "series": 2000,
+          "rejected": 194,
+          "rate": 0.097,
+          "unresolved": 0,
+          "b_counts": {
+            "1": 15,
+            "2": 1371,
+            "3": 361,
+            "4": 96,
+            "5": 90,
+            "6": 36,
+            "7": 16,
+            "8": 6,
+            "9": 5,
+            "11": 2,
+            "13": 1,
+            "14": 1
+          },
+          "in_band": false,
+          "decisive": true
+        },
+        "ar1_b1": {
+          "series": 2000,
+          "rejected": 308,
+          "rate": 0.154,
+          "unresolved": 0,
+          "b_counts": {
+            "1": 2000
+          },
+          "in_band": false,
+          "decisive": false
+        }
+      }
+    }
+  },
+  "comparisons": null,
+  "runs": []
+}

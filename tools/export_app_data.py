@@ -54,7 +54,7 @@ from arima_forecasting.contract import dumps, make_envelope, validate_envelope  
 from arima_forecasting.data import SnapshotError, read_snapshot  # noqa: E402
 from arima_forecasting.export import ARTIFACTS, build_payloads  # noqa: E402
 from arima_forecasting.fitting import GridMismatch  # noqa: E402
-from arima_forecasting.payloads import PAYLOAD_VALIDATORS, validate_fit_residuals, validate_forecast_evaluation, validate_forecast_fit, validate_forecast_prices  # noqa: E402
+from arima_forecasting.payloads import PAYLOAD_VALIDATORS, capped_family, validate_fit_residuals, validate_forecast_evaluation, validate_forecast_fit, validate_forecast_prices  # noqa: E402
 from arima_forecasting.prep import DataQualityError  # noqa: E402
 from arima_forecasting.provenance import build_time, source_commit  # noqa: E402
 from arima_forecasting.selection import ModelSearchError  # noqa: E402
@@ -211,9 +211,11 @@ CHECKED = (*FAMILY, "prices")
 
 
 def _family_problems(files: dict[str, Any]) -> list[str]:
+    """The four checks across files, joined and cut at MAX_PROBLEMS with one closing line, as each of them is
+    (payloads.capped_family; contract.md, "Bounds")."""
     residuals = {name: data for name, data in files.items() if name.startswith("residuals_")}
     forecasts = {name: data for name, data in files.items() if name.startswith("forecast_")}
-    return (
+    return capped_family(
         validate_fit_residuals(files["fit"], residuals)
         + validate_forecast_fit(files["fit"], residuals, forecasts)
         + validate_forecast_prices(files["prices"], forecasts)

@@ -11,7 +11,7 @@
  * exported file, prices.json and eda.json included, is committed and checked here.
  */
 import { describe, expect, it } from 'vitest'
-import { parseEnvelope, parseMeta } from './contract'
+import { ARTIFACTS, parseEnvelope, parseMeta } from './contract'
 import { parseEda, parsePrices } from './contract.payloads'
 import { parseAcfPacf, parseAicGrid, parseStationarity } from './contract.order'
 import { MODEL_IDS, parseFit, parseResiduals } from './contract.fit'
@@ -72,6 +72,11 @@ describe('the committed files in public/data', () => {
 
   it('are the artifacts that meta.json lists, less only those it marks as held', () => {
     expect([...PRESENT].sort()).toEqual(LISTED.filter((name) => PRESENT.includes(name) || !HELD.includes(name)).sort())
+  })
+
+  it('list, in meta.json, exactly the names the reader pins: the export writes export.ARTIFACTS there, in order', () => {
+    // The tie of contract.ts's ARTIFACTS to the producer's (tests/test_export.py checks meta lists export.ARTIFACTS).
+    expect(LISTED).toEqual([...ARTIFACTS])
   })
 
   it.each(HELD)('every held artifact (%s) is one meta lists and has a registered parser', (name) => {

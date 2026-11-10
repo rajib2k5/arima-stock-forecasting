@@ -27,6 +27,10 @@ The JSON files the app reads, in `app/public/data/`:
 | `stationarity.json` | ADF and KPSS test results for the training log price and its differences. |
 | `acf_pacf.json` | Autocorrelations and partial autocorrelations of the same three series, with their bands. |
 | `aic_grid.json` | AIC values and fit diagnostics of 144 ARIMA fits on the training segment. |
+| `fit.json` | The three fitted models' estimates, information criteria, roots and residual tests, and the course's recipe measured. Its `burned` rows carry the first training log close. |
+| `residuals_aic.json`, `residuals_bic.json`, `residuals_course.json` | Each model's standardised residuals by date, their correlograms and QQ points. No prices. |
+| `forecast_<model>_<method>.json` (seven files) | Each forecast path on the test and out-of-sample windows, with each day's actual adjusted close and its log. |
+| `evaluation.json` | Every forecast's errors against the random walk, the Diebold–Mariano tests and the intervals' coverage. No prices. |
 
 **Why:** the project is a portfolio. The owner decided on 2026-10-29 that the real data the app and
 the docs need goes into the repository, so a fresh clone runs the whole app and every test without a

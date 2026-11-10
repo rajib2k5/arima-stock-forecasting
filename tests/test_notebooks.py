@@ -36,7 +36,7 @@ NAMES = sorted(builder.NOTEBOOKS)
 
 
 def test_the_builder_knows_the_project_tour_and_the_milestone_notebooks():
-    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb", "02_stationarity_and_identification.ipynb", "03_fit_and_diagnostics.ipynb", "04_forecast_and_evaluation.ipynb"]
+    assert NAMES == ["00_project_tour.ipynb", "01_data_and_eda.ipynb", "02_stationarity_and_identification.ipynb", "03_fit_and_diagnostics.ipynb", "04_forecast_and_evaluation.ipynb", "05_where_the_sample_goes_wrong.ipynb"]
 
 
 # --- (a) committed notebooks equal the in-memory build -----------------------------------

@@ -125,9 +125,9 @@ course's module-8 plots include it.
 
 Read in this order. Each step names one file and line.
 
-1. `src/arima_forecasting/export.py:172` is `fit_payloads`. It hands `fit_models` the training rows
+1. `src/arima_forecasting/export.py:175` is `fit_payloads`. It hands `fit_models` the training rows
    and the course rows (training and test, never out-of-sample), then `residual_payloads` the fitted
-   results and the training dates. `build_payloads` (`:196`) runs it after the grid, or with a reused
+   results and the training dates. `build_payloads` (`:208`) runs it after the grid, or with a reused
    grid for `--only`.
 2. `src/arima_forecasting/fitting.py:282` is `fit_models`. It refuses a course series that does not
    start with the training series (`:288`), then takes the AIC and BIC cells from the grid's
@@ -153,45 +153,46 @@ Read in this order. Each step names one file and line.
    distance. `tests/test_fitting.py:51` works the rule by hand, ties and conjugates included, and
    `tests/test_fitting.py:69` shows where closest first would differ.
    `src/arima_forecasting/fitting.py:152` is `describe`, which assembles one `models[]` entry.
-7. `src/arima_forecasting/diagnostics.py:59` is `burn_in`, statsmodels' rule, and `:65`
+7. `src/arima_forecasting/diagnostics.py:63` is `burn_in`, statsmodels' rule, and `:69`
    `standardized_residuals`, the series every test sees. `tests/test_diagnostics.py:33` checks the
    rule against statsmodels for d = 1 and 2, and `tests/test_diagnostics.py:43` that the burned
    residual is the level, not a shock.
-8. `src/arima_forecasting/diagnostics.py:83` is `ljung_box`: `applied` is lag > `model_df` (`:88`), and
-   the caller passes p + q (`:152`). `:102` is `arch_lm` with `ddof=0` (`:111`), `:116` `normality`
-   (Pearson kurtosis), `:121` `qq_points` (scipy's `probplot`, then the fitted t at the same
-   positions), `:75` `correlogram` with the band z/√n (`:78`) and `outside` (`:70`).
-9. `src/arima_forecasting/diagnostics.py:134` is `verdicts`: a test is "found" or "rejected" when any of
-   its rows has p < alpha. `:145` `model_diagnostics` builds one model's test block and plot series,
-   with the burned rows for display (`:162`). `:190` `residual_payloads` adds them to `fit`, writes one
+8. `src/arima_forecasting/diagnostics.py:87` is `ljung_box`: `applied` is lag > `model_df` (`:92`), and
+   the caller passes p + q (`:156`). `:106` is `arch_lm` with `ddof=0` (`:115`), `:120` `normality`
+   (Pearson kurtosis), `:125` `qq_points` (scipy's `probplot`, then the fitted t at the same
+   positions), `:79` `correlogram` with the band z/√n (`:82`) and `outside` (`:74`).
+9. `src/arima_forecasting/diagnostics.py:138` is `verdicts`: a test is "found" or "rejected" when any of
+   its rows has p < alpha. `:149` `model_diagnostics` builds one model's test block and plot series,
+   with the burned rows for display (`:166`). `:194` `residual_payloads` adds them to `fit`, writes one
    `residuals_<id>` payload per model, and tests concept note 07's prediction on the primary model
-   (`:212`).
-10. `src/arima_forecasting/payloads.py:1832` is `validate_fit` and `:2082` `validate_residuals`. Both
-    readers bound the orders first (`:1480`, p and q ≤ 10, d ≤ 2), so a huge order gives one short
-    problem. Python re-derives what the app does not: each parameter's p-value from z (`:1567`),
-    each test's p-value from its statistic (`:1505`, with the chi-squared tail in closed form at
-    `:1404`), AIC, BIC and AICc from llf (`:1812`), the cancelling rule (`:1608`), the llf gap
-    against its tolerance (`:1921`), each band (`:2050`) and every outside flag (`:2074`).
-    `tests/test_payloads_fit.py:103` breaks one statistical rule per case and expects the named
-    refusal. `src/arima_forecasting/payloads.py:2137` is `validate_fit_residuals`, the fit against
+   (`:216`).
+10. `src/arima_forecasting/payloads.py:1923` is `validate_fit` and `:2173` `validate_residuals`. Both
+    readers bound the orders first (`:1565`, p and q ≤ 10, d ≤ 2), so a huge order gives one short
+    problem. Python re-derives what the app does not: each parameter's p-value from z (`:1652`),
+    each test's p-value from its statistic (`:1590`, with the chi-squared tail in closed form at
+    `:1489`), AIC, BIC and AICc from llf (`:1897`), the cancelling rule (`:1693`), the llf gap
+    against its tolerance (`:2012`), each band (`:2141`) and every outside flag (`:2165`).
+    `tests/test_payloads_fit.py:105` breaks one statistical rule per case and expects the named
+    refusal. `src/arima_forecasting/payloads.py:2242` is `validate_fit_residuals`, the fit against
     the residual files.
 11. `tools/export_app_data.py:83` is `--only`; it reads the grid from `--out` (`:104`) and writes only
     the named files. Before writing it checks the fit and residual files the folder will hold
     (`:175`), and after writing it checks them again as read back (`:196`);
-    `tests/test_export.py:473` shows `--only fit` refusing to write beside stale residual files. `tests/test_committed_artifacts.py:231` rebuilds all four milestone-3 files from
-    the committed `prices.json` and `aic_grid.json` and compares them exactly; `:240` and `:252` are
+    `tests/test_export.py:473` shows `--only fit` refusing to write beside stale residual files. `tests/test_committed_artifacts.py:241` rebuilds all four milestone-3 files from
+    the committed `prices.json` and `aic_grid.json` and compares them exactly; `:250` and `:262` are
     the cross-file checks (the fit names the grid's choices; each residuals file matches its model and
     the training dates).
 12. `app/src/App.tsx:14` loads `FitView` through `lazy()`, offered only when `meta.json` lists the four
     files (`app/src/lib/gate.ts:18`). `app/src/data/useFitData.ts:36` fetches one model's file and
     parses it for that model's id; a parser that throws becomes an error state (`:50`), and a failed
-    file is fetched again on the next pick (`:67`). `app/src/lib/contract.fit.ts:703` is `parseFit`,
-    `:287` bounds an order before anything is built from it, and `:865` is where `parseResiduals`
+    file is fetched again on the next pick (`:67`). `app/src/lib/contract.fit.ts:710` is `parseFit`,
+    `:294` bounds an order before anything is built from it, and `:876` is where `parseResiduals`
     refuses another model's file.
-13. `app/src/views/FitView.tsx:111` is the page body. `PValue` (`:49`) sets a power of ten in a
-    superscript and an underflowed 0 as "< 1e-300". The unit circle (`:242`) rings Python's pairs
-    (`:304`), the test table (`:346`) reads each verdict, `:444` shows the burned residual, `bars`
-    (`:460`) passes Python's `outside` flag to each bar, and `:528` is the course card.
+13. `app/src/views/FitView.tsx:100` is the page body. `PValue` (`app/src/lib/PValue.tsx:8`) sets a
+    power of ten in a superscript and an underflowed 0 as "< 1e-300". The unit circle
+    (`app/src/views/FitView.tsx:231`) rings Python's pairs (`:293`), the test table (`:335`) reads each
+    verdict, `:433` shows the burned residual, `bars` (`:449`) passes Python's `outside` flag to each
+    bar, and `:517` is the course card.
 14. `tools/build_notebooks.py:566` builds notebook 03, which prints the numbers below from the committed
     files and rebuilds them once to check they match.
 
@@ -203,18 +204,18 @@ The training log price (2,037 values) followed to the page.
 
 | # | Hop | Shape at this hop | Where |
 |---|---|---|---|
-| 1 | `price_table` → training rows and course rows | 2,037 log closes, 2015-01-02 to 2023-02-03; 2,264 with the test rows, to 2023-12-29 | `src/arima_forecasting/export.py:172` |
+| 1 | `price_table` → training rows and course rows | 2,037 log closes, 2015-01-02 to 2023-02-03; 2,264 with the test rows, to 2023-12-29 | `src/arima_forecasting/export.py:175` |
 | 2 | `_grid_cell`, twice | the grid's (3, 1, 4) with a drift and (2, 1, 2) without, each with its recorded estimates | `src/arima_forecasting/fitting.py:187` |
 | 3 | `fit_grid_cell` | two statsmodels results; llf gaps 5.0e-10 and 6.5e-8; 1 iteration each | `src/arima_forecasting/fitting.py:194` |
 | 4 | `auto_arima_full` | 2,264 rows → (0, 1, 1) with an intercept | `src/arima_forecasting/fitting.py:224` |
 | 5 | `course_refit`, and the same order with a drift | (0, 1, 1), trend `"n"`, 2 iterations; the drift fit beside it | `src/arima_forecasting/fitting.py:215`, `:255` |
 | 6 | `describe` | three `models[]` entries: 9, 5 and 2 parameters; 3 + 4, 2 + 2 and 0 + 1 inverse roots; 2, 2 and 0 pairs | `src/arima_forecasting/fitting.py:152` |
-| 7 | `model_diagnostics`, per model | 2,036 standardised residuals; 3 Ljung–Box rows, 1 Jarque–Bera, 2 ARCH-LM; 2 × 50 ACF rows; 2,036 QQ points | `src/arima_forecasting/diagnostics.py:145` |
-| 8 | `residual_payloads` | `fit` with `diagnostics`, `diagnostic_settings` and `clustering_prediction`; three `residuals_<id>` payloads | `src/arima_forecasting/diagnostics.py:190` |
+| 7 | `model_diagnostics`, per model | 2,036 standardised residuals; 3 Ljung–Box rows, 1 Jarque–Bera, 2 ARCH-LM; 2 × 50 ACF rows; 2,036 QQ points | `src/arima_forecasting/diagnostics.py:149` |
+| 8 | `residual_payloads` | `fit` with `diagnostics`, `diagnostic_settings` and `clustering_prediction`; three `residuals_<id>` payloads | `src/arima_forecasting/diagnostics.py:194` |
 | 9 | validate, `dumps`, check the fit against the residual files, write, check again | four JSON files: 18,464 bytes and about 483 kB each | `tools/export_app_data.py` |
 | 10 | The reader opens **Fit and diagnostics** | `loadFit` fetches `fit.json`; `parseFit` re-checks it | `app/src/data/useFitData.ts` |
 | 11 | The reader picks a model | `loadResiduals` fetches that model's file; `parseResiduals` checks its id | `app/src/data/useFitData.ts:36` |
-| 12 | Tables, unit circle, plots | the page draws what the files say | `app/src/views/FitView.tsx:111` |
+| 12 | Tables, unit circle, plots | the page draws what the files say | `app/src/views/FitView.tsx:100` |
 
 ```mermaid
 sequenceDiagram
@@ -243,27 +244,27 @@ sequenceDiagram
 
 | Pitfall | How it showed up | Guard (`file:line`) |
 |---|---|---|
-| **The first residual is the level, not a shock** | Every model's first residual is about 3.18 (the first log price is 3.1852), every later one within 0.13 of zero; its standardised value is 0.0032, because statsmodels' approximate diffuse start gives that forecast a variance of about 10⁶. A QQ plot of `resid` whole, as the course draws it, has a top point at 3.185 and the next at 0.105 | `burn_in` (`src/arima_forecasting/diagnostics.py:59`); `tests/test_diagnostics.py:43`; the burned row is exported and shown, so the reader sees what the course plots |
+| **The first residual is the level, not a shock** | Every model's first residual is about 3.18 (the first log price is 3.1852), every later one within 0.13 of zero; its standardised value is 0.0032, because statsmodels' approximate diffuse start gives that forecast a variance of about 10⁶. A QQ plot of `resid` whole, as the course draws it, has a top point at 3.185 and the next at 0.105 | `burn_in` (`src/arima_forecasting/diagnostics.py:63`); `tests/test_diagnostics.py:43`; the burned row is exported and shown, so the reader sees what the course plots |
 | **The course's refit drops the drift** | `ARIMA(train, order=(0, 1, 1)).fit()` has trend `"n"`: statsmodels' default at d ≥ 1 (statsmodels/tsa/arima/model.py:156-160) | The drift fit beside it (`src/arima_forecasting/fitting.py:255`) and `course_track.drift_dropped`; `tests/test_fitting.py:173` |
-| **The course's search sees the test period** | `auto_arima` ran on 2,264 rows, 227 of them test rows | `train_only` and `same_order` (`src/arima_forecasting/fitting.py:257`); `tests/test_committed_artifacts.py:240` ties `train_only` to the grid's run |
+| **The course's search sees the test period** | `auto_arima` ran on 2,264 rows, 227 of them test rows | `train_only` and `same_order` (`src/arima_forecasting/fitting.py:257`); `tests/test_committed_artifacts.py:250` ties `train_only` to the grid's run |
 | **A fresh fit can stop short of the grid's point** | On the simulated (1, 1, 1) with a drift in `tests/test_fitting.py`, one default start stopped 5.4e-6 below a restart from its own estimates, more than the 1e-6 tolerance | Refit from the recorded estimates and `GridMismatch` (`src/arima_forecasting/fitting.py:210`); `tests/test_fitting.py:140` |
-| **The 1 MB budget** | The three residual series together are 1,450,049 bytes | One file per model (`src/arima_forecasting/export.py:49`); `tests/test_committed_artifacts.py:114` fails any file over 1,000,000 bytes |
+| **The 1 MB budget** | The three residual series together are 1,450,049 bytes | One file per model (`src/arima_forecasting/export.py:52`); `tests/test_committed_artifacts.py:124` fails any file over 1,000,000 bytes |
 | **Near-cancelling roots make the estimates hard to read** | The AIC choice's AR and MA standard errors are 0.15 to 0.29 for lags 1 to 3, against 0.023 to 0.030 for the BIC choice; its complex AR and MA pairs are 0.0625 apart. Distance alone does not explain it: the BIC choice's pair is closer (0.037) and its errors are small (concept note 09) | The roots and pairs are exported and drawn (`src/arima_forecasting/fitting.py:110`); `tests/test_fitting.py:51`; concept note 09 says how to read them |
 | **OPG errors assume no volatility clustering** | The robust sandwich errors of the AIC choice's AR and MA coefficients are 1.80 to 1.99 times OPG. The first build blamed the fat tails (kurtosis 7.03). The evidence says the ratio comes from dependence in the order of the shocks, as volatility clustering would give: rebuilt from AAPL's own shocks resampled independently (kurtosis kept, order lost) the AR and MA ratios run from 0.915 to 1.035 (medians over 10 resamples of the smallest and the largest); from the same shocks in their order, 1.80 to 1.99 (`aapl_iid_probe.py`, Second review fix round). A wrong conditional mean would also separate the sandwich from OPG | Not corrected: `cov_type` is recorded in `fit_settings` (`src/arima_forecasting/fitting.py:59`) and the page says which errors these are; the size of the difference is in Measured results |
 | **statsmodels labels the drift `x1`** | In 0.15.0 `ARIMA` passes trend `'t'` as an exogenous column | `parameter_name` (`src/arima_forecasting/fitting.py:90`); `library_name` keeps statsmodels' label; `tests/test_fitting.py:28` |
-| **Ljung–Box at a lag ≤ p + q** | `acorr_ljungbox` returns a NaN p-value there, which JSON cannot carry | `applied` (`src/arima_forecasting/diagnostics.py:88`); `p_value` and `df` null exactly when not applied; `tests/test_diagnostics.py:52` |
-| **statsmodels' own degrees-of-freedom rule counts the drift** | `test_serial_correlation(df_adjust=True)` uses 8 for the AIC choice (statsmodels/tsa/statespace/mlemodel.py:3745) | p + q passed explicitly (`src/arima_forecasting/diagnostics.py:152`) and recorded as `ljung_box_model_df` |
+| **Ljung–Box at a lag ≤ p + q** | `acorr_ljungbox` returns a NaN p-value there, which JSON cannot carry | `applied` (`src/arima_forecasting/diagnostics.py:92`); `p_value` and `df` null exactly when not applied; `tests/test_diagnostics.py:52` |
+| **statsmodels' own degrees-of-freedom rule counts the drift** | `test_serial_correlation(df_adjust=True)` uses 8 for the AIC choice (statsmodels/tsa/statespace/mlemodel.py:3745) | p + q passed explicitly (`src/arima_forecasting/diagnostics.py:156`) and recorded as `ljung_box_model_df` |
 | **A p-value can underflow to 0** | Jarque–Bera for the BIC and course models, and the BIC choice's `ar.L1` (z −74.8), give p = 0.0 in double precision | 0.0 is a valid number in the contract; the app prints it as "< 1e-300", never "0", and sets other powers of ten in a superscript (`pParts`, `app/src/lib/fitText.ts:33`) |
-| **`sigma2`'s z-test is a boundary null** | The first build exported `sigma2`'s z (49.5) and p (0.0); its null value 0 is on the edge of what a variance can be, where z is not normal | `parameter_rows` exports its z and p as null (`src/arima_forecasting/fitting.py:130`); both readers refuse a `sigma2` with them; the table shows a dash and a note (`app/src/views/FitView.tsx:224`) |
+| **`sigma2`'s z-test is a boundary null** | The first build exported `sigma2`'s z (49.5) and p (0.0); its null value 0 is on the edge of what a variance can be, where z is not normal | `parameter_rows` exports its z and p as null (`src/arima_forecasting/fitting.py:130`); both readers refuse a `sigma2` with them; the table shows a dash and a note (`app/src/views/FitView.tsx:213`) |
 | **The refit reproduces the grid's point; it does not prove a maximum** | Restarted at the BIC choice's recorded point, Nelder–Mead gains 1.27e-4 in llf, 127 times the tolerance | The docs and `fitting.py` say "reproduces"; the gains are measured (`m3_fix_probe.py`, Review fix round) |
-| **Closest-first pairing misses pairs** | AR {0.5, 0.6} and MA {0.51, 0.41}: closest first gives one pair, two exist within 0.1 | A maximum matching (`src/arima_forecasting/fitting.py:110`); `tests/test_fitting.py:69`; Python's validator restates it by dynamic programming (`src/arima_forecasting/payloads.py:1608`) |
-| **A stated order is used before it is bounded** | order [10⁸, 1, 0] in a file: Python's validator raised `MemoryError` and the app's parser ran out of heap; 2³² gave a `RangeError`, and the page stayed on "loading" | Both readers bound p, q ≤ 10 and d ≤ 2 first (`src/arima_forecasting/payloads.py:1480`, `app/src/lib/contract.fit.ts:287`); corpus cases; a parser that throws is an error state (`app/src/data/useFitData.ts:50`) |
-| **A root list longer than its order** (second review) | k equal roots a side, the order unchanged: the validator's matching ran over 2^k subsets, 7.8 s at k = 18 (`roots_probe.py`, Second review fix round) | `_check_roots` returns no roots on a count mismatch (`src/arima_forecasting/payloads.py:1578`) and `_check_pairs` matches at most `MAX_PQ` roots a side (`:1659`); `tests/test_payloads_fit.py:414`, `:424`, `:431` |
-| **A file set its own tolerances** (second review) | `llf_tolerance` 1.0 in a self-consistent file let a refit 0.5 from the grid's llf pass; `cancel_distance` was read from the file too | Both readers pin 1e-6 and 0.1 (`src/arima_forecasting/payloads.py:1377`, `app/src/lib/contract.fit.ts:52`) and refuse another stated value; `tests/test_payloads_fit.py:359`; corpus cases |
+| **Closest-first pairing misses pairs** | AR {0.5, 0.6} and MA {0.51, 0.41}: closest first gives one pair, two exist within 0.1 | A maximum matching (`src/arima_forecasting/fitting.py:110`); `tests/test_fitting.py:69`; Python's validator restates it by dynamic programming (`src/arima_forecasting/payloads.py:1693`) |
+| **A stated order is used before it is bounded** | order [10⁸, 1, 0] in a file: Python's validator raised `MemoryError` and the app's parser ran out of heap; 2³² gave a `RangeError`, and the page stayed on "loading" | Both readers bound p, q ≤ 10 and d ≤ 2 first (`src/arima_forecasting/payloads.py:1565`, `app/src/lib/contract.fit.ts:294`); corpus cases; a parser that throws is an error state (`app/src/data/useFitData.ts:50`) |
+| **A root list longer than its order** (second review) | k equal roots a side, the order unchanged: the validator's matching ran over 2^k subsets, 7.8 s at k = 18 (`roots_probe.py`, Second review fix round) | `_check_roots` returns no roots on a count mismatch (`src/arima_forecasting/payloads.py:1663`) and `_check_pairs` matches at most `MAX_PQ` roots a side (`:1744`); `tests/test_payloads_fit.py:441`, `:451`, `:458` |
+| **A file set its own tolerances** (second review) | `llf_tolerance` 1.0 in a self-consistent file let a refit 0.5 from the grid's llf pass; `cancel_distance` was read from the file too | Both readers pin 1e-6 and 0.1 (`src/arima_forecasting/payloads.py:1456`, `app/src/lib/contract.fit.ts:52`) and refuse another stated value; `tests/test_payloads_fit.py:386`; corpus cases |
 | **`--only fit` beside stale residual files** | After a code change, `--only fit` wrote a `fit.json` whose `nlags` (40) contradicted the residual files' (50); only pytest noticed | `validate_fit_residuals` before and after writing (`tools/export_app_data.py:175`, `:196`); `tests/test_export.py:473` |
-| **Sizes that only a real browser shows** | The three legend icons drew at 300 × 300 px and the QQ plot at 927 × 579 px with its text scaled up (`.plot svg` is 100% wide) | `.plot svg.legend-mark` and `.qq-plot` in `app/src/index.css:216`; measured in headless Chromium: 12 × 12 px and 560 × 350 px (Review fix round) |
-| **One model's residual file shown for another** | App mutant (b): a parser that accepted any id would draw the BIC series under the AIC label | `parseResiduals` checks `model_id` (`app/src/lib/contract.fit.ts:865`); Python's `validate_residuals(data, model_id)`; corpus case "residuals_aic: the model_id of another model" |
-| **The app recomputing a flag** | App mutant (a): comparing \|acf\| with the band in the view | `FitView.tsx` passes Python's `outside` (`app/src/views/FitView.tsx:460`); the view test flips a flag and expects the bar to follow |
+| **Sizes that only a real browser shows** | The three legend icons drew at 300 × 300 px and the QQ plot at 927 × 579 px with its text scaled up (`.plot svg` is 100% wide) | `.plot svg.legend-mark` and `.qq-plot` in `app/src/index.css:221`; measured in headless Chromium: 12 × 12 px and 560 × 350 px (Review fix round) |
+| **One model's residual file shown for another** | App mutant (b): a parser that accepted any id would draw the BIC series under the AIC label | `parseResiduals` checks `model_id` (`app/src/lib/contract.fit.ts:876`); Python's `validate_residuals(data, model_id)`; corpus case "residuals_aic: the model_id of another model" |
+| **The app recomputing a flag** | App mutant (a): comparing \|acf\| with the band in the view | `FitView.tsx` passes Python's `outside` (`app/src/views/FitView.tsx:449`); the view test flips a flag and expects the bar to follow |
 
 ---
 
@@ -1024,7 +1025,7 @@ mutant (the table after the list).
    `[]` for it and `parseFit` returned `ok` with the verdicts `not_tested, found, not_found`
    (measured on a copy of the tree before this round). Both readers now hold `ALPHA` 0.05,
    `LJUNG_BOX_LAGS` (5, 10, 20), `ARCH_LM_LAGS` (5, 10), `ARCH_LM_DDOF` 0 and `NLAGS` 50 themselves
-   (`src/arima_forecasting/payloads.py:1383`, `app/src/lib/contract.fit.ts:60`), compare a stated value
+   (`src/arima_forecasting/payloads.py:1462`, `app/src/lib/contract.fit.ts:60`), compare a stated value
    exactly (one 1e-12 away is another value) and judge the rows against their own values whatever the
    file says. `tests/test_diagnostics.py:189` ties the Python pins to `diagnostics.py` and to the
    settings `residual_payloads` writes, and the real `fit.json` still has 0 problems. The made-up
@@ -1043,8 +1044,8 @@ mutant (the table after the list).
    the file. Measured on the old tree with the re-review's `dos_probe.py`: the three tiny-statistic
    cases raised; a Ljung–Box lag of 1e7 took 2.457 s and ARCH-LM lags of 1e7 took 2.492 s; the
    re-review's lag of 1e9 ran past `timeout 60`. Now the tail is computed only for a pinned lag with
-   the df that lag gives (`payloads.py:1731` and `:1781`), so a row off the pins is a problem and its
-   p-value is not tied, and a halved statistic of 0.0 gives a tail of 1 (`:1412`). After: all eight
+   the df that lag gives (`payloads.py:1816` and `:1866`), so a row off the pins is a problem and its
+   p-value is not tied, and a halved statistic of 0.0 gives a tail of 1 (`:1497`). After: all eight
    probe cases take 0.001 s or less, the tiny statistics give one "gives p = 1.0" problem each, and
    the lag of 1e9 gives its lag problems in 0.000 s.
 3. **Six mutants survived**, each now killed by a test that states what it tests: O1 (the Jarque–Bera

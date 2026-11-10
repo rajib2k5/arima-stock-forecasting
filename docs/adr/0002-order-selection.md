@@ -128,7 +128,7 @@ Two details matter when reading the numbers:
 
 - **KPSS p-values are clipped.** statsmodels interpolates the KPSS p-value from a table that
   covers only 0.01 to 0.10. Outside that range it returns the boundary and issues an
-  `InterpolationWarning` (`_stattools.py:3205-3235`). A reported "0.01" means "0.01 or
+  `InterpolationWarning` (`_stattools.py:3211-3235`). A reported "0.01" means "0.01 or
   smaller". The contract carries this as `p_value_bound`.
 - **statsmodels 0.15.0 warns about the return type.** `adfuller` and `kpss` now issue a
   `FutureWarning` unless `result_object=` is passed (`_stattools.py:279-291, 465-475`). Pass
@@ -139,7 +139,7 @@ Two details matter when reading the numbers:
 whereas the course passes `test='adf'`. pmdarima's ADF and KPSS are its **own**
 implementations, not statsmodels' (`pmdarima/arima/stationarity.py:104, 215`). Its ADF regresses
 on a constant, a trend and a fixed ⌊(n−1)^(1/3)⌋ lagged differences. The code computes
-`k = trunc((n−1)^(1/3)) + 1` (`stationarity.py:326-335`), but that k is the embedding width:
+`k = trunc((n−1)^(1/3)) + 1` (`pmdarima/arima/stationarity.py:326-335`), but that k is the embedding width:
 the regression takes `z[:, 1:k]` (`:289`), which is k − 1 lags. It therefore equals statsmodels'
 `adfuller(regression='ct', maxlag=⌊(n−1)^(1/3)⌋, autolag=None)`: on the training part
 (n = 1,800, so 12 lags) both give τ = −0.642439, and 13 lags would give −0.719864 (measured).
@@ -153,7 +153,7 @@ series all three gave d = 1.)
 This is the subtle part, and the 3D landscape is built around it.
 
 statsmodels' `ARIMA` handles d *inside* the state-space model: it never passes
-`simple_differencing` to its `SARIMAX` parent (`statsmodels/tsa/arima/model.py:199-211`), so
+`simple_differencing` to its `SARIMAX` parent (`statsmodels/tsa/arima/model.py:204-211`), so
 the SARIMAX default `simple_differencing=False` applies (`statsmodels/tsa/statespace/sarimax.py:344`).
 The d "integration" states get an approximate diffuse prior (a huge variance, meaning "we have
 no idea where the level starts"), and the first d observations are **burned**: excluded from
@@ -222,7 +222,7 @@ reported as a tie-break and not as a test.
 ### 4. The trend term is part of the model, chosen explicitly
 
 statsmodels `ARIMA` puts trends in the *levels* equation, as "regression with ARIMA errors"
-(docstring, `statsmodels/tsa/arima/model.py:104-118`). A constant cannot survive differencing,
+(docstring, `statsmodels/tsa/arima/model.py:105-118`). A constant cannot survive differencing,
 so it **rejects** `trend='c'` when d ≥ 1 with a `ValueError` (`model.py:178-190`; measured).
 The way to get a drift with d = 1 is `trend='t'` (a linear time trend in levels, which
 differences into a constant). Measured: ARIMA(0,1,0) with `trend='t'` estimates 0.000868, and
@@ -500,14 +500,14 @@ numpy 2.5.4, Python 3.12, aarch64).
 |---|---|
 | `ARIMA` default trend is `'c'` without integration, `'n'` with it | `statsmodels/tsa/arima/model.py:156-160` |
 | `ARIMA` rejects trend terms of lower order than d | `statsmodels/tsa/arima/model.py:178-190` |
-| `ARIMA` does not pass `simple_differencing`, so SARIMAX's default `False` applies | `statsmodels/tsa/arima/model.py:199-211`, `statsmodels/tsa/statespace/sarimax.py:344` |
+| `ARIMA` does not pass `simple_differencing`, so SARIMAX's default `False` applies | `statsmodels/tsa/arima/model.py:204-211`, `statsmodels/tsa/statespace/sarimax.py:344` |
 | Diffuse states and `loglikelihood_burn` | `statsmodels/tsa/statespace/sarimax.py:669-683` |
 | `ARIMA.fit` defaults to `method='statespace'` | `statsmodels/tsa/arima/model.py:325-335` |
 | MLE fit defaults: L-BFGS, `maxiter=50` | `statsmodels/tsa/statespace/mlemodel.py:532-541` |
 | `ConvergenceWarning` when `converged` is False | `statsmodels/base/model.py:656-665` |
 | SARIMAX trend enters the differenced equation | `statsmodels/tsa/statespace/sarimax.py:234-235` |
 | `adfuller` defaults; `FutureWarning` without `result_object` | `statsmodels/tsa/stattools/_stattools.py:233-242, 465-475` |
-| `kpss` defaults; p-value clipped to [0.01, 0.10] with `InterpolationWarning` | `_stattools.py:3051-3055, 3205-3235` |
+| `kpss` defaults; p-value clipped to [0.01, 0.10] with `InterpolationWarning` | `_stattools.py:3051-3055, 3211-3235` |
 | `auto_arima` defaults: `test='kpss'`, `max_p=5`, `max_q=5`, `max_d=2`, `maxiter=50`, `suppress_warnings=True`, `with_intercept='auto'` | `pmdarima/arima/auto.py:330-374` |
 | d fixed by `ndiffs` before the search | `pmdarima/arima/auto.py:545-553` |
 | `with_intercept='auto'` sets the *starting* value (intercept when d + D ∈ {0, 1}); the stepwise search also fits without it and toggles it | `pmdarima/arima/auto.py:623-624`; `pmdarima/arima/_auto_solvers.py:312-314, 440-445` |

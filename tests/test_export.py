@@ -25,7 +25,7 @@ import pytest
 from synthetic import FIXED_NOW, NOT_RUN, SMALL_GRID, write_synthetic_snapshot
 
 from arima_forecasting import config, selection
-from arima_forecasting.contract import SCHEMA_VERSION, dumps, validate_envelope
+from arima_forecasting.contract import SCHEMA_VERSION, dumps, more_problems, validate_envelope
 from arima_forecasting.data import read_snapshot
 from arima_forecasting.forecasting import FORECASTS
 from arima_forecasting.export import ARTIFACTS, build_payloads, meta_payload, order_selection_payloads
@@ -66,12 +66,12 @@ EXPECTED_META = {
         {"id": 1, "slug": "data-eda", "title": "Data and EDA", "status": "done"},
         {"id": 2, "slug": "stationarity", "title": "Stationarity and identification", "status": "done"},
         {"id": 3, "slug": "fit-diagnostics", "title": "Fit and diagnostics", "status": "done"},
-        {"id": 4, "slug": "forecast-eval", "title": "Forecast and evaluation", "status": "current"},
+        {"id": 4, "slug": "forecast-eval", "title": "Forecast and evaluation", "status": "done"},
         {
             "id": 5,
             "slug": "where-it-goes-wrong",
             "title": "Where the sample goes wrong, and polish",
-            "status": "planned",
+            "status": "current",
         },
     ],
     "artifacts": ["meta", "prices", "eda", "stationarity", "acf_pacf", "aic_grid", "fit", "residuals_aic", "residuals_bic", "residuals_course", "forecast_aic_static", "forecast_aic_walk_forward", "forecast_aic_refit", "forecast_bic_static", "forecast_bic_walk_forward", "forecast_course_static", "forecast_course_walk_forward", "evaluation"],
@@ -471,25 +471,25 @@ def test_only_rewrites_the_named_files_from_the_committed_grid(exported, snapsho
 
 
 def test_only_fit_refuses_to_write_beside_residual_files_that_contradict_it(exported, snapshot_root, tmp_path):
-    # As after a code change: a residuals file on disk from other settings (nlags 40, each file
-    # valid on its own). --only fit must not write a fit.json that contradicts it.
+    # As after a code change: a residuals file on disk from other code (one ACF bar more past its band,
+    # each file valid on its own; a file stating another nlags is refused on its own since the pin).
+    # --only fit must not write a fit.json that contradicts it.
     out = tmp_path / "only"
     out.mkdir()
     for p in exported.iterdir():
         (out / p.name).write_bytes(p.read_bytes())
     stale = json.loads((out / "residuals_bic.json").read_text())
-    for name in ("acf", "acf_squared"):
-        g = stale["data"][name]
-        g["rows"] = g["rows"][:40]
-        g["outside_count"] = sum(r["outside"] for r in g["rows"])
-    stale["data"]["nlags"] = 40
+    acf = stale["data"]["acf"]
+    row = next(r for r in acf["rows"] if not r["outside"])
+    row.update(acf=0.9, outside=True)  # past the band z / sqrt(n), about 0.04 here
+    acf["outside_count"] += 1
     (out / "residuals_bic.json").write_text(dumps(stale))
     assert PAYLOAD_VALIDATORS["residuals_bic"](stale["data"]) == []
     (out / "fit.json").unlink()
     done = run_tool(out, "--only", "fit", data_root=snapshot_root)
     assert done.returncode == 1
     assert "refusing to write: the fit, residuals, forecast and evaluation files would disagree" in done.stderr
-    assert "residuals_bic: nlags is 40, but fit.json says 50" in done.stderr
+    assert f"residuals_bic: acf.outside_count is {acf['outside_count']}, but fit.json says {acf['outside_count'] - 1}" in done.stderr
     assert not (out / "fit.json").exists()
     # With the residual files in --only too, the set agrees again.
     done = run_tool(out, "--only", "fit,residuals_aic,residuals_bic,residuals_course", data_root=snapshot_root)
@@ -564,6 +564,25 @@ def test_check_runs_the_cross_file_check_on_the_fresh_export(exported, monkeypat
     assert "the fresh export's fit, residuals, forecast and evaluation files disagree:\n  - disagree on purpose" in out
     assert "app data is current" not in out
     assert {p.name: p.read_bytes() for p in exported.iterdir()} == before
+
+
+def test_the_family_check_joins_the_four_checks_and_stops_at_max_problems(monkeypatch):
+    # Each check is capped on its own (payloads._capped_across); the tool joins the four and cuts the join
+    # the same way, so the files of a broken export print 200 problems and one closing line, not 800.
+    tool = load_tool()
+    checks = ("validate_fit_residuals", "validate_forecast_fit", "validate_forecast_prices", "validate_forecast_evaluation")
+
+    def returning(lists):
+        for name, problems in zip(checks, lists, strict=True):
+            monkeypatch.setattr(tool, name, lambda *args, problems=problems: list(problems))
+        return tool._family_problems({"fit": {}, "prices": {}, "evaluation": {}})
+
+    each = [[f"{name}: problem {k}" for k in range(150)] for name in checks]
+    assert returning(each) == [*each[0], *each[1][:50], more_problems("family")]
+    # A check that stopped at the cap itself: its closing line is cut with the rest, and one closing line ends the join.
+    capped = [*each[0][:100], *each[1][:100], more_problems("family")]
+    assert returning([capped, ["x"], [], []]) == [*capped[:200], more_problems("family")]
+    assert returning([each[0][:120], each[1][:80], [], []]) == [*each[0][:120], *each[1][:80]]  # 200: not cut
 
 
 @pytest.mark.parametrize("args", [("--only", "nope"), ("--only", ""), ("--only", "fit", "--check")])

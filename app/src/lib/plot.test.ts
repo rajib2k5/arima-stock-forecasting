@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extent, formatLogTick, formatTick, gapPath, linearScale, logTicks, nearestIndex, niceStep, niceTicks, runs, stepDecimals, yearTicks } from './plot'
+import { drawingWidth, extent, formatLogTick, formatTick, gapPath, linearScale, logTicks, MIN_DRAWING_WIDTH, nearestIndex, niceStep, niceTicks, runs, stepDecimals, thinTicks, yearTicks } from './plot'
 
 describe('extent', () => {
   it('spans every series and skips nulls and non-finite values', () => {
@@ -130,5 +130,55 @@ describe('logTicks', () => {
   })
   it('writes a tick with no trailing zeros', () => {
     expect([formatLogTick(150), formatLogTick(0.30000000000000004), formatLogTick(1500), formatLogTick(2.5)]).toEqual(['150', '0.3', '1500', '2.5'])
+  })
+})
+
+describe('drawingWidth', () => {
+  it('draws one unit per pixel in a container narrower than the drawing, so 10-unit text stays 10 px', () => {
+    // A 375 px phone leaves a card 293 px wide.
+    expect(drawingWidth(293, 720)).toBe(293)
+    expect(drawingWidth(293.4, 420)).toBe(293)
+    expect(drawingWidth(719, 720)).toBe(719)
+  })
+  it('keeps the nominal drawing in a container as wide or wider, and in one not measured yet', () => {
+    expect(drawingWidth(720, 720)).toBe(720)
+    expect(drawingWidth(1018, 720)).toBe(720)
+    expect(drawingWidth(null, 720)).toBe(720)
+    expect(drawingWidth(0, 720)).toBe(720)
+    expect(drawingWidth(NaN, 420)).toBe(420)
+  })
+  it('never draws narrower than the minimum, nor wider than a drawing that is smaller than it', () => {
+    expect(MIN_DRAWING_WIDTH).toBe(240)
+    expect(drawingWidth(200, 720)).toBe(240)
+    expect(drawingWidth(240, 720)).toBe(240)
+    expect(drawingWidth(241, 720)).toBe(241)
+    expect(drawingWidth(100, 200)).toBe(200)
+    expect(drawingWidth(150, 720, 120)).toBe(150)
+  })
+})
+
+describe('thinTicks', () => {
+  const dates = ['2024-01-02', '2024-03-01', '2024-05-01', '2024-07-01', '2024-09-03'].map((label) => ({ label }))
+  it('keeps every tick when the longest label fits between neighbours', () => {
+    // Ten characters need 10 x 6.2 + 8 = 70 units: five dates on a 720-unit drawing are 162 apart.
+    expect(thinTicks(dates, [58, 220, 382, 544, 706])).toEqual(dates)
+    expect(thinTicks(dates, [0, 70, 140, 210, 280])).toEqual(dates)
+  })
+  it('keeps every k-th tick, the first always, when labels would run into each other', () => {
+    // On a 293-unit drawing the five dates are 55 apart: every second one is kept.
+    expect(thinTicks(dates, [58, 113, 168, 224, 279]).map((t) => t.label)).toEqual(['2024-01-02', '2024-05-01', '2024-09-03'])
+    expect(thinTicks(dates, [0, 69.9, 139.8, 209.7, 279.6]).map((t) => t.label)).toEqual(['2024-01-02', '2024-05-01', '2024-09-03'])
+    // Twelve years 18 units apart need 4 x 6.2 + 8 = 32.8 units each: every second year.
+    const years = Array.from({ length: 12 }, (_, k) => ({ label: String(2015 + k) }))
+    expect(thinTicks(years, years.map((_, k) => 58 + 18 * k)).map((t) => t.label)).toEqual(['2015', '2017', '2019', '2021', '2023', '2025'])
+  })
+  it('measures the tightest gap, and keeps only the first tick when two share a position', () => {
+    // The tightest gap, 30 units, sets the step: ceil(70 / 30) = 3.
+    expect(thinTicks(dates, [0, 200, 230, 430, 630]).map((t) => t.label)).toEqual(['2024-01-02', '2024-07-01'])
+    expect(thinTicks(dates, [0, 0, 100, 200, 300]).map((t) => t.label)).toEqual(['2024-01-02'])
+  })
+  it('passes zero or one tick through', () => {
+    expect(thinTicks([], [])).toEqual([])
+    expect(thinTicks([{ label: 'x' }], [5])).toEqual([{ label: 'x' }])
   })
 })

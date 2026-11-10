@@ -140,5 +140,5 @@ run 2026-10-29.)
 - `src/arima_forecasting/prep.py:40-74` (`clean_close`) forward-fills with `.ffill()`, refuses a
   fill that carries a close more than 7 days, and records the filled dates; `:84-103`
   (`check_coverage`) refuses truncated or holed data.
-- `src/arima_forecasting/export.py:82-101` copies the snapshot's SHA-256, row count and download
+- `src/arima_forecasting/export.py:92-111` copies the snapshot's SHA-256, row count and download
   time into `prices.source`.

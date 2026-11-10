@@ -22,7 +22,8 @@ import numpy as np
 import pytest
 from scipy import stats
 
-from arima_forecasting import payloads
+from arima_forecasting import contract, payloads
+from arima_forecasting.contract import more_problems
 from arima_forecasting.payloads import _t_sf, kupiec_lr, validate_evaluation, validate_forecast, validate_forecast_evaluation, validate_forecast_fit
 
 FIXTURES = Path(__file__).resolve().parent.parent / "app" / "src" / "test" / "fixtures"
@@ -803,3 +804,86 @@ def test_the_forecast_windows_are_prices_splits(segment, field, value, message):
     if (segment, field) == ("test", "end"):  # also the oos window's origin date
         expected = [p for m, k in payloads.FORECASTS for p in (f"forecast_{m}_{k}: {message}", f"forecast_{m}_{k}: window 'oos' origin date is '2021-06-25', but prices.json's splits say '2021-06-24'")]
     assert problems == expected, problems
+
+
+# --- one bound on the problems of a check across files (contract.md, "Bounds") -------------------------------
+# Each check across files stops at MAX_PROBLEMS problems and ends with more_problems("family"), as a file's
+# reader does with "data"; each bounds every list it walks before walking it.
+
+FAMILY_CAP = more_problems("family")
+
+
+def _shifted_actuals(by: float = 1.0, keep: str | None = None) -> dict[str, dict]:
+    """Every forecast file (but `keep`) with each actual moved up `by` log points, actual_usd following: each
+    file stays valid on its own, and the evaluation made from the fixtures disagrees with nearly every metric,
+    DM row and coverage count it holds."""
+    forecasts = copy.deepcopy(FORECASTS)
+    for name, data in forecasts.items():
+        if name == keep:
+            continue
+        for w in data["windows"]:
+            for r in w["rows"]:
+                r["actual_log"] += by
+                r["actual_usd"] = math.exp(r["actual_log"])
+    return forecasts
+
+
+def test_an_evaluation_that_disagrees_with_every_row_stops_at_max_problems(monkeypatch):
+    forecasts = _shifted_actuals()
+    assert all(validate_forecast(d, d["model_id"], d["method"]) == [] for d in forecasts.values())
+    t0 = time.perf_counter()
+    problems = validate_forecast_evaluation(EVALUATION, forecasts)
+    assert time.perf_counter() - t0 < 1.0
+    monkeypatch.setattr(payloads, "MAX_PROBLEMS", 10**9)  # the whole list, to compare its head with
+    every = validate_forecast_evaluation(EVALUATION, forecasts)
+    assert len(every) == 230
+    assert problems == [*every[:200], FAMILY_CAP]
+
+
+# Each check with the number of problems it gives.
+CROSS_CHECKS = {
+    # Each forecast file's label against fit.json's.
+    "validate_forecast_fit": (lambda: validate_forecast_fit({**FIT, "models": [{**m, "label": "made up"} for m in FIT["models"]]}, RESIDUALS, FORECASTS), 7),
+    # Each file's oos rows against a prices.json whose last close moved.
+    "validate_forecast_prices": (lambda: payloads.validate_forecast_prices(edited(_prices_of_the_fixtures(), ["rows", -1, "close_usd"], lambda v: v + 0.01), FORECASTS), 7),
+    # Both windows of six files against the first file's.
+    "_same_windows": (lambda: payloads._same_windows(_shifted_actuals(keep="forecast_aic_static")), 12),
+    # The evaluation against the rows.
+    "validate_forecast_evaluation": (lambda: validate_forecast_evaluation(EVALUATION, _shifted_actuals()), 230),
+}
+
+
+@pytest.mark.parametrize("name", CROSS_CHECKS)
+def test_each_check_across_files_stops_at_the_cap(monkeypatch, name):
+    # Most of these checks cannot reach 200 problems once their lists are bounded (7 files, 2 windows each),
+    # so the cap is lowered to 2 to see each one stop: the same first problems, then the closing line.
+    check, count = CROSS_CHECKS[name]
+    monkeypatch.setattr(payloads, "MAX_PROBLEMS", 10**9)
+    every = check()
+    assert len(every) == count, every
+    monkeypatch.setattr(payloads, "MAX_PROBLEMS", 2)
+    monkeypatch.setattr(contract, "MAX_PROBLEMS", 2)
+    assert check() == [*every[:2], "family: more than 2 problems; a reader reports the first 2 and stops"]
+
+
+def test_the_checks_across_files_bound_the_lists_they_walk():
+    # 2,000,000 windows in a file, a window one row past MAX_ROWS, a prices.json of 2,000,000 rows and a fit
+    # of 2,000,000 models: one short problem each, quickly. Each file's own reader refuses them too.
+    walk = FORECASTS["forecast_aic_walk_forward"]
+    windows = {**FORECASTS, "forecast_bic_static": {**FORECASTS["forecast_bic_static"], "windows": [STATIC["windows"][0]] * 2_000_000}}
+    rows = {**FORECASTS, "forecast_aic_walk_forward": {**walk, "windows": [{**walk["windows"][0], "rows": [walk["windows"][0]["rows"][0]] * (payloads.MAX_ROWS + 1)}, walk["windows"][1]]}}
+    prices = _prices_of_the_fixtures()
+    many_windows = "forecast_bic_static: has 2000000 windows, more than the 2 a reader takes, so it is not checked against the other files"
+    long_window = "forecast_aic_walk_forward: window 'test' has 10001 rows, more than the 10000 a reader takes, so it is not checked against the other files"
+    for check, expected in (
+        (lambda: payloads._same_windows(windows), [many_windows]),
+        (lambda: payloads._same_windows(rows), [long_window]),
+        (lambda: payloads.validate_forecast_prices(prices, windows), [many_windows]),
+        (lambda: payloads.validate_forecast_prices(prices, rows), [long_window]),
+        (lambda: payloads.validate_forecast_prices({**prices, "rows": prices["rows"][:1] * 2_000_000}, FORECASTS), ["prices: rows has 2000000 entries, more than the 10000 a reader takes, so no forecast file is checked against it"]),
+        (lambda: validate_forecast_fit({**FIT, "models": FIT["models"][:1] * 2_000_000}, RESIDUALS, FORECASTS), ["fit: models has 2000000 entries, more than the 3 a reader takes, so no forecast file is checked against it"]),
+    ):
+        t0 = time.perf_counter()
+        problems = check()
+        assert time.perf_counter() - t0 < 1.0
+        assert problems == expected

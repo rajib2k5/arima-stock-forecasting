@@ -42,7 +42,9 @@ $$
 \hat y_{T+1} = y_T + \theta \hat\varepsilon_T, \qquad \hat y_{T+h} = \hat y_{T+1} \text{ for } h \ge 2 ,
 $$
 
-a flat line after one day, with variance σ²(1 + (h − 1)(1 + θ)²). With the course model's θ =
+a flat line after one day, with variance σ²(1 + (h − 1)(1 + θ)²). (That is the variance once the
+Kalman filter has settled; statsmodels' own adds θ² times the remaining uncertainty about ε_T, which on
+the course's 2,037 training days moves it by at most 2.4e-7, relative.) With the course model's θ =
 −0.0788 and σ² = 0.000354 (`fit.json`), 227 days ahead that is 0.000354 × (1 + 226 × 0.8486) =
 0.0683, a standard deviation of 0.2612 log points, which is the exported `sd_log` of the course
 model's last static test day (milestone-4 walkthrough, Measured results).

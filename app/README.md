@@ -90,7 +90,7 @@ Tests assert behaviour against hand-worked values or hand-built fixtures, not ag
 
 ## Dependencies
 
-Every dependency in `package.json` is pinned to an exact version, and `package-lock.json` is committed. The versions in the lock file were chosen to be at least 14 days old on the day the lock was created (2026-10-28), as a small supply-chain precaution. `@fontsource/inter` (SIL Open Font License 1.1) supplies the one font file the 3D labels use, so no font is fetched from a CDN at run time.
+Every dependency in `package.json` is pinned to an exact version, and `package-lock.json` is committed. The versions in the lock file were chosen to be at least 14 days old on the day the lock was created (2026-10-28), as a small supply-chain precaution. `playwright` (the screenshot tool's dev dependency) was added on 2026-10-30; its 1.62.0 was published on 2026-07-24, so it too was more than 14 days old. `@fontsource/inter` (SIL Open Font License 1.1) supplies the one font file the 3D labels use, so no font is fetched from a CDN at run time.
 
 `src/data/` (the loader) is committed like any other source, and so is `public/data/meta.json`. So are the other files the exporter writes there, `prices.json` and `eda.json` included, since the owner's decision of 2026-10-29 (ADR-0001, `DATA.md`). The repository's top-level `.gitignore` keeps raw market data out with the anchored rule `/data/`, which matches only a `data/` folder at the repository root; a bare `data/` would also have matched these two folders. This app's own `.gitignore` has no `data` rule. `tests/test_gitignore.py` (in the repository root) checks all of this with `git check-ignore`.
 

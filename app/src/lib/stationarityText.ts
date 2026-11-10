@@ -25,17 +25,15 @@ export const VERDICT_MEANINGS: Record<Verdict, string> = {
   inconclusive: 'Neither test rejects: both lack the power to tell, and the data cannot decide.',
 }
 
-/** A p-value for a table: three decimals, or scientific notation below 0.001. */
-export function formatP(p: number): string {
-  if (p === 0) return '0'
-  return p >= 0.001 ? p.toFixed(3) : p.toExponential(1).replace('e-', ' × 10^-')
-}
-
-/** KPSS p-values are clipped to statsmodels' table: say "0.01 or less" rather than "0.010". */
-export function kpssP(kpss: KpssResult): string {
-  if (kpss.p_value_bound === 'smaller') return '≤ 0.01'
-  if (kpss.p_value_bound === 'greater') return '≥ 0.10'
-  return formatP(kpss.p_value)
+/**
+ * KPSS p-values are clipped to statsmodels' table, so a p at its edge means "this or past it": the
+ * sign set before the exported p ("≤ 0.010", "≥ 0.100"), or nothing for a p inside the table. The
+ * p itself is set by PValue, as every other p-value on the page.
+ */
+export function kpssBound(kpss: KpssResult): string {
+  if (kpss.p_value_bound === 'smaller') return '≤ '
+  if (kpss.p_value_bound === 'greater') return '≥ '
+  return ''
 }
 
 export function adfLag(adf: AdfResult): string {

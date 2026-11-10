@@ -221,6 +221,8 @@ caption { caption-side: top; text-align: left; font-size: .82rem; color: var(--m
 .plot svg.legend-mark { display: inline-block; width: 12px; height: 12px; max-width: none; margin: 0 .35rem 0 0; vertical-align: -1px; }
 /* A 480-unit drawing at most this wide, so its 10-unit text is about the page's size, not scaled up to the card. */
 .qq-plot { max-width: 560px; }
+/* A p-value's power of ten (PValue): a superscript that does not lower its cell's baseline below its neighbours'. */
+td.num sup { line-height: 0; }
 .verdict-flag { color: var(--down); border-color: var(--down); }
 .verdict-plain { color: var(--teal); border-color: var(--teal); }
 tr.reading > td { font-size: .8rem; padding-bottom: .7rem; }

@@ -37,6 +37,10 @@ The final verifier pass repeated the hygiene part on all 118 files, binary PNGs 
 - **Other searches:** there are no hits for a personal email or `/tmp/claude-` scratch paths.
 - **Lockfiles:** the lockfile, audit and install-script findings above were re-checked and still hold.
 
+## Note, 2026-11-09: the lockfile has changed since this review
+
+This review's lockfile counts are as of 2026-10-28 and are left as written. Milestone 5 added `playwright` 1.62.0 (published 2026-07-24, so older than 14 days when it was locked on 2026-10-30) as a dev dependency of the screenshot tool. `app/package-lock.json` now has 375 entries (372 before: `playwright`, `playwright-core` and a second `fsevents`, 2.3.2, nested under `playwright`). All 375 still come from registry.npmjs.org and carry an `integrity` hash. The install scripts are now esbuild's and two copies of the macOS-only `fsevents` (`node_modules/fsevents` 2.3.3 and `node_modules/playwright/node_modules/fsevents` 2.3.2). Measured on 2026-11-09 by counting the keys of `packages` in the lock, less the root entry, and the entries with `hasInstallScript`. `npm audit` was not re-run for this note.
+
 ## Not checked
 
 The Blender script inside a real Blender; network requests made from troika's web worker (concluded from reading the code); a live malicious-notebook test, which would have meant editing the repo.

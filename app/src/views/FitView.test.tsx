@@ -214,16 +214,16 @@ describe('FitPage', () => {
       },
     })
     render(<FitPage state={ready()} load={load} />)
-    await screen.findByRole('img', { name: 'ACF of the standardised residuals, lags 1 to 3' })
-    expect(barClasses('ACF of the standardised residuals, lags 1 to 3')).toEqual(['bar outside', 'bar', 'bar'])
-    expect(barClasses('ACF of the squared standardised residuals, lags 1 to 3')).toEqual(['bar', 'bar', 'bar'])
+    await screen.findByRole('img', { name: 'ACF of the standardised residuals, lags 1 to 50' })
+    expect(barClasses('ACF of the standardised residuals, lags 1 to 50')).toEqual(['bar outside', 'bar', 'bar', ...new Array<string>(47).fill('bar')])
+    expect(barClasses('ACF of the squared standardised residuals, lags 1 to 50')).toEqual(['bar', 'bar', 'bar', ...new Array<string>(47).fill('bar')])
   })
 
   it('draws the exported flags of the base file', async () => {
     render(<FitPage state={ready()} load={fakeLoad()} />)
-    await screen.findByRole('img', { name: 'ACF of the squared standardised residuals, lags 1 to 3' })
-    expect(barClasses('ACF of the standardised residuals, lags 1 to 3')).toEqual(['bar', 'bar', 'bar'])
-    expect(barClasses('ACF of the squared standardised residuals, lags 1 to 3')).toEqual(['bar outside', 'bar', 'bar'])
+    await screen.findByRole('img', { name: 'ACF of the squared standardised residuals, lags 1 to 50' })
+    expect(barClasses('ACF of the standardised residuals, lags 1 to 50')).toEqual(['bar', 'bar', 'bar', ...new Array<string>(47).fill('bar')])
+    expect(barClasses('ACF of the squared standardised residuals, lags 1 to 50')).toEqual(['bar outside', 'bar', 'bar', ...new Array<string>(47).fill('bar')])
     expect(screen.getByRole('img', { name: /^QQ plot/ })).toBeInTheDocument()
   })
 

@@ -147,6 +147,40 @@ function round2(v: number): number {
   return Math.round(v * 100) / 100
 }
 
+/** The narrowest drawing, in SVG units: below it the plot area between the axis labels is too small to read. */
+export const MIN_DRAWING_WIDTH = 240
+
+/**
+ * The width, in SVG units, at which to draw a plot whose drawing is `nominal` units wide, in a
+ * container `containerPx` CSS pixels wide. SVG text scales with the viewBox, so a 720-unit drawing
+ * squeezed into a 293 px phone card drew its 10-unit labels 4 px tall. A container narrower than the
+ * drawing gets a drawing as wide as itself, one unit per pixel, so the labels keep their 10 px
+ * (never narrower than `min`). A wider container, or one not measured yet (null or 0: jsdom has no
+ * layout), keeps the nominal width, so a desktop chart is drawn as before.
+ */
+export function drawingWidth(containerPx: number | null, nominal: number, min = MIN_DRAWING_WIDTH): number {
+  if (containerPx === null || !(containerPx > 0) || containerPx >= nominal) return nominal
+  return Math.max(Math.round(containerPx), Math.min(min, nominal))
+}
+
+/** About the advance of one character of a 10-unit monospace tick label, and the space kept between two labels, in SVG units. */
+const TICK_CHAR = 6.2
+const TICK_GAP = 8
+
+/**
+ * Every k-th tick, with k the smallest step that leaves room for the longest label between two kept
+ * ticks: on a narrow drawing, five dates or twelve years would run into each other. `xs` are the
+ * ticks' positions in SVG units, in order. Which ticks are drawn, not where: positions are unchanged.
+ */
+export function thinTicks<T extends { label: string }>(ticks: readonly T[], xs: readonly number[]): T[] {
+  if (ticks.length < 2) return [...ticks]
+  const need = Math.max(...ticks.map((t) => t.label.length)) * TICK_CHAR + TICK_GAP
+  let gap = Infinity
+  for (let i = 1; i < xs.length; i++) gap = Math.min(gap, xs[i] - xs[i - 1])
+  const every = gap > 0 ? Math.max(1, Math.ceil(need / gap)) : ticks.length
+  return ticks.filter((_, k) => k % every === 0)
+}
+
 /** Mantissas for log-axis ticks, coarsest first: 1, 2 and 5 times powers of ten, then finer steps. */
 const LOG_MANTISSAS: readonly (readonly number[])[] = [[1], [1, 2, 5], [1, 1.5, 2, 3, 5, 7], [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9]]
 

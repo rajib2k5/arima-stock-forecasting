@@ -20,6 +20,7 @@ An empty list means the payload is valid. Like validate_envelope, it never raise
 from __future__ import annotations
 
 import functools
+import heapq
 import math
 import re
 from collections.abc import Callable
@@ -155,13 +156,59 @@ def _capped(validate: Callable[..., list[str]]) -> Callable[..., list[str]]:
     return run
 
 
+# The checks across files (validate_fit_residuals, validate_forecast_fit, validate_forecast_prices,
+# validate_forecast_evaluation, _same_windows, and the export tool's _family_problems, which joins the
+# first four) stop at MAX_PROBLEMS problems as a file's reader does, and end the list with
+# more_problems(FAMILY) (contract.md, "Bounds"). Each bounds every list it walks before walking it, so the
+# cap stops the messages and the bounds the work.
+FAMILY = "family"
+
+
+class _Problems(list[str]):
+    """A check across files' problems, at most MAX_PROBLEMS: one more raises _Full, which _capped_across
+    turns into the list and its closing line. A capped list added to it is cut the same way."""
+
+    def append(self, problem: str) -> None:
+        if len(self) == MAX_PROBLEMS:
+            raise _Full(list(self))
+        super().append(problem)
+
+    def extend(self, problems: Any) -> None:
+        for problem in problems:
+            self.append(problem)
+
+    def __iadd__(self, problems: Any) -> _Problems:  # type: ignore[override]
+        self.extend(problems)
+        return self
+
+
+def _capped_across(check: Callable[..., list[str]]) -> Callable[..., list[str]]:
+    """A check across files that stops at MAX_PROBLEMS problems and ends its list with more_problems(FAMILY)."""
+
+    @functools.wraps(check)
+    def run(*args: Any, **kwargs: Any) -> list[str]:
+        try:
+            return list(check(*args, **kwargs))
+        except _Full as full:
+            return [*full.problems, more_problems(FAMILY)]
+
+    return run
+
+
+def capped_family(problems: list[str]) -> list[str]:
+    """The joined lists of several checks across files, cut as one: the first MAX_PROBLEMS problems and
+    more_problems(FAMILY). Each list is already capped, so the join holds a few times MAX_PROBLEMS at most;
+    a list's own closing line follows MAX_PROBLEMS of its problems, so it is never among the first kept."""
+    return problems if len(problems) <= MAX_PROBLEMS else [*problems[:MAX_PROBLEMS], more_problems(FAMILY)]
+
+
 # Every list is bounded before it is walked, in both readers (contract.md, "Bounds"): a longer one is
 # one short problem and is not read, so no file, of 6 MB or 600, makes a reader slow or writes a
 # message per item past the bound. Lists of days and points take MAX_LIST: no list of trading days
 # can be longer than the download window's 4,291 calendar days, and the KDE grids have 200 points.
-# Short lists of names (meta's milestones and artifacts, eda's KDEs, the fit's lag lists) take
-# MAX_NAMES: 6, 18, 2 and 3 today. A list that enumerates a pinned set or an order takes that set's
-# size (each says so where it is read).
+# Short lists of names (meta's milestones, eda's KDEs, the fit's lag lists) take MAX_NAMES: 6, 2 and
+# 3 today. A list that enumerates a pinned set or an order takes that set's size (each says so where
+# it is read): meta's artifacts and held_artifacts take ARTIFACTS's 18.
 MAX_LIST = 10_000
 MAX_NAMES = 100
 
@@ -474,6 +521,31 @@ def validate_eda(data: object) -> list[str]:
 
 
 MILESTONE_STATUSES = ("done", "current", "planned")
+# Every artifact an export writes, in its order (export.ARTIFACTS; tests/test_payloads.py ties them, and
+# contract.ts holds the same names). meta's artifacts and held_artifacts name only these, each once at
+# most: any other name is refused. meta may list fewer (the gate switches on the views whose files it
+# lists, and the made-up fixtures list three), in any order. A new artifact is added here, in contract.ts
+# and in export.py together.
+ARTIFACTS = (
+    "meta",
+    "prices",
+    "eda",
+    "stationarity",
+    "acf_pacf",
+    "aic_grid",
+    "fit",
+    "residuals_aic",
+    "residuals_bic",
+    "residuals_course",
+    "forecast_aic_static",
+    "forecast_aic_walk_forward",
+    "forecast_aic_refit",
+    "forecast_bic_static",
+    "forecast_bic_walk_forward",
+    "forecast_course_static",
+    "forecast_course_walk_forward",
+    "evaluation",
+)
 
 
 @_capped
@@ -533,15 +605,22 @@ def validate_meta(data: object) -> list[str]:
         if len(c.problems) == before and statuses.count("current") != 1:
             c.add("data.milestones", f"expected exactly one 'current' milestone, found {statuses.count('current')}")
 
-    artifacts = _list(c, c.key(root, "artifacts", "data"), "data.artifacts", MAX_NAMES, "artifacts")
+    artifacts = _list(c, c.key(root, "artifacts", "data"), "data.artifacts", len(ARTIFACTS), "artifacts")  # each name once at most
     names: list[str] = []
     if artifacts is not None:
         for index, item in enumerate(artifacts):
-            name = c.string(item, f"data.artifacts[{index}]")
-            if name is not None:
+            at = f"data.artifacts[{index}]"
+            name = c.string(item, at)
+            if name is None:
+                continue
+            if name not in ARTIFACTS:
+                c.add(at, f"{_show(name)} is not one of the {len(ARTIFACTS)} artifacts an export writes (export.ARTIFACTS)")
+            elif name in names:
+                c.add(at, f"{_show(name)} is listed more than once")
+            else:
                 names.append(name)
     if "held_artifacts" in root:  # added in 1.1.0; a 1.0.x file has no such key
-        held = _list(c, root["held_artifacts"], "data.held_artifacts", MAX_NAMES, "artifacts")
+        held = _list(c, root["held_artifacts"], "data.held_artifacts", len(ARTIFACTS), "artifacts")  # a subset of the artifacts
         if held is not None:
             for index, item in enumerate(held):
                 if not isinstance(item, str) or item not in names or item == "meta" or held.index(item) != index:
@@ -1385,6 +1464,12 @@ LJUNG_BOX_LAGS = (5, 10, 20)
 ARCH_LM_LAGS = (5, 10)
 ARCH_LM_DDOF = 0
 NLAGS = 50
+# The texts the exporter states for the series the tests ran on and for Ljung-Box's model_df rule
+# (diagnostics.SERIES and LJUNG_BOX_MODEL_DF; tests/test_diagnostics.py ties them), pinned as the lags are:
+# the checks below run on that series' statistics with model_df = p + q, so a file stating another series
+# or rule beside them would describe tests this reader did not check. Compared exactly.
+SERIES = "standardized_forecasts_error after the burn-in"
+LJUNG_BOX_MODEL_DF = "p + q"
 # A p-value Python recomputes from its statistic must agree to P_REL relative, or within P_FLOOR
 # when both are that small (a p-value below about 1e-308 underflows to 0.0, or loses digits).
 P_REL = 1e-9
@@ -1811,18 +1896,24 @@ def _default_trend(d: int) -> str:
 
 def _check_information(c: _Checker, vals: dict[str, float | None], llf: float, k: int, n: int | None, at: str) -> None:
     """Python only: statsmodels' criteria from llf, k parameters and n = nobs_effective
-    (statsmodels/tools/eval_measures.py, called by mlemodel.py with nobs_effective)."""
+    (statsmodels/tools/eval_measures.py, called by mlemodel.py with nobs_effective). HQIC is
+    eval_measures.py:502, -2 llf + 2 ln(ln n) k, called at mlemodel.py:3422 with nobs_effective and
+    df_model (statsmodels 0.15.0). ln(ln n) is negative for 1 < n < e and finite from n = 2 up; at n = 1
+    it is ln 0, and statsmodels gives -inf, which no JSON file can hold."""
     want: dict[str, float | None] = {"aic": -2 * llf + 2 * k}
     if n is not None:
         want["bic"] = -2 * llf + math.log(n) * k
         # statsmodels returns +inf when n - k - 1 <= 0, which no JSON file can hold.
         want["aicc"] = -2 * llf + 2 * k * n / (n - k - 1) if n - k - 1 > 0 else None
-    labels = {"aic": "-2 llf + 2 k", "bic": "-2 llf + ln(n) k", "aicc": "-2 llf + 2 k n / (n - k - 1)"}
+        want["hqic"] = -2 * llf + 2 * math.log(math.log(n)) * k if n > 1 else None
+    labels = {"aic": "-2 llf + 2 k", "bic": "-2 llf + ln(n) k", "aicc": "-2 llf + 2 k n / (n - k - 1)", "hqic": "-2 llf + 2 ln(ln n) k"}
     for name, expected in want.items():
         got = vals.get(name)
         if got is None:
             continue
-        if expected is None:
+        if expected is None and name == "hqic":
+            c.add(f"{at}.{name}", f"is {got}, but n = {n}, where ln(ln n) is undefined (statsmodels gives -inf)")
+        elif expected is None:
             c.add(f"{at}.{name}", f"is {got}, but n - k - 1 = {n} - {k} - 1 <= 0, where AICc is undefined (statsmodels gives inf)")
         elif not _close(got, expected):
             c.add(f"{at}.{name}", f"is {got}, but {labels[name]} is {expected}{'' if name == 'aic' else ' (n = nobs_effective)'}")
@@ -1867,8 +1958,8 @@ def validate_fit(data: object) -> list[str]:
     if ds is not _MISSING and (s := c.obj(ds, "data.diagnostic_settings")) is not None:
         sat = "data.diagnostic_settings"
         _pinned(c, c.number(c.key(s, "alpha", sat), f"{sat}.alpha"), f"{sat}.alpha", ALPHA, "tests at alpha")
-        for name in ("series", "ljung_box_model_df"):
-            c.string(c.key(s, name, sat), f"{sat}.{name}")
+        _pinned(c, c.string(c.key(s, "series", sat), f"{sat}.series"), f"{sat}.series", SERIES, "runs the residual tests on")
+        _pinned(c, c.string(c.key(s, "ljung_box_model_df", sat), f"{sat}.ljung_box_model_df"), f"{sat}.ljung_box_model_df", LJUNG_BOX_MODEL_DF, "checks Ljung-Box with model_df")
         _pinned(c, _int_list(c, c.key(s, "ljung_box_lags", sat), f"{sat}.ljung_box_lags"), f"{sat}.ljung_box_lags", list(LJUNG_BOX_LAGS), "checks Ljung-Box at lags")
         _pinned(c, _int_list(c, c.key(s, "arch_lm_lags", sat), f"{sat}.arch_lm_lags"), f"{sat}.arch_lm_lags", list(ARCH_LM_LAGS), "checks ARCH-LM at lags")
         _pinned(c, c.integer(c.key(s, "arch_lm_ddof", sat), f"{sat}.arch_lm_ddof"), f"{sat}.arch_lm_ddof", ARCH_LM_DDOF, "checks ARCH-LM with ddof")
@@ -2093,7 +2184,9 @@ def validate_residuals(data: object, model_id: str) -> list[str]:
     if z is not None and z != Z_FOR_ALPHA[0.05]:
         c.add("data.z", f"is {z}, expected {Z_FOR_ALPHA[0.05]}")
         z = None
-    nlags = c.integer(c.key(root, "nlags", "data"), "data.nlags", minimum=1)
+    # Pinned (NLAGS), as fit.json's nlags is: the correlograms are counted against the reader's 50 whatever the
+    # file says, so a file alone that states 49 and has 49 rows is refused, not only beside fit.json.
+    _pinned(c, c.integer(c.key(root, "nlags", "data"), "data.nlags", minimum=1), "data.nlags", NLAGS, "checks the correlograms at nlags")
     rows = _list(c, c.key(root, "rows", "data"), "data.rows", MAX_LIST, "rows")
     if rows is not None:
         if n is not None and len(rows) != n:
@@ -2108,7 +2201,7 @@ def validate_residuals(data: object, model_id: str) -> list[str]:
             c.number(c.key(row, "resid_std", f"data.rows[{i}]"), f"data.rows[{i}].resid_std")
         _check_ascending(c, dates, "data.rows")
     for name in ("acf", "acf_squared"):
-        _check_correlogram(c, c.key(root, name, "data"), f"data.{name}", nlags, n, z)
+        _check_correlogram(c, c.key(root, name, "data"), f"data.{name}", NLAGS, n, z)
     qq = _list(c, c.key(root, "qq", "data"), "data.qq", MAX_LIST, "points")
     if qq is not None:
         if n is not None and len(qq) != n:
@@ -2134,15 +2227,30 @@ def validate_residuals(data: object, model_id: str) -> list[str]:
     return c.problems
 
 
+def _fit_model_list(fit: object, problems: _Problems, against: str) -> list[Any] | None:
+    """fit.json's models, or None after one problem when there are more than MODEL_IDS (validate_fit's
+    problem too; counted here before anything walks them)."""
+    data = fit if isinstance(fit, dict) else {}
+    models = data.get("models") if isinstance(data.get("models"), list) else []
+    if len(models) > len(MODEL_IDS):
+        problems.append(f"fit: models has {len(models)} entries, more than the {len(MODEL_IDS)} a reader takes, so no {against} file is checked against it")
+        return None
+    return models
+
+
+@_capped_across
 def validate_fit_residuals(fit: object, residuals: dict[str, object]) -> list[str]:
     """Problems between `fit` and the `residuals_<id>` payloads (each already valid on its own): each
     model's file must exist and hold that model's id, `n` and `burn_excluded` (so n + burn = nobs),
     the fit's `nlags`, and its two outside counts. The export tool runs this on the files on disk
     after a write, `--only` included, so a fit.json rebuilt alone after a code change cannot sit
-    beside residual files from the old code. Like the other validators it never raises."""
-    problems: list[str] = []
+    beside residual files from the old code. Like the other validators it never raises; it stops at
+    MAX_PROBLEMS problems (_capped_across)."""
+    problems = _Problems()
     data = fit if isinstance(fit, dict) else {}
-    models = data.get("models") if isinstance(data.get("models"), list) else []
+    models = _fit_model_list(fit, problems, "residuals")
+    if models is None:
+        return problems
     settings = data.get("diagnostic_settings") if isinstance(data.get("diagnostic_settings"), dict) else {}
     for model in models:
         # A model whose id is not one of MODEL_IDS is validate_fit's problem; it names no file here.
@@ -2165,8 +2273,10 @@ def validate_fit_residuals(fit: object, residuals: dict[str, object]) -> list[st
         for field, got, want in checks:
             if got != want:
                 problems.append(f"{name}: {field} is {_show(got)}, but fit.json says {_show(want)}")
-    extra = sorted(set(residuals) - {f"residuals_{m['id']}" for m in models if isinstance(m, dict) and m.get("id") in MODEL_IDS})
-    problems += [f"{name}: fit.json has no model {name.removeprefix('residuals_')!r}" for name in extra]
+    known = {f"residuals_{m['id']}" for m in models if isinstance(m, dict) and m.get("id") in MODEL_IDS}
+    # The first names in order only: a caller's dict of a million files is not sorted whole.
+    extra = heapq.nsmallest(MAX_PROBLEMS + 1, (name for name in residuals if name not in known))
+    problems += [f"{name}: fit.json has no model {_show(name.removeprefix('residuals_'))}" for name in extra]
     return problems
 
 
@@ -2961,9 +3071,7 @@ def validate_evaluation(data: object) -> list[str]:
     return c.problems
 
 
-def _fit_models(fit: object) -> dict[str, dict[str, Any]]:
-    data = fit if isinstance(fit, dict) else {}
-    models = data.get("models") if isinstance(data.get("models"), list) else []
+def _fit_models(models: list[Any]) -> dict[str, dict[str, Any]]:
     return {m["id"]: m for m in models if isinstance(m, dict) and isinstance(m.get("id"), str)}
 
 
@@ -3007,14 +3115,20 @@ def _one_step_variance_problems(name: str, data: dict[str, Any], sigma2: float |
     return problems
 
 
+@_capped_across
 def validate_forecast_fit(fit: object, residuals: dict[str, object], forecasts: dict[str, object]) -> list[str]:
     """Problems between the forecast files and `fit` and the `residuals_<id>` files (each already valid
     on its own): each file's order, trend and label are its model's, its t_df is that model's residual
     t fit's df, a refit file's first n_obs is n_train + REFIT_EVERY, and each one-step row's sd_log^2
     is its parameters' sigma2 to SIGMA2_REL (`_one_step_variance_problems`; only for a forecast file
-    valid on its own). Never raises."""
-    problems: list[str] = []
-    models = _fit_models(fit)
+    valid on its own). Never raises. With fit.json's models counted first, at most 37 problems: three
+    fields and t_df for each file, one per window for each one-step file, and the refit's n_obs; the cap
+    (_capped_across) is there all the same."""
+    problems = _Problems()
+    listed = _fit_model_list(fit, problems, "forecast")
+    if listed is None:
+        return problems
+    models = _fit_models(listed)
     n_train = fit.get("n_train") if isinstance(fit, dict) else None
     for model_id, method in FORECASTS:
         name = f"forecast_{model_id}_{method}"
@@ -3063,18 +3177,40 @@ def _window_facts(window: dict[str, Any]) -> tuple[Any, ...]:
     return (window.get("id"), window.get("start"), window.get("end"), window.get("n"), window.get("origin"), [(r.get("date"), r.get("actual_log"), r.get("actual_usd")) for r in rows if isinstance(r, dict)])
 
 
+def _bounded_windows(name: str, data: object, problems: _Problems) -> list[Any] | None:
+    """A forecast file's windows, when it has a list of them; None for a file without one, and None after
+    one problem for a file with more than len(WINDOW_IDS) windows or a window of more than MAX_ROWS rows
+    (validate_forecast's problems too), counted before anything walks them."""
+    windows = data.get("windows") if isinstance(data, dict) else None
+    if not isinstance(windows, list):
+        return None
+    if len(windows) > len(WINDOW_IDS):
+        problems.append(f"{name}: has {len(windows)} windows, more than the {len(WINDOW_IDS)} a reader takes, so it is not checked against the other files")
+        return None
+    for w in windows:
+        rows = w.get("rows") if isinstance(w, dict) else None
+        if isinstance(rows, list) and len(rows) > MAX_ROWS:
+            problems.append(f"{name}: window {_show(w.get('id'))} has {len(rows)} rows, more than the {MAX_ROWS} a reader takes, so it is not checked against the other files")
+            return None
+    return windows
+
+
+@_capped_across
 def _same_windows(forecasts: dict[str, object]) -> list[str]:
     """Every forecast file's windows equal the first file's: the same ids, bounds, origins, dates and
-    actuals, exactly. One problem per file and window at most."""
+    actuals, exactly. One problem for a file past its bounds (`_bounded_windows`, checked before any
+    window is walked; the file is then left out), else one per file and window: 12 for the seven files
+    at most."""
+    problems = _Problems()
     names = [f"forecast_{m}_{meth}" for m, meth in FORECASTS]
-    present = [n for n in names if isinstance(forecasts.get(n), dict) and isinstance(forecasts[n].get("windows"), list)]
+    windows = {n: _bounded_windows(n, forecasts.get(n), problems) for n in names}
+    present = [n for n in names if windows[n] is not None]
     if not present:
-        return []
+        return problems
     reference = present[0]
-    ref = [_window_facts(w) for w in forecasts[reference]["windows"] if isinstance(w, dict)]
-    problems = []
+    ref = [_window_facts(w) for w in windows[reference] if isinstance(w, dict)]
     for name in present[1:]:
-        mine = [_window_facts(w) for w in forecasts[name]["windows"] if isinstance(w, dict)]
+        mine = [_window_facts(w) for w in windows[name] if isinstance(w, dict)]
         if len(mine) != len(ref):
             problems.append(f"{name}: has {len(mine)} windows, but {reference} has {len(ref)}")
             continue
@@ -3085,27 +3221,34 @@ def _same_windows(forecasts: dict[str, object]) -> list[str]:
     return problems
 
 
+@_capped_across
 def validate_forecast_prices(prices: object, forecasts: dict[str, object]) -> list[str]:
     """Problems between the forecast files and `prices` (each already valid on its own): each window's
     rows are that segment's rows of prices.json (date, log_close, close_usd, exactly), its origin is the
     row before the segment, and its start, end and n are the segment's; and its start, end, n and origin
     date are prices.json's `splits` (the window's segment, and the end of the segment before it), which
     validate_prices ties to the rows and to the pinned out-of-sample window. One problem per file and
-    window at most for each tie. Never raises."""
+    window at most for each tie, so 28 for the seven files; prices.json's rows and each file's windows are
+    bounded before they are walked (MAX_LIST, `_bounded_windows`), and the cap (_capped_across) is there
+    all the same. Never raises."""
+    problems = _Problems()
     data = prices if isinstance(prices, dict) else {}
     rows = data.get("rows") if isinstance(data.get("rows"), list) else []
+    if len(rows) > MAX_LIST:  # validate_prices's problem too
+        problems.append(f"prices: rows has {len(rows)} entries, more than the {MAX_LIST} a reader takes, so no forecast file is checked against it")
+        return problems
     table = [r for r in rows if isinstance(r, dict)]
     splits = data.get("splits") if isinstance(data.get("splits"), dict) else {}
-    problems = []
+    segment_rows = {wid: [i for i, r in enumerate(table) if r.get("segment") == wid] for wid in WINDOW_IDS}
     for name in (f"forecast_{m}_{meth}" for m, meth in FORECASTS):
         forecast = forecasts.get(name)
         if not isinstance(forecast, dict) or not isinstance(forecast.get("windows"), list):
             problems.append(f"{name}: missing")
             continue
-        for w in forecast["windows"]:
+        for w in _bounded_windows(name, forecast, problems) or []:
             if not isinstance(w, dict) or w.get("id") not in WINDOW_IDS:
                 continue
-            index = [i for i, r in enumerate(table) if r.get("segment") == w["id"]]
+            index = segment_rows[w["id"]]
             want_rows = [(table[i].get("date"), table[i].get("log_close"), table[i].get("close_usd")) for i in index]
             before = table[index[0] - 1] if index and index[0] > 0 else {}
             want = (w["id"], want_rows[0][0] if want_rows else None, want_rows[-1][0] if want_rows else None, len(want_rows), {"date": before.get("date"), "log_close": before.get("log_close"), "close_usd": before.get("close_usd")}, want_rows)
@@ -3123,6 +3266,7 @@ def validate_forecast_prices(prices: object, forecasts: dict[str, object]) -> li
     return problems
 
 
+@_capped_across
 def validate_forecast_evaluation(evaluation: object, forecasts: dict[str, object]) -> list[str]:
     """Problems between `evaluation` and the forecast files: every file describes the same days and
     actuals (`_same_windows`), the windows and t_df agree, and every metric, every random-walk metric,
@@ -3132,8 +3276,10 @@ def validate_forecast_evaluation(evaluation: object, forecasts: dict[str, object
     The checks assume each file is valid on its own, as the export tool's are; a file that is not
     (validate_forecast, validate_evaluation) is named once and left out of them, so a malformed file
     cannot make them raise. Never raises: a number that cannot be recomputed (an overflow, a division
-    by a zero actual) is reported as a problem."""
-    problems: list[str] = []
+    by a zero actual) is reported as a problem. Every list it walks is a valid file's, so bounded; an
+    evaluation that disagrees with every row gives a few hundred problems, cut at MAX_PROBLEMS
+    (_capped_across)."""
+    problems = _Problems()
     valid: dict[str, object] = {}
     for model_id, method in FORECASTS:
         name = f"forecast_{model_id}_{method}"

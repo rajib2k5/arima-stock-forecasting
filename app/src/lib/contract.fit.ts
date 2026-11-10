@@ -62,6 +62,13 @@ export const LJUNG_BOX_LAGS: readonly number[] = [5, 10, 20]
 export const ARCH_LM_LAGS: readonly number[] = [5, 10]
 export const ARCH_LM_DDOF = 0
 export const NLAGS = 50
+/**
+ * The texts the exporter states for the series the tests ran on and for Ljung-Box's model_df rule
+ * (diagnostics.SERIES and LJUNG_BOX_MODEL_DF; payloads.SERIES and LJUNG_BOX_MODEL_DF), pinned as the lags
+ * are and compared exactly: a file stating another series or rule would describe tests nobody checked.
+ */
+export const SERIES = 'standardized_forecasts_error after the burn-in'
+export const LJUNG_BOX_MODEL_DF = 'p + q'
 /** The most warnings one fit's list may hold (payloads.MAX_WARNINGS), checked before the list is read. */
 export const MAX_WARNINGS = 100
 /** statsmodels 0.15.0 labels ARIMA's drift as an exogenous "x1" (payloads.LIBRARY_NAMES). */
@@ -753,11 +760,15 @@ function readFit(r: Reader, data: Record<string, unknown>): FitResult {
       if (value !== undefined && !sameValues(value, own)) r.errors.push(`${at}: is ${show(value)}, but this reader ${rule} ${show(own)}`)
       return value === undefined ? undefined : [...own]
     }
+    const pinText = (value: string | undefined, at: string, own: string, rule: string): string | undefined => {
+      if (value !== undefined && value !== own) r.errors.push(`${at}: is ${show(value)}, but this reader ${rule} ${show(own)}`)
+      return value === undefined ? undefined : own
+    }
     settings = clean<Fit['diagnostic_settings']>(r, sStart, {
       alpha: pinNumber(r.num(r.field(ds, 'alpha', sat), `${sat}.alpha`), `${sat}.alpha`, ALPHA, 'tests at alpha'),
-      series: r.str(r.field(ds, 'series', sat), `${sat}.series`),
+      series: pinText(r.str(r.field(ds, 'series', sat), `${sat}.series`), `${sat}.series`, SERIES, 'runs the residual tests on'),
       ljung_box_lags: pinList(lagList(r, r.field(ds, 'ljung_box_lags', sat), `${sat}.ljung_box_lags`), `${sat}.ljung_box_lags`, LJUNG_BOX_LAGS, 'checks Ljung-Box at lags'),
-      ljung_box_model_df: r.str(r.field(ds, 'ljung_box_model_df', sat), `${sat}.ljung_box_model_df`),
+      ljung_box_model_df: pinText(r.str(r.field(ds, 'ljung_box_model_df', sat), `${sat}.ljung_box_model_df`), `${sat}.ljung_box_model_df`, LJUNG_BOX_MODEL_DF, 'checks Ljung-Box with model_df'),
       arch_lm_lags: pinList(lagList(r, r.field(ds, 'arch_lm_lags', sat), `${sat}.arch_lm_lags`), `${sat}.arch_lm_lags`, ARCH_LM_LAGS, 'checks ARCH-LM at lags'),
       arch_lm_ddof: pinNumber(r.int(r.field(ds, 'arch_lm_ddof', sat), `${sat}.arch_lm_ddof`), `${sat}.arch_lm_ddof`, ARCH_LM_DDOF, 'checks ARCH-LM with ddof'),
       nlags: pinNumber(r.int(r.field(ds, 'nlags', sat), `${sat}.nlags`, 1), `${sat}.nlags`, NLAGS, 'checks the correlograms at nlags'),
@@ -867,7 +878,11 @@ function readResiduals(r: Reader, data: Record<string, unknown>, modelId: ModelI
   const burn = bounded(r, r.field(data, 'burn_excluded', 'data'), 'data.burn_excluded', MAX_D)
   const z = r.num(r.field(data, 'z', 'data'), 'data.z')
   if (z !== undefined && z !== Z95) r.errors.push(`data.z: is ${z}, expected ${Z95}`)
-  const nlags = r.int(r.field(data, 'nlags', 'data'), 'data.nlags', 1)
+  // Pinned (NLAGS), as fit.json's nlags is: the correlograms are counted against the reader's 50 whatever the
+  // file says, so a file alone that states 49 and has 49 rows is refused (payloads.validate_residuals the same).
+  const stated = r.int(r.field(data, 'nlags', 'data'), 'data.nlags', 1)
+  if (stated !== undefined && stated !== NLAGS) r.errors.push(`data.nlags: is ${stated}, but this reader checks the correlograms at nlags ${NLAGS}`)
+  const nlags = stated === undefined ? undefined : NLAGS
 
   const rowsRaw = r.list(r.field(data, 'rows', 'data'), 'data.rows', MAX_LIST, 'rows')
   let rows: Residuals['rows'] | undefined
@@ -887,8 +902,8 @@ function readResiduals(r: Reader, data: Record<string, unknown>, modelId: ModelI
     })
     if (r.errors.length === start) rows = out as Residuals['rows']
   }
-  const acf = parseCorrelogram(r, r.field(data, 'acf', 'data'), 'data.acf', nlags)
-  const acfSquared = parseCorrelogram(r, r.field(data, 'acf_squared', 'data'), 'data.acf_squared', nlags)
+  const acf = parseCorrelogram(r, r.field(data, 'acf', 'data'), 'data.acf', NLAGS)
+  const acfSquared = parseCorrelogram(r, r.field(data, 'acf_squared', 'data'), 'data.acf_squared', NLAGS)
 
   const qqRaw = r.list(r.field(data, 'qq', 'data'), 'data.qq', MAX_LIST, 'points')
   let qq: Residuals['qq'] | undefined

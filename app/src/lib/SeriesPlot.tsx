@@ -6,7 +6,8 @@
  * and dark themes without re-rendering. All geometry is done by the pure helpers in plot.ts.
  */
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
-import { extent, formatTick, gapPath, linearScale, nearestIndex, niceStep, niceTicks } from './plot'
+import { extent, formatTick, gapPath, linearScale, nearestIndex, niceStep, niceTicks, thinTicks } from './plot'
+import { useDrawingWidth } from './useDrawingWidth'
 
 export type PlotTone = 'primary' | 'secondary' | 'muted'
 
@@ -41,7 +42,8 @@ export interface SeriesPlotProps {
   height?: number
   /**
    * Width of the drawing in SVG units. The SVG scales to its container, so text shrinks with it:
-   * a small panel uses a narrower drawing to keep its 10-unit labels readable.
+   * a small panel uses a narrower drawing to keep its 10-unit labels readable. A container narrower
+   * than this draws at its own width instead (useDrawingWidth), so a phone keeps 10 px labels too.
    */
   width?: number
   /** Draw a horizontal line at y = 0 when 0 is inside the y range. */
@@ -53,9 +55,10 @@ export interface SeriesPlotProps {
 export const PLOT_WIDTH = 720
 const PAD = { l: 58, r: 14, t: 26, b: 26 }
 
-export function SeriesPlot({ title, xs, series, yLabel, bands = [], xTicks, height = 240, width = PLOT_WIDTH, zeroLine = false, readout }: SeriesPlotProps) {
+export function SeriesPlot({ title, xs, series, yLabel, bands = [], xTicks, height = 240, width: nominal = PLOT_WIDTH, zeroLine = false, readout }: SeriesPlotProps) {
   const [cursor, setCursor] = useState<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const [figureRef, width] = useDrawingWidth(nominal)
 
   const layout = useMemo(() => {
     const yExt = extent(series.map((s) => s.ys))
@@ -69,7 +72,8 @@ export function SeriesPlot({ title, xs, series, yLabel, bands = [], xTicks, heig
     const toX = linearScale([PAD.l, width - PAD.r], xExt)
     const yTicks = niceTicks(yDomain[0], yDomain[1], 4)
     const yStep = niceStep(yDomain[1] - yDomain[0], 4)
-    const xt = xTicks ?? niceTicks(xExt[0], xExt[1], 5).map((x) => ({ x, label: formatTick(x, niceStep(xExt[1] - xExt[0], 5)) }))
+    const allTicks = xTicks ?? niceTicks(xExt[0], xExt[1], 5).map((x) => ({ x, label: formatTick(x, niceStep(xExt[1] - xExt[0], 5)) }))
+    const xt = thinTicks(allTicks, allTicks.map((t) => sx(t.x)))
     // Half the spacing between neighbouring x values, so a band covers its rows' full width.
     const half = xs.length > 1 ? (sx(xs[xs.length - 1]) - sx(xs[0])) / (xs.length - 1) / 2 : 0
     const paths = series.map((s) => gapPath(xs, s.ys, sx, sy))
@@ -102,7 +106,7 @@ export function SeriesPlot({ title, xs, series, yLabel, bands = [], xTicks, heig
 
   const interactive = readout !== undefined
   return (
-    <figure className="plot">
+    <figure className="plot" ref={figureRef}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}

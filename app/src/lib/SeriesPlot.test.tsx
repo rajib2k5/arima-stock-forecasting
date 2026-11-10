@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { PLOT_WIDTH, SeriesPlot } from './SeriesPlot'
+import { fakeResizeObserver } from '../test/resize'
 
 const xs = [0, 1, 2, 3]
 
@@ -12,6 +13,10 @@ const xs = [0, 1, 2, 3]
 function pointAt(target: Element, clientX: number) {
   fireEvent(target, new MouseEvent('pointermove', { bubbles: true, clientX }))
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('SeriesPlot', () => {
   it('draws one path per series, broken at nulls, with an accessible name', () => {
@@ -139,6 +144,34 @@ describe('SeriesPlot', () => {
     expect(container.querySelectorAll('line.zero')).toHaveLength(1)
     rerender(<SeriesPlot title="Z" xs={xs} series={[{ name: 'a', ys: [1, 2, 3, 4], tone: 'primary' }]} yLabel="u" zeroLine />)
     expect(container.querySelectorAll('line.zero')).toHaveLength(0)
+  })
+
+  it('draws one unit per pixel in a container narrower than its drawing, so its 10-unit labels stay 10 px on a phone', () => {
+    const ro = fakeResizeObserver()
+    const years = Array.from({ length: 12 }, (_, k) => ({ x: k, label: String(2015 + k) }))
+    const xs12 = years.map((t) => t.x)
+    const { container, unmount } = render(<SeriesPlot title="Phone" xs={xs12} series={[{ name: 'a', ys: xs12, tone: 'primary' }]} yLabel="u" xTicks={years} readout={(i) => `row ${i}`} />)
+    const svg = screen.getByRole('img', { name: 'Phone' })
+    const ticks = () => [...container.querySelectorAll('text.tick')].map((t) => t.textContent)
+    expect(svg).toHaveAttribute('viewBox', '0 0 720 240')
+    expect(ticks()).toHaveLength(12)
+    // A 375 px phone leaves the card 293 px wide: the drawing becomes 293 units, its grid ends at 293 - 14.
+    ro.resizeTo(293)
+    expect(svg).toHaveAttribute('viewBox', '0 0 293 240')
+    expect(container.querySelector('line.grid')).toHaveAttribute('x2', '279')
+    // Twelve years 20 units apart would overlap: every second one is drawn.
+    expect(ticks()).toEqual(['2015', '2017', '2019', '2021', '2023', '2025'])
+    // The pointer maps onto the 293-unit drawing: 100 px is (100 − 58) / 221 × 11 = 2.1 rows along a plot area from 58 to 279.
+    svg.getBoundingClientRect = () => ({ left: 0, width: 293, top: 0, height: 240, right: 293, bottom: 240, x: 0, y: 0, toJSON: () => ({}) })
+    pointAt(svg, 100)
+    expect(screen.getByTestId('plot-cursor')).toHaveTextContent('row 2')
+    // A desktop card wider than the drawing keeps the drawing as it was.
+    ro.resizeTo(1018)
+    expect(svg).toHaveAttribute('viewBox', '0 0 720 240')
+    expect(ticks()).toHaveLength(12)
+    expect(ro.observed()).toBe(1)
+    unmount()
+    expect(ro.observed()).toBe(0)
   })
 
   it('labels the x axis with nice ticks when no ticks are given', () => {

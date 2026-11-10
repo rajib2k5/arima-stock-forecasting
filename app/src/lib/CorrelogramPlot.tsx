@@ -6,22 +6,25 @@
  */
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { bandPath, correlogramDomain, lagTicks, readoutText, type CorrelogramBar } from './correlogram'
-import { formatTick, linearScale, nearestIndex, niceStep, niceTicks } from './plot'
+import { formatTick, linearScale, nearestIndex, niceStep, niceTicks, thinTicks } from './plot'
+import { useDrawingWidth } from './useDrawingWidth'
 
 export interface CorrelogramPlotProps {
   title: string
   /** "ACF" or "PACF", for the readout. */
   label: string
   bars: readonly CorrelogramBar[]
+  /** Width of the drawing in SVG units; a narrower container draws at its own width (useDrawingWidth). */
   width?: number
   height?: number
 }
 
 const PAD = { l: 46, r: 10, t: 22, b: 24 }
 
-export function CorrelogramPlot({ title, label, bars, width = 420, height = 220 }: CorrelogramPlotProps) {
+export function CorrelogramPlot({ title, label, bars, width: nominal = 420, height = 220 }: CorrelogramPlotProps) {
   const [cursor, setCursor] = useState<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const [figureRef, width] = useDrawingWidth(nominal)
   const layout = useMemo(() => {
     if (bars.length === 0) return null
     const lags = bars.map((b) => b.lag)
@@ -33,10 +36,12 @@ export function CorrelogramPlot({ title, label, bars, width = 420, height = 220 
     const half = (sx(1) - sx(0)) / 2
     const yTicks = niceTicks(yDomain[0], yDomain[1], 4)
     const yStep = niceStep(yDomain[1] - yDomain[0], 4)
-    return { lags, sx, sy, toX, half, yTicks, yStep, band: bandPath(bars, sx, sy, half) }
+    const ticks = lagTicks(bars).map((lag) => ({ lag, label: String(lag) }))
+    const xTicks = thinTicks(ticks, ticks.map((t) => sx(t.lag)))
+    return { lags, sx, sy, toX, half, yTicks, yStep, xTicks, band: bandPath(bars, sx, sy, half) }
   }, [bars, width, height])
   if (!layout) return <p className="sub">No lags to plot.</p>
-  const { lags, sx, sy, toX, half, yTicks, yStep, band } = layout
+  const { lags, sx, sy, toX, half, yTicks, yStep, xTicks, band } = layout
 
   const moveTo = (i: number) => setCursor(Math.max(0, Math.min(bars.length - 1, i)))
   const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
@@ -58,7 +63,7 @@ export function CorrelogramPlot({ title, label, bars, width = 420, height = 220 
   }
   const barWidth = Math.max(1, Math.min(6, half * 0.9))
   return (
-    <figure className="plot correlogram">
+    <figure className="plot correlogram" ref={figureRef}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
@@ -79,9 +84,9 @@ export function CorrelogramPlot({ title, label, bars, width = 420, height = 220 
           </g>
         ))}
         <line className="zero" x1={PAD.l} x2={width - PAD.r} y1={sy(0)} y2={sy(0)} />
-        {lagTicks(bars).map((lag) => (
-          <text key={lag} className="tick" x={sx(lag)} y={height - 8} textAnchor="middle">
-            {lag}
+        {xTicks.map((t) => (
+          <text key={t.lag} className="tick" x={sx(t.lag)} y={height - 8} textAnchor="middle">
+            {t.label}
           </text>
         ))}
         <text className="axis-label" x={4} y={13}>

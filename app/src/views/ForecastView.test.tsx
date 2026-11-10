@@ -7,6 +7,7 @@ import { parseEnvelope, type Envelope } from '../lib/contract'
 import { COVERAGE_VERDICTS, DM_VERDICTS, type CoverageVerdict, type DmVerdict, type Evaluation } from '../lib/contract.forecast'
 import { COVERAGE_LABELS, COVERAGE_READINGS, DM_LABELS, DM_READINGS, DM_STATIC_NOTE } from '../lib/forecastText'
 import { fixtureEvaluation, forecastEnvelope } from '../test/fixtures/payloads'
+import { fakeResizeObserver } from '../test/resize'
 
 function ready(edit?: (e: Evaluation) => void): EvaluationState {
   const evaluation = fixtureEvaluation()
@@ -65,6 +66,7 @@ async function walkForward(options: { reduced?: boolean; state?: EvaluationState
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllGlobals()
 })
 
 describe('ForecastPage', () => {
@@ -252,6 +254,30 @@ describe('ForecastPage', () => {
     expect(container.querySelectorAll('svg:not([width])')).toHaveLength(0)
   })
 
+  it('draws both charts one unit per pixel in a phone-width card, with as many dates as fit', async () => {
+    const ro = fakeResizeObserver()
+    await walkForward()
+    const dates = (id: string) => Array.from(screen.getByTestId(id).querySelectorAll('text.tick')).map((el) => el.textContent)
+    expect(dates('fan-chart')).toEqual(['2021-06-21', '2021-06-22', '2021-06-23', '2021-06-24', '2021-06-25'])
+    // A 375 px phone leaves the card 293 px wide: five dates 55 units apart would overlap, so every second one is drawn.
+    ro.resizeTo(293)
+    for (const id of ['fan-chart', 'walk-chart']) {
+      const svg = screen.getByTestId(id)
+      expect([svg.getAttribute('width'), svg.getAttribute('height'), svg.getAttribute('viewBox')]).toEqual(['293', '300', '0 0 293 300'])
+      expect(svg.querySelector('g.tick line.grid')).toHaveAttribute('x2', '279')
+      expect(dates(id)).toEqual(['2021-06-21', '2021-06-23', '2021-06-25'])
+    }
+    // The last day's mark sits at the right end of the narrower plot area.
+    fireEvent.click(button('Step forward'))
+    fireEvent.click(button('Step forward'))
+    fireEvent.click(button('Step forward'))
+    fireEvent.click(button('Step forward'))
+    expect(screen.getByTestId('walk-fan').querySelector('line')).toHaveAttribute('x1', '279')
+    ro.resizeTo(1018)
+    expect(screen.getByTestId('fan-chart')).toHaveAttribute('viewBox', '0 0 720 300')
+    expect(dates('fan-chart')).toHaveLength(5)
+  })
+
   it('shows the errors of the picked forecast beside the random walk of the same kind and window, as exported', async () => {
     render(<ForecastPage state={ready()} load={pending} />)
     const cells = () =>
@@ -325,6 +351,20 @@ describe('ForecastPage', () => {
       const coverage = within(screen.getByRole('table', { name: 'Interval coverage' })).getAllByRole('rowgroup').slice(1)
       expect(coverage.map((g) => within(g).getAllByRole('row')[0]).map((r) => within(r).getAllByRole('cell')).map(([, inside, lr]) => [inside.textContent?.match(/\((.*)\)/)?.[1], lr.textContent])).toEqual(c.cov)
     })
+  })
+
+  it('sets a tiny DM or Kupiec p as a power of ten in a superscript and one that underflowed as "< 1e-300", never a bare "0"', () => {
+    const state = ready((e) => {
+      e.dm.forEach((d) => (d.p_value = 3e-40))
+      e.coverage.forEach((c) => (c.p_value = c.p_value === null ? null : 0))
+    })
+    render(<ForecastPage state={state} load={pending} />)
+    fireEvent.click(radio('Method', 'Walk-forward one-step'))
+    const dm = within(screen.getByRole('rowgroup', { name: 'Squared error' })).getAllByRole('cell')[3]
+    expect(dm.textContent).toBe('3.0 × 10−40')
+    expect(dm.querySelector('sup')?.textContent).toBe('−40')
+    const coverage = within(screen.getByRole('table', { name: 'Interval coverage' })).getAllByRole('rowgroup').slice(1)
+    expect(coverage.map((g) => within(g).getAllByRole('cell')[3].textContent)).toEqual(['< 1e-300', '< 1e-300', '< 1e-300', '< 1e-300'])
   })
 
   it('reads each DM row by its own exported verdict, with one verdict flipped at a time', () => {

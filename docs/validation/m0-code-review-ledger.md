@@ -44,7 +44,7 @@ built to break it failed to.
   - `make_envelope` raises `OverflowError`, not the `ValueError` its docstring promises, for an
     aware datetime near `datetime.min` or `datetime.max`. Example: `datetime(1,1,1,0,30,tzinfo=+01:00)`.
   - Nothing cross-checks `artifact == file stem`. The exporter writes the literal `"meta"` twice,
-    at `tools/export_app_data.py:37` and `:58`.
+    at `src/arima_forecasting/export.py:53` and `:201`.
 
 **Verdict: SURVIVES.** The literal tokens `NaN` and `Infinity` cannot be written.
 
@@ -67,11 +67,11 @@ scripts are in `scratchpad/review-code/c2/`. Result: **14 divergences out of 82.
 
 - ECMA-262, MakeFullYear (tc39.es, fetched 2026-10-28): "interpreting any value in the
   inclusive interval from 0 to 99 as a count of years since the start of 1900". So `Date.UTC(1,0,1)`
-  is the year 1901, and the year check at `app/src/lib/contract.ts:69` fails.
+  is the year 1901, and the year check at `app/src/lib/contract.ts:226-229` fails.
 - Python 3.12 docs: "MINYEAR is 1". So Python accepts years 1 to 99.
 - contract.md §1 lists the artifact pattern and says unknown keys are tolerated only "inside
   `data`" (contract.md:40-43). `parseEnvelope` checks only that `artifact` is non-empty
-  (`contract.ts:122`), and it ignores unknown top-level keys.
+  (`contract.ts:279-282`), and it ignores unknown top-level keys.
 
 **Mitigation in the app.** `loadArtifact.ts:19,40` re-checks the name pattern and equality with
 the requested name, so the artifact rows are masked end to end. The extra-key rows and the
@@ -94,7 +94,7 @@ direction. Add the 14 rows above as a shared fixture for both test suites.
 |---|---|
 | modified, staged-only, untracked, untracked with `status.showUntrackedFiles=no`, deleted, subdir path, detached HEAD (clean and dirty), git not on PATH, nonexistent path, path is a file | PASS |
 | `core.quotePath=false` and an untracked file named `b"\xff.txt"` | **RAISED** `UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff` (`text=True` at `provenance.py:31`) |
-| a non-executable `git` first on PATH | **RAISED** `PermissionError` (only `FileNotFoundError` is caught, at `provenance.py:45`) |
+| a non-executable `git` first on PATH | **RAISED** `PermissionError` (only `FileNotFoundError` is caught, at `provenance.py:100`) |
 | `update-index --assume-unchanged` or `--skip-worktree`, then modify | bare sha (**not dirty**) |
 | a new `.py` file hidden by `.git/info/exclude` | bare sha (**not dirty**) |
 | an `--object-format=sha256` repo | a 64-hex string, which `make_envelope` then rejects with `ValueError`, so the export aborts |
@@ -212,12 +212,12 @@ font from a third-party CDN", is false for any future Greek or math label (F4).
 - **Email:** the only addresses are `t@example.com` and `test@example.com`. `git config --local
   user.email` is `20094874+rajib2k5@users.noreply.github.com`.
 - **Outline copying:** 8-word shingles against `sample.txt` gave one shared shingle, the course
-  title, which appears as attribution (`README.md:70`, `AboutView.tsx:10`). 12-word shingles: 0.
+  title, which appears as attribution (`README.md:157`, `AboutView.tsx:10`). 12-word shingles: 0.
   6-grams in code: only that title.
-- **Private or suite references: REFUTED.** `docs/architecture/README.md:25,29` makes
+- **Private or suite references: REFUTED.** `docs/architecture/README.md:27-28` makes
   `vol-diagram-kit` the required rebuild tool. That repo has no git remote, and
   `api.github.com/repos/rajib2k5/vol-diagram-kit` returns 404. The "vol" project suite is also
-  named in `config.py:18-21`, ADR-0001:116-117 and `README.md:45` (`$VOL_DATA_DIR`,
+  named in `config.py:19-22`, ADR-0001:145-146 and `README.md:118` (`$VOL_DATA_DIR`,
   `~/data/vol-projects`).
 
 **Fix:** vendor the kit or publish it, and rename the variable and default to project-neutral
@@ -233,14 +233,14 @@ the sha256 verified.
 
 | ID | Mutant | Result |
 |---|---|---|
-| S1 | `contract.py:116` `!=` → `>` (accept major 0) | KILLED (2) |
-| S2 | `contract.py:72` drop `or generated_at.utcoffset() is None` | **SURVIVED** (300 passed) |
-| S3 | `contract.py:50-54` drop the strptime check | KILLED (3) |
+| S1 | `contract.py:183` `!=` → `>` (accept major 0) | KILLED (2) |
+| S2 | `contract.py:137` drop `or generated_at.utcoffset() is None` | **SURVIVED** (300 passed) |
+| S3 | `contract.py:114-117` drop the strptime check | KILLED (3) |
 | S4 (extra) | accept `UNCOMMITTED` | KILLED (1) |
-| A1 | `contract.ts:82` `sec <= 60` | KILLED (1) |
-| A2 | `contract.ts:69` drop the year equality | **SURVIVED** (266 passed) |
-| A3 | `contract.ts:232` `a.trim() === ''` → `a === ''` | **SURVIVED** (266 passed) |
-| A4 (extra) | `contract.ts:160` `>=` → `>` | KILLED (1) |
+| A1 | `contract.ts:241` `sec <= 60` | KILLED (1) |
+| A2 | `contract.ts:226` drop the year equality | **SURVIVED** (266 passed) |
+| A3 | `contract.ts:422` `a.trim() === ''` → `a === ''` | **SURVIVED** (266 passed) |
+| A4 (extra) | `contract.ts:335` `>=` → `>` | KILLED (1) |
 
 S5, `except FileNotFoundError` → `except OSError`, survived as expected: it is the fix, not a
 defect.
@@ -259,9 +259,9 @@ divergence, and no test pins its behaviour.
 - Hand-checked: 21 sampled refs, plus all short-form refs at 00-scaffold.md:169-170, 392-396,
   406-409, 436-439 and 489-491, and concepts:19 and 94.
 - **Defect 1.** `docs/milestones/00-scaffold.md:365` says "(lines 52-57)". The excerpt is at
-  `tools/export_app_data.py:54-59`.
+  `tools/export_app_data.py:137-139`.
 - **Defect 2.** `00-scaffold.md:482` cites `contract.md:40-43` for "the app's reader ignores
-  [unexpected envelope keys]". contract.md:40-43 says the reader ignores unknown keys **inside
+  [unexpected envelope keys]". contract.md:44-48 says the reader ignores unknown keys **inside
   `data`**.
 
 **Verdict: REFUTED (2 defects).**
@@ -364,7 +364,7 @@ change the answer". `$XDG_CONFIG_HOME/git/ignore` still applies under `GIT_CONFI
   `JUPYTER_CONFIG_DIR` to tmp in the `kernel_name` fixture.
 - **F4.** The jsDelivr fallback URL ships in the 3D chunk (see C7). Pass `unicodeFontsURL` as a
   local path, or assert in a test that labels stay inside the font's cmap.
-- **F5.** The notebook and `README.md:65` list a `reports/` folder that will not exist in the
+- **F5.** The notebook and `README.md:65` (as it was then; the README has since been rewritten) list a `reports/` folder that will not exist in the
   public tree (it is an empty, untracked directory).
 - **F6.** While this review ran, other processes wrote `docs/architecture/graph/` (about 6 MB:
   graph.html, graph.json, graph.svg) and `docs/validation/m0-stats-review-ledger.md` into the

@@ -25,8 +25,8 @@ export const SUPPORTED_MAJOR = 1
  * MAX_NAMES, the same values; contract.md, "Bounds"): a longer one is one short error and is not read.
  * Lists of days and points take MAX_LIST (no list of trading days can be longer than the download
  * window's 4,291 calendar days; the KDE grids have 200 points). Short lists of names (meta's
- * milestones and artifacts, eda's KDEs, the fit's lag lists) take MAX_NAMES. A list that enumerates a
- * pinned set or an order takes that set's size, where it is read.
+ * milestones, eda's KDEs, the fit's lag lists) take MAX_NAMES. A list that enumerates a pinned set or
+ * an order takes that set's size, where it is read (meta's artifacts and held_artifacts: ARTIFACTS's).
  */
 export const MAX_LIST = 10_000
 export const MAX_NAMES = 100
@@ -114,6 +114,33 @@ export const OOS_WINDOW = { start: '2024-01-01', end_exclusive: '2026-10-01' } a
 
 export const MILESTONE_STATUSES = ['done', 'current', 'planned'] as const
 export type MilestoneStatus = (typeof MILESTONE_STATUSES)[number]
+
+/**
+ * Every artifact an export writes, in its order (export.ARTIFACTS; payloads.ARTIFACTS holds the same names,
+ * and contract.realdata.test.ts ties this list to the committed meta.json, which the export writes from
+ * export.ARTIFACTS). meta's artifacts and held_artifacts name only these, each once at most: any other name
+ * is refused. meta may list fewer (the gate switches on the views whose files it lists), in any order.
+ */
+export const ARTIFACTS = [
+  'meta',
+  'prices',
+  'eda',
+  'stationarity',
+  'acf_pacf',
+  'aic_grid',
+  'fit',
+  'residuals_aic',
+  'residuals_bic',
+  'residuals_course',
+  'forecast_aic_static',
+  'forecast_aic_walk_forward',
+  'forecast_aic_refit',
+  'forecast_bic_static',
+  'forecast_bic_walk_forward',
+  'forecast_course_static',
+  'forecast_course_walk_forward',
+  'evaluation',
+] as const
 
 export interface Envelope {
   schema_version: string
@@ -383,13 +410,21 @@ function readMeta(data: Record<string, unknown>, errors: string[]): MetaResult {
   }
 
   let artifacts: string[] | undefined
+  // The valid names, each once: what held_artifacts may name (payloads.validate_meta's `names`).
+  const names: string[] = []
   if (!Object.hasOwn(data, 'artifacts')) errors.push('data.artifacts: missing')
   else if (!Array.isArray(data.artifacts)) errors.push(`data.artifacts: expected an array, got ${typeName(data.artifacts)}`)
-  else if (data.artifacts.length > MAX_NAMES) errors.push(tooMany('data.artifacts', data.artifacts.length, 'artifacts', MAX_NAMES))
+  else if (data.artifacts.length > ARTIFACTS.length) errors.push(tooMany('data.artifacts', data.artifacts.length, 'artifacts', ARTIFACTS.length)) // each name once at most
   else {
-    const bad = data.artifacts.findIndex((a) => typeof a !== 'string' || BLANK.test(a))
-    if (bad >= 0) errors.push(`data.artifacts[${bad}]: expected a non-empty string, got ${shown(data.artifacts[bad])}`)
-    else artifacts = data.artifacts as string[]
+    const before = errors.length
+    data.artifacts.forEach((a: unknown, i) => {
+      const at = `data.artifacts[${i}]`
+      if (typeof a !== 'string' || BLANK.test(a)) errors.push(`${at}: expected a non-empty string, got ${shown(a)}`)
+      else if (!(ARTIFACTS as readonly string[]).includes(a)) errors.push(`${at}: ${shown(a)} is not one of the ${ARTIFACTS.length} artifacts an export writes (export.ARTIFACTS)`)
+      else if (names.includes(a)) errors.push(`${at}: ${shown(a)} is listed more than once`)
+      else names.push(a)
+    })
+    if (errors.length === before) artifacts = names
   }
 
   let held: string[] | undefined = []
@@ -397,14 +432,14 @@ function readMeta(data: Record<string, unknown>, errors: string[]): MetaResult {
     if (!Array.isArray(data.held_artifacts)) {
       errors.push(`data.held_artifacts: expected an array, got ${typeName(data.held_artifacts)}`)
       held = undefined
-    } else if (data.held_artifacts.length > MAX_NAMES) {
-      errors.push(tooMany('data.held_artifacts', data.held_artifacts.length, 'artifacts', MAX_NAMES))
+    } else if (data.held_artifacts.length > ARTIFACTS.length) {
+      errors.push(tooMany('data.held_artifacts', data.held_artifacts.length, 'artifacts', ARTIFACTS.length)) // a subset of the artifacts
       held = undefined
     } else {
       // Each held name is a listed artifact, named once, and never meta itself: the app reads
       // meta.json to learn what is held, so meta cannot be missing on purpose.
       const list = data.held_artifacts
-      const bad = list.findIndex((a, i) => typeof a !== 'string' || !(artifacts ?? []).includes(a) || a === 'meta' || list.indexOf(a) !== i)
+      const bad = list.findIndex((a, i) => typeof a !== 'string' || !names.includes(a) || a === 'meta' || list.indexOf(a) !== i)
       if (bad >= 0) {
         errors.push(`data.held_artifacts[${bad}]: ${shown(list[bad])} must be a listed artifact other than meta, named once`)
         held = undefined

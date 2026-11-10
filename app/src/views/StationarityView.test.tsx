@@ -14,6 +14,10 @@ function ready(): StationarityState {
   }
 }
 
+/** A test row's ADF and KPSS p-value cells (after n, ADF τ; after the lag and KPSS η). */
+const adfP = (row: HTMLElement) => within(row).getAllByRole('cell')[2]
+const kpssP = (row: HTMLElement) => within(row).getAllByRole('cell')[5]
+
 describe('StationarityPage', () => {
   it('says it is loading both files', () => {
     render(<StationarityPage state={{ status: 'loading' }} />)
@@ -47,13 +51,37 @@ describe('StationarityPage', () => {
     expect(rows[0]).toHaveTextContent('−1.200')
     expect(rows[0]).toHaveTextContent('0.650')
     expect(rows[0]).toHaveTextContent('3 of 0–16')
-    expect(rows[0]).toHaveTextContent('≤ 0.01')
     expect(rows[0]).toHaveTextContent('Unit root')
     expect(rows[1]).toHaveAttribute('aria-current', 'true')
-    expect(rows[1]).toHaveTextContent('≥ 0.10')
-    expect(rows[1]).toHaveTextContent('1.0 × 10^-20')
+    // The KPSS p clipped at either edge of statsmodels' table, the exported 0.01 and 0.1 set as every other p.
+    expect(adfP(rows[0]).textContent).toBe('0.650')
+    expect(kpssP(rows[0]).textContent).toBe('≤ 0.010')
+    expect(kpssP(rows[1]).textContent).toBe('≥ 0.100')
+    expect(adfP(rows[1]).textContent).toBe('1.0 × 10−20')
     const trend = screen.getByRole('table', { name: 'ADF and KPSS with a constant and a trend' })
-    expect(within(trend).getAllByRole('row')[2]).toHaveTextContent('0.070')
+    expect(kpssP(within(trend).getAllByRole('row')[2]).textContent).toBe('0.070')
+  })
+
+  it('sets a tiny p as a power of ten in a superscript and one that underflowed as "< 1e-300", never "10^-" or a bare "0"', () => {
+    const state = ready()
+    if (state.status !== 'ready') throw new Error('unreachable')
+    const [log, diff1, diff2] = state.stationarity.transforms
+    log.adf.p_value = 0.0123
+    diff1.adf.p_value = 1e-50
+    diff2.adf.p_value = 0
+    render(<StationarityPage state={state} />)
+    const rows = within(screen.getByRole('table', { name: 'ADF and KPSS with a constant' })).getAllByRole('row').slice(1)
+    expect(adfP(rows[0]).textContent).toBe('0.012')
+    expect(adfP(rows[1]).textContent).toBe('1.0 × 10−50')
+    expect(adfP(rows[1]).querySelector('sup')?.textContent).toBe('−50')
+    expect(adfP(rows[2]).textContent).toBe('< 1e-300')
+    for (const row of rows) {
+      for (const p of [adfP(row), kpssP(row)]) {
+        // Neither the old "1.0 × 10^-50" nor toExponential's "1.0e-50".
+        expect(p.textContent).not.toMatch(/\^|\d\.\de-/)
+        expect(p.textContent?.trim()).not.toBe('0')
+      }
+    }
   })
 
   it('draws the ACF and PACF of the chosen d first, and of another d on request', () => {

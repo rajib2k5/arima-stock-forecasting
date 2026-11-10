@@ -196,15 +196,19 @@ def test_the_readers_pin_the_settings_the_exporter_writes():
     assert list(payloads.LJUNG_BOX_LAGS) == list(dg.LJUNG_BOX_LAGS) == [5, 10, 20]
     assert list(payloads.ARCH_LM_LAGS) == list(dg.ARCH_LM_LAGS) == [5, 10]
     assert payloads.NLAGS == dg.NLAGS == 50
+    assert payloads.SERIES == dg.SERIES == "standardized_forecasts_error after the burn-in"
+    assert payloads.LJUNG_BOX_MODEL_DF == dg.LJUNG_BOX_MODEL_DF == "p + q"
     # The ddof het_arch is given is in test_arch_lm_is_engles_n_r_squared...; the file states it too.
     result = fit(walk(), (1, 1, 1))
     written = {"primary": "aic", "models": [{"id": "aic", "order": [1, 1, 1]}]}
     dg.residual_payloads(written, {"aic": result}, pd.bdate_range("2015-01-01", periods=len(walk())))
     settings = written["diagnostic_settings"]
-    assert (settings["alpha"], settings["ljung_box_lags"], settings["arch_lm_lags"], settings["arch_lm_ddof"], settings["nlags"]) == (
+    assert (settings["alpha"], settings["ljung_box_lags"], settings["arch_lm_lags"], settings["arch_lm_ddof"], settings["nlags"], settings["series"], settings["ljung_box_model_df"]) == (
         payloads.ALPHA,
         list(payloads.LJUNG_BOX_LAGS),
         list(payloads.ARCH_LM_LAGS),
         payloads.ARCH_LM_DDOF,
         payloads.NLAGS,
+        payloads.SERIES,
+        payloads.LJUNG_BOX_MODEL_DF,
     )

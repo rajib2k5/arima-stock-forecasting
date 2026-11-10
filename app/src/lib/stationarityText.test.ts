@@ -1,20 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { adfLag, decisionSentence, formatP, kpssP, ndiffsSentence, signedFixed } from './stationarityText'
+import { adfLag, decisionSentence, kpssBound, ndiffsSentence, signedFixed } from './stationarityText'
 import { fixtureStationarity } from '../test/fixtures/payloads'
 
 describe('p-values', () => {
-  it('writes three decimals, or powers of ten below 0.001', () => {
-    expect(formatP(0.6543)).toBe('0.654')
-    expect(formatP(0.001)).toBe('0.001')
-    expect(formatP(8.12e-26)).toBe('8.1 × 10^-26')
-    expect(formatP(0)).toBe('0')
-  })
-
-  it('says "0.01 or less" and "0.10 or more" for a clipped KPSS p-value, and the number otherwise', () => {
+  it('puts "≤" before a KPSS p clipped at the table’s small edge, "≥" at its large edge, and nothing inside it', () => {
     const [log, diff1] = fixtureStationarity().transforms
-    expect(kpssP(log.kpss)).toBe('≤ 0.01')
-    expect(kpssP(diff1.kpss)).toBe('≥ 0.10')
-    expect(kpssP(diff1.with_trend.kpss)).toBe('0.070')
+    expect(kpssBound(log.kpss)).toBe('≤ ')
+    expect(kpssBound(diff1.kpss)).toBe('≥ ')
+    expect(kpssBound(diff1.with_trend.kpss)).toBe('')
   })
 
   it('shows the ADF lag against its search range', () => {

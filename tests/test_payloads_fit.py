@@ -19,7 +19,8 @@ from pathlib import Path
 import pytest
 from scipy import stats
 
-from arima_forecasting import payloads
+from arima_forecasting import contract, payloads
+from arima_forecasting.contract import more_problems
 from arima_forecasting.payloads import validate_fit, validate_fit_residuals, validate_residuals
 
 FIXTURES = Path(__file__).resolve().parent.parent / "app" / "src" / "test" / "fixtures"
@@ -57,6 +58,7 @@ FIT_CASES = [
     ("AIC is not -2 llf + 2k", [*INFO, "aic"], lambda v: v + 0.5, "-2 llf + 2 k"),
     ("BIC is not -2 llf + ln(n) k with n = nobs_effective", [*INFO, "bic"], lambda v: v + 0.5, "-2 llf + ln(n) k"),
     ("AICc is not -2 llf + 2 k n / (n - k - 1)", [*INFO, "aicc"], lambda v: v + 0.5, "2 k n / (n - k - 1)"),
+    ("HQIC is not -2 llf + 2 ln(ln n) k with n = nobs_effective", [*INFO, "hqic"], lambda v: v + 0.5, "-2 llf + 2 ln(ln n) k"),
     ("llf_gap is not llf - grid_llf", ["models", 0, "llf_gap"], lambda v: v + 1e-9, "llf - grid_llf"),
     ("the refit is outside the llf tolerance", ["models", 0], lambda m: {**m, "grid_llf": m["information"]["llf"] - 2e-6, "llf_gap": m["information"]["llf"] - (m["information"]["llf"] - 2e-6)}, "outside llf_tolerance 1e-06"),
     ("a modulus is not |re + i im|", ["models", 0, "inv_roots_ar", 0, "modulus"], lambda v: v + 0.01, "|re + i im|"),
@@ -256,6 +258,8 @@ def test_a_file_cannot_change_a_verdict_by_stating_other_lags():
         ("arch_lm_lags", [5], "is [5], but this reader checks ARCH-LM at lags [5, 10]"),
         ("arch_lm_ddof", 1, "is 1, but this reader checks ARCH-LM with ddof 0"),
         ("nlags", 49, "is 49, but this reader checks the correlograms at nlags 50"),
+        ("series", "resid", "is 'resid', but this reader runs the residual tests on 'standardized_forecasts_error after the burn-in'"),
+        ("ljung_box_model_df", "p + q + 1", "is 'p + q + 1', but this reader checks Ljung-Box with model_df 'p + q'"),
     ],
 )
 def test_a_stated_residual_test_setting_other_than_the_pinned_one_is_refused(key, stated, message):
@@ -316,6 +320,29 @@ def test_aicc_where_n_minus_k_minus_1_is_not_positive_is_refused():
     data = edited(data, ["course_track", "n_train"], 7)
     data = edited(data, ["course_track", "test_rows_seen"], 5)
     assert any("models[0].information.aicc" in p and "undefined" in p for p in validate_fit(data)), validate_fit(data)
+
+
+def test_hqic_is_statsmodels_with_n_the_effective_observations():
+    # statsmodels' own function is the oracle (eval_measures.hqic, which mlemodel.py calls with
+    # nobs_effective and df_model): its value passes the tie and one a part in a million off does not, from
+    # n = 2, where ln(ln n) is negative, up. The base's three models hold it to the same formula (FIT_CASES).
+    from statsmodels.tools.eval_measures import hqic
+
+    for n in (2, 3, 39, 2036):
+        for k, llf in ((2, 20.1), (7, -1234.5)):
+            want = float(hqic(llf, n, k))
+            ok, off = payloads._Checker(), payloads._Checker()
+            payloads._check_information(ok, {"hqic": want}, llf, k, n, "data.models[0].information")
+            payloads._check_information(off, {"hqic": want * (1 + 1e-6)}, llf, k, n, "data.models[0].information")
+            assert ok.problems == [], (n, k, ok.problems)
+            assert len(off.problems) == 1 and "but -2 llf + 2 ln(ln n) k is" in off.problems[0], (n, k, off.problems)
+
+
+def test_hqic_where_n_is_1_is_refused_not_raised():
+    # ln(ln 1) is ln 0: math.log raises there, and statsmodels gives -inf, which no JSON file can hold.
+    c = payloads._Checker()
+    payloads._check_information(c, {"hqic": -3.0}, 20.0, 2, 1, "data.models[0].information")
+    assert c.problems == ["data.models[0].information.hqic: is -3.0, but n = 1, where ln(ln n) is undefined (statsmodels gives -inf)"]
 
 
 def test_the_cancelling_rule_is_a_maximum_matching_not_closest_first():
@@ -471,6 +498,19 @@ def test_python_refuses_residuals_that_break_a_statistical_rule(name, path, chan
     assert problems and any(message in p for p in problems), problems
 
 
+def test_a_residuals_file_alone_cannot_state_another_nlags():
+    # nlags 49 with 49 rows in each correlogram agrees with itself; before the pin only the check against
+    # fit.json refused it. The rows are counted against the reader's NLAGS, whatever the file states.
+    data = edited(edited(edited(RESIDUALS, ["nlags"], 49), ["acf", "rows"], lambda rows: rows[:49]), ["acf_squared", "rows"], lambda rows: rows[:49])
+    assert validate_residuals(data, "aic") == [
+        "data.nlags: is 49, but this reader checks the correlograms at nlags 50",
+        "data.acf.rows: has 49 rows, but lags 1 to 50 make 50",
+        "data.acf_squared.rows: has 49 rows, but lags 1 to 50 make 50",
+    ]
+    assert validate_residuals(edited(RESIDUALS, ["nlags"], 49), "aic") == ["data.nlags: is 49, but this reader checks the correlograms at nlags 50"]
+    assert RESIDUALS["nlags"] == payloads.NLAGS == 50 and validate_residuals(RESIDUALS, "aic") == []
+
+
 def test_a_ljung_box_row_applied_against_its_lag_is_named_for_that_rule():
     # A shared rule (the corpus has it), but in every corpus case the df and p-value nulls also break,
     # so only the message shows that the applied rule itself fired.
@@ -521,3 +561,30 @@ def test_a_missing_or_extra_residuals_file_is_named():
     files["residuals_hqic"] = files["residuals_aic"]
     assert validate_fit_residuals(FIT, files) == ["residuals_course: missing, but fit has model 'course'", "residuals_hqic: fit.json has no model 'hqic'"]
     assert validate_fit_residuals("not a fit", {}) == []  # never raises; validate_fit reports the shape
+
+
+def test_a_residuals_check_with_hundreds_of_problems_stops_at_max_problems():
+    # 300 residual files fit.json has no model for: the first 200 names in order, then the closing line
+    # (contract.md, "Bounds"). A caller's dict of 2,000,000 is not sorted whole: the same, quickly.
+    files = matching_residuals() | {f"residuals_x{i:03d}": RESIDUALS for i in range(300)}
+    problems, seconds = timed(lambda: validate_fit_residuals(FIT, files))
+    assert problems == [*(f"residuals_x{i:03d}: fit.json has no model 'x{i:03d}'" for i in range(200)), more_problems("family")]
+    assert seconds < 1.0
+    files = matching_residuals() | {f"residuals_x{i:07d}": RESIDUALS for i in range(2_000_000)}
+    problems, seconds = timed(lambda: validate_fit_residuals(FIT, files))
+    assert problems == [*(f"residuals_x{i:07d}: fit.json has no model 'x{i:07d}'" for i in range(200)), more_problems("family")]
+    assert seconds < 2.0
+
+
+def test_the_residuals_check_counts_the_fit_models_before_walking_them(monkeypatch):
+    many = {**FIT, "models": FIT["models"][:1] * 2_000_000}
+    problems, seconds = timed(lambda: validate_fit_residuals(many, matching_residuals()))
+    assert problems == ["fit: models has 2000000 entries, more than the 3 a reader takes, so no residuals file is checked against it"]
+    assert seconds < 1.0
+    # The cap lowered to 2: three extra files give the first two and the closing line.
+    files = matching_residuals() | {f"residuals_x{i}": RESIDUALS for i in range(3)}
+    every = validate_fit_residuals(FIT, files)
+    assert len(every) == 3
+    monkeypatch.setattr(payloads, "MAX_PROBLEMS", 2)
+    monkeypatch.setattr(contract, "MAX_PROBLEMS", 2)
+    assert validate_fit_residuals(FIT, files) == [*every[:2], "family: more than 2 problems; a reader reports the first 2 and stops"]

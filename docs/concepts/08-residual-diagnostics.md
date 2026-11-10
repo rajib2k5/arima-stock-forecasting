@@ -173,12 +173,12 @@ standardised value, 0.0032, sits in the middle of the cloud and would hide inste
 
 ## In this project
 
-- `src/arima_forecasting/diagnostics.py:59` is the burn-in rule and `:65` the series every test sees.
-- `src/arima_forecasting/diagnostics.py:83` runs Ljung–Box with `model_df` = p + q, passed at `:152`,
-  and marks a lag ≤ p + q not applied (`:88`).
-- `src/arima_forecasting/diagnostics.py:102` runs ARCH-LM with `ddof=0`, `:116` Jarque–Bera, and `:75`
+- `src/arima_forecasting/diagnostics.py:63` is the burn-in rule and `:69` the series every test sees.
+- `src/arima_forecasting/diagnostics.py:87` runs Ljung–Box with `model_df` = p + q, passed at `:156`,
+  and marks a lag ≤ p + q not applied (`:92`).
+- `src/arima_forecasting/diagnostics.py:106` runs ARCH-LM with `ddof=0`, `:120` Jarque–Bera, and `:79`
   the residual ACFs with the band z/√n.
-- `src/arima_forecasting/diagnostics.py:134` turns the p-values into the verdicts the app shows, "any
+- `src/arima_forecasting/diagnostics.py:138` turns the p-values into the verdicts the app shows, "any
   row rejects", without a correction.
 - `tests/test_diagnostics.py:52` checks the p + q rule and the skipped lags, `tests/test_diagnostics.py:91`
   that ARCH-LM finds clustering where there is some and not in white noise, and

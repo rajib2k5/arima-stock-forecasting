@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isIsoDate, isSourceCommit, isUtcTimestamp, MAX_LIST, MAX_NAMES, OOS_WINDOW, parseEnvelope, parseMeta, SUPPORTED_MAJOR, type Meta } from './contract'
+import { ARTIFACTS, isIsoDate, isSourceCommit, isUtcTimestamp, MAX_LIST, MAX_NAMES, OOS_WINDOW, parseEnvelope, parseMeta, SUPPORTED_MAJOR, type Meta } from './contract'
 import { VALID_COMMIT, validMetaEnvelope, withValue, without, type Json } from '../test/fixtures/fixtures'
 
 const errorsOf = (raw: unknown): string[] => {
@@ -413,6 +413,23 @@ describe('parseMeta: milestones and artifacts', () => {
     expect(metaErrorsOf(metaData(withValue(['data', 'artifacts'], ['meta', blank])))).toEqual([
       `data.artifacts[1]: expected a non-empty string, got ${JSON.stringify(blank)}`,
     ])
+  })
+  it('pins the artifact names to the export’s (export.ARTIFACTS; payloads.ARTIFACTS): any other name, or one listed twice, is one short error each', () => {
+    expect(ARTIFACTS).toEqual([
+      'meta', 'prices', 'eda', 'stationarity', 'acf_pacf', 'aic_grid', 'fit', 'residuals_aic', 'residuals_bic', 'residuals_course',
+      'forecast_aic_static', 'forecast_aic_walk_forward', 'forecast_aic_refit', 'forecast_bic_static', 'forecast_bic_walk_forward', 'forecast_course_static', 'forecast_course_walk_forward', 'evaluation',
+    ])
+    expect(metaErrorsOf(metaData(withValue(['data', 'artifacts'], ['meta', 'x'.repeat(100_000), 'eda', 'meta'])))).toEqual([
+      `data.artifacts[1]: "${'x'.repeat(80)}"… (100000 characters) is not one of the 18 artifacts an export writes (export.ARTIFACTS)`,
+      'data.artifacts[3]: "meta" is listed more than once',
+    ])
+    // A subset, in any order, is read: the gate switches on the views whose files are listed.
+    const r = parseMeta(metaData(withValue(['data', 'artifacts'], [...ARTIFACTS].reverse())))
+    expect(r.ok && r.meta.artifacts).toEqual([...ARTIFACTS].reverse())
+  })
+  it('bounds artifacts and held_artifacts at the number of artifacts an export writes', () => {
+    expect(metaErrorsOf(metaData(withValue(['data', 'artifacts'], new Array(19).fill('meta'))))).toEqual(['data.artifacts: has 19 artifacts, more than the 18 a reader takes'])
+    expect(metaErrorsOf(metaData(withValue(['data', 'held_artifacts'], new Array(19).fill('meta'))))).toEqual(['data.held_artifacts: has 19 artifacts, more than the 18 a reader takes'])
   })
   it('collects errors from several sections at once', () => {
     let env = withValue(['data', 'ticker'], 5)

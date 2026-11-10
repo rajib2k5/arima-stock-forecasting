@@ -4,7 +4,7 @@
  * they leave to Python (ADR-0001: no statistic is re-checked here).
  */
 import { describe, expect, it } from 'vitest'
-import { ALPHA, ARCH_LM_DDOF, ARCH_LM_LAGS, CANCEL_DISTANCE, defaultTrend, expectedParamNames, LJUNG_BOX_LAGS, LLF_TOLERANCE, MAX_D, MAX_PQ, MAX_WARNINGS, NLAGS, parseFit, parseResiduals } from './contract.fit'
+import { ALPHA, ARCH_LM_DDOF, ARCH_LM_LAGS, CANCEL_DISTANCE, defaultTrend, expectedParamNames, LJUNG_BOX_LAGS, LJUNG_BOX_MODEL_DF, LLF_TOLERANCE, MAX_D, MAX_PQ, MAX_WARNINGS, NLAGS, parseFit, parseResiduals, SERIES } from './contract.fit'
 import fitData from '../test/fixtures/fit.data.json'
 import residualsData from '../test/fixtures/residuals_aic.data.json'
 
@@ -132,16 +132,21 @@ describe('parseFit', () => {
   })
 
   it('pins the residual tests’ settings as diagnostics.py, and refuses any other stated value', () => {
-    // alpha, the two lag lists, the ddof and nlags: a file that states others changes which rows exist.
+    // alpha, the two lag lists, the ddof and nlags: a file that states others changes which rows exist. The
+    // series and the model_df rule (diagnostics.SERIES and LJUNG_BOX_MODEL_DF): a file that states others
+    // describes tests nobody checked.
     expect([ALPHA, LJUNG_BOX_LAGS, ARCH_LM_LAGS, ARCH_LM_DDOF, NLAGS]).toEqual([0.05, [5, 10, 20], [5, 10], 0, 50])
+    expect([SERIES, LJUNG_BOX_MODEL_DF]).toEqual(['standardized_forecasts_error after the burn-in', 'p + q'])
     const r = parseFit(copy(fitData))
-    expect(r.ok && r.fit.diagnostic_settings).toMatchObject({ alpha: 0.05, ljung_box_lags: [5, 10, 20], arch_lm_lags: [5, 10], arch_lm_ddof: 0, nlags: 50 })
+    expect(r.ok && r.fit.diagnostic_settings).toMatchObject({ alpha: 0.05, series: SERIES, ljung_box_lags: [5, 10, 20], ljung_box_model_df: LJUNG_BOX_MODEL_DF, arch_lm_lags: [5, 10], arch_lm_ddof: 0, nlags: 50 })
     const data = copy(fitData)
-    Object.assign(data.diagnostic_settings, { alpha: 0.1, ljung_box_lags: [5, 10, 21], arch_lm_lags: [5], arch_lm_ddof: 1, nlags: 49 })
+    Object.assign(data.diagnostic_settings, { alpha: 0.1, series: 'resid', ljung_box_lags: [5, 10, 21], ljung_box_model_df: 'p + q + 1', arch_lm_lags: [5], arch_lm_ddof: 1, nlags: 49 })
     const bad = parseFit(data)
     expect(bad.ok ? [] : bad.errors).toEqual([
       'data.diagnostic_settings.alpha: is 0.1, but this reader tests at alpha 0.05',
+      'data.diagnostic_settings.series: is "resid", but this reader runs the residual tests on "standardized_forecasts_error after the burn-in"',
       'data.diagnostic_settings.ljung_box_lags: is [5,10,21], but this reader checks Ljung-Box at lags [5,10,20]',
+      'data.diagnostic_settings.ljung_box_model_df: is "p + q + 1", but this reader checks Ljung-Box with model_df "p + q"',
       'data.diagnostic_settings.arch_lm_lags: is [5], but this reader checks ARCH-LM at lags [5,10]',
       'data.diagnostic_settings.arch_lm_ddof: is 1, but this reader checks ARCH-LM with ddof 0',
       'data.diagnostic_settings.nlags: is 49, but this reader checks the correlograms at nlags 50',
@@ -259,7 +264,7 @@ describe('parseResiduals', () => {
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.residuals.rows).toHaveLength(7)
-    expect(r.residuals.acf_squared.rows.map((row) => row.outside)).toEqual([true, false, false])
+    expect(r.residuals.acf_squared.rows.map((row) => row.outside)).toEqual([true, ...new Array<boolean>(NLAGS - 1).fill(false)])
     expect(r.residuals.qq).toHaveLength(7)
     expect(r.residuals.t_fit).toEqual({ df: 5, loc: 0, scale: 0.9 })
   })
@@ -280,6 +285,21 @@ describe('parseResiduals', () => {
 
   it('refuses a payload that is not an object', () => {
     expect(parseResiduals('x', 'aic')).toEqual({ ok: false, errors: ['data: expected an object, got string'] })
+  })
+
+  it('pins nlags at 50 (NLAGS) and counts the correlograms against the pin, so a file alone cannot state another', () => {
+    // nlags 49 with 49 rows in each correlogram agrees with itself; the cross-file check alone once refused it.
+    const data = copy(residualsData)
+    data.nlags = 49
+    data.acf.rows.pop()
+    data.acf_squared.rows.pop()
+    expect(parseResiduals(data, 'aic')).toEqual({
+      ok: false,
+      errors: ['data.nlags: is 49, but this reader checks the correlograms at nlags 50', 'data.acf.rows: has 49 rows, but lags 1 to 50 make 50', 'data.acf_squared.rows: has 49 rows, but lags 1 to 50 make 50'],
+    })
+    const stated = copy(residualsData)
+    stated.nlags = 49 // beside 50 rows: the rows are counted against the reader's 50
+    expect(parseResiduals(stated, 'aic')).toEqual({ ok: false, errors: ['data.nlags: is 49, but this reader checks the correlograms at nlags 50'] })
   })
 
   it('bounds burn_excluded by d’s bound, 2', () => {

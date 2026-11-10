@@ -16,17 +16,17 @@ A *dependency specifier* says which versions of a package you accept.
 - A **range**, such as `statsmodels>=0.15`, accepts many versions. The installer picks the newest
   one that fits *on the day you install*. Two installs a month apart can get different code.
 - An **exact pin**, such as `statsmodels==0.15.0`, accepts one version. This repo pins all 12
-  direct Python dependencies (`pyproject.toml:6-15`, `:29-34`) and all 23 direct app dependencies
-  (`app/package.json:16-42`).
+  direct Python dependencies (`pyproject.toml:6-15`, `:29-34`) and all 24 direct app dependencies
+  (`app/package.json:17-44`).
 - A pin covers only the packages you name. Their own dependencies, the *transitive* ones, can
   still float. pandas 3.1.0, for example, depends on numpy, python-dateutil and tzdata
-  (`uv.lock:683-690`).
+  (`uv.lock:691-698`).
 - A **lockfile** records the whole resolved tree: every package, its exact version, where it came
   from, and a hash of each file. uv's documentation describes `uv.lock` as a universal lockfile
   (one file for all platforms and Python versions) that should be committed and that uv, not you,
   edits ([uv docs, "The lockfile"](https://docs.astral.sh/uv/concepts/projects/layout/#the-lockfile)).
   Here `uv.lock` has 84 package entries (one is the project itself) and 467 SHA-256 hashes;
-  `app/package-lock.json` has 372 packages, every one with an `integrity` hash.
+  `app/package-lock.json` has 375 packages, every one with an `integrity` hash.
 
 So the pins state intent in a file a human reviews, and the lockfile reproduces everything
 underneath. `tests/test_package.py:53-57` checks that each pin equals the locked version, so the
@@ -52,7 +52,7 @@ two cannot drift apart.
 addition, and PATCH for a backward-compatible fix.
 
 For a JSON contract, the "API" is the *shape* that readers rely on. The contract's own table
-(`docs/architecture/contract.md:90-94`) applies semver like this:
+(`docs/architecture/contract.md:96-100`) applies semver like this:
 
 - **Breaking (major):** removing or renaming a field; changing its type, unit or meaning; making a
   non-nullable field nullable; adding a value to a *closed* enum (one the reader may switch over
@@ -61,7 +61,7 @@ For a JSON contract, the "API" is the *shape* that readers rely on. The contract
 - **Patch:** no shape change, such as fixing how a value is computed without changing what it means.
 
 Two design choices make this workable. First, the version describes shape, not content:
-re-exporting with new data never bumps it (`contract.md:87-88`). Second, units live in field
+re-exporting with new data never bumps it (`contract.md:93-94`). Second, units live in field
 names (`close_usd`, `log_close`), so a unit change *is* a rename, which is visibly major.
 
 "Adding a field is not breaking" is only true if old readers ignore fields they do not know. That
@@ -75,7 +75,7 @@ behaviour.
 **Where it breaks**
 - A meaning change without a shape change (dollars silently becoming log-dollars under the same
   name) passes every parser. Only review catches it
-  (`docs/adr/0001-python-computes-app-visualises.md:155`).
+  (`docs/adr/0001-python-computes-app-visualises.md:156`).
 - semver's major version 0 means "anything may change", which is why the contract started at
   `1.0.0`. Pre-release tags such as `1.0.0-rc.1` are rejected by both parsers.
 
@@ -90,11 +90,11 @@ not to the other.
 
 - **The envelope's top level is closed.** Both readers, Python's `validate_envelope`
   (`src/arima_forecasting/contract.py:171-176`) and the app's `parseEnvelope`
-  (`app/src/lib/contract.ts:279-285`), reject a missing *or* an unknown top-level key. The five
+  (`app/src/lib/contract.ts:306-312`), reject a missing *or* an unknown top-level key. The five
   envelope keys are what every artifact shares and what the loader trusts before it reads any
-  payload, so a new one is a major bump (`docs/architecture/contract.md:44-48`).
+  payload, so a new one is a major bump (`docs/architecture/contract.md:45-49`).
 - **The `data` payload is open.** The app's payload parsers build a *new* object from the keys
-  they know (`contract.ts:290-293`, `:416`). Unknown keys inside `data` are ignored and not passed
+  they know (`contract.ts:317-320`, `:451`). Unknown keys inside `data` are ignored and not passed
   on, so a minor version can add a field without breaking an older app. Missing or wrongly typed
   known keys are still errors; tolerance is not coercion.
 
@@ -160,7 +160,7 @@ that with a `SyntaxError` for the whole document (measured). In the other direct
 `JSON.stringify({x: NaN, y: Infinity})` silently writes `{"x":null,"y":null}` (measured). Both
 directions lose information without the producer noticing. The contract's answer: `allow_nan=False`
 on export, and a missing value is an explicit `null` with a sibling field that says why
-(`docs/architecture/contract.md:76`).
+(`docs/architecture/contract.md:81`).
 
 The same binary64 format sets a second limit. Its 52 fraction bits (53 with the implicit leading
 bit) hold every integer exactly only up to $2^{53} - 1 = 9{,}007{,}199{,}254{,}740{,}991$, which
@@ -169,7 +169,7 @@ double, so `JSON.parse("9007199254740993")` gives `9007199254740992`, and the 31
 that Python writes happily becomes `Infinity` (both measured in Node 22). So `dumps` refuses any
 integer beyond ±(2^53 − 1), naming its path, after `json.dumps` has run
 (`src/arima_forecasting/contract.py:229-247`, the walk at `:208-226`;
-`docs/architecture/contract.md:37-42`). A value that really needs more digits must travel as a
+`docs/architecture/contract.md:38-43`). A value that really needs more digits must travel as a
 string.
 
 **Assumptions**
@@ -195,13 +195,13 @@ Sources of accidental difference, and the guard for each:
   error if it is malformed. `build_time` does this (`src/arima_forecasting/provenance.py:109-128`).
   Two exports with `SOURCE_DATE_EPOCH=1700000000` were byte-identical; without it, exactly one
   line, `generated_at`, differed (measured). The contract also bans wall-clock values inside
-  `data` (`contract.md:83`).
+  `data` (`contract.md:88`).
 - **The exporter's own output.** In a committed repo, the first export rewrites the tracked
   `meta.json`. If provenance counted that as a change, the second export of the same code would
   stamp `-dirty` and the two files would differ. Section 6 explains the exclusion that prevents
   it; `test_two_exports_with_a_fixed_source_date_epoch_are_byte_identical` checks the result.
 - **Random ids.** nbformat gives each new cell a random id; two calls gave `bd6a5883` and
-  `6e7f134d` (measured). The builder sets `cell-00`, `cell-01`, ... (`tools/build_notebooks.py:403`).
+  `6e7f134d` (measured). The builder sets `cell-00`, `cell-01`, ... (`tools/build_notebooks.py:1064`).
 - **Key order.** `sort_keys=True` makes the bytes independent of dict insertion order
   (`contract.py:245`).
 - **Formatting.** Fixed two-space indent and exactly one trailing newline.
@@ -248,7 +248,7 @@ subfolder would miss a change elsewhere. Both halves have tests, and so does the
 
 A file cannot contain the SHA of the commit that contains it: writing the SHA changes the file,
 which changes the SHA. So the procedure is two commits: commit the code, export on the clean tree,
-commit the JSON (`docs/adr/0001-python-computes-app-visualises.md:157-162`).
+commit the JSON (`docs/adr/0001-python-computes-app-visualises.md:158-163`).
 
 **Since milestone 1, the SHA is the last code commit, not HEAD.** `source_commit` asks
 `git log -1 -- ':(top)' ':(exclude)app/public/data'`: the last commit that touched anything outside
@@ -326,8 +326,8 @@ release of a real package, or a look-alike name, and waits for installs.
 
 - **Minimum release age.** The app's lock used only versions at least 14 days old on the lock day,
   2026-10-28 (`app/README.md:93`). The bet is that a bad release is usually noticed and pulled
-  within that time. Measured: of the 23 direct app dependencies, the youngest was `vite@7.3.7`,
-  published 2026-10-06, 21.8 days before. Only direct dependencies were checked, not all 372 lock
+  within that time. Measured: of the 24 direct app dependencies, the youngest was `vite@7.3.7`,
+  published 2026-10-06, 21.8 days before. Only direct dependencies were checked, not all 375 lock
   entries.
 - **`npm audit`** compares the lock against a public advisory database
   ([npm docs](https://docs.npmjs.com/cli/commands/npm-audit)). `npm audit --omit=dev`, which checks

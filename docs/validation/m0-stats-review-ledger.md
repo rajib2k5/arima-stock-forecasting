@@ -24,8 +24,8 @@ The probe scripts and their raw outputs are kept outside the repo, in the sessio
 | Default trend is `'n'` when d ≥ 1 (and `'c'` when d = 0) | `SP/statsmodels/tsa/arima/model.py:156-160`; docstring `:68-69` | `trend d=1: n  d=0: c  D=1: n`. The mutant run, with the expectation flipped, FAILs. | **SURVIVES** |
 | `trend='c'` with d ≥ 1 raises | `model.py:178-190`: raises when the lowest trend term is below d + D | `('c',d=1)`, `('ct',d=1)` and `('t',d=2)` all raise `ValueError`. `('t',d=1)` constructs. | **SURVIVES**. The rule is broader than stated: `'t'` with d = 2 also raises. |
 | `simple_differencing=False` | `model.py:204-211` (not passed), `:229-232` (stripped from the init keys), `sarimax.py:344` (default False) | `simple_differencing attr: False  model nobs: 2000` | **SURVIVES** |
-| The likelihood burns the first d observations | `sarimax.py:677-683`: burn = k_states − k_order when stationarity is enforced, otherwise k_states | Burn is 0/1/1/2 for (1,0,0), (0,1,0), (1,1,0), (0,2,1), and `llf == sum(llf_obs[burn:])` exactly (5331.595517 and 5328.296924). With `enforce_stationarity=False` the burn is 2 for (0,1,0) and 3 for (2,1,0). | **SURVIVES**. The first probe asserted `llf_obs[:d] == 0`. That condition was wrong (statsmodels reports the burned terms but leaves them out of `llf`), so that check was invalid and was replaced by the sum check. |
-| `trend='t'` with d = 1 is a drift | `model.py:61-72`, `:104-121` (the trend is an exog regressor in levels, `trend_offset=1`) | `params x1 0.000823`. Every forecast increment is 0.000823 (`np.allclose`). | **SURVIVES** |
+| The likelihood burns the first d observations | `sarimax.py:678-683`: burn = k_states − k_order when stationarity is enforced, otherwise k_states | Burn is 0/1/1/2 for (1,0,0), (0,1,0), (1,1,0), (0,2,1), and `llf == sum(llf_obs[burn:])` exactly (5331.595517 and 5328.296924). With `enforce_stationarity=False` the burn is 2 for (0,1,0) and 3 for (2,1,0). | **SURVIVES**. The first probe asserted `llf_obs[:d] == 0`. That condition was wrong (statsmodels reports the burned terms but leaves them out of `llf`), so that check was invalid and was replaced by the sum check. |
+| `trend='t'` with d = 1 is a drift | `model.py:61-72`, `:105-121` (the trend is an exog regressor in levels, `trend_offset=1`) | `params x1 0.000823`. Every forecast increment is 0.000823 (`np.allclose`). | **SURVIVES** |
 
 ## C2. The likelihood identity, and why AIC is not compared across d
 
@@ -61,7 +61,7 @@ What this shows:
 |---|---|
 | ADR §3 formula and table (`0002:144-162`) | **SURVIVES**. Every number reproduces. |
 | Background §6, `00-background.md:365-368`: "a density for the log *prices* … for the log *returns*. They describe different random variables … not on a common scale" | **REFUTED**. Conditional on y₁ they are the same variables on the same scale. The difference is one term, −1.07 nats here. |
-| Milestone Q6, `00-scaffold.md:1042`: AIC "must never be compared across d" | **REFUTED as worded**. It contradicts the ADR's own rejected alternative (`0002:176-184`), and the common-sample comparison is valid. |
+| Milestone Q6, `00-scaffold.md:1301`: AIC "must never be compared across d" | **REFUTED as worded**. It contradicts the ADR's own rejected alternative (`0002:176-184`), and the common-sample comparison is valid. |
 
 **Fix:** replace "different random variables / not on a common scale" with: "the d = 0 likelihood also scores y₁ under the stationary prior; the d = 1 likelihood conditions on y₁ through the diffuse prior and the burn. Even on a common sample, AIC is not calibrated for the unit-root boundary, so d is chosen by tests."
 
@@ -96,7 +96,7 @@ What this shows:
 | `with_intercept='auto'` gives an intercept iff d + D ∈ {0, 1} | `auto.py:623-624` sets the *starting* value. `_auto_solvers.py:312-314` and `:440-445` refit without the constant and toggle it. | Intercept candidates of both kinds `[False, True]` were fitted at d = 0, 1 **and 2** | **REFUTED as a statement about the final model**. It is true only of the starting value. The docs themselves describe it correctly (`00-background.md:613-615`). |
 | Failed fits are dropped and warnings hidden | `_auto_solvers.py:507-520` and `:564-566`. Only `LinAlgError` and `ValueError` are caught. The default `error_action='trace'` (`auto.py:362`) warns. | Injected a `ValueError` for (1,1,1). With the default, (1,1,1) was dropped and **`['ModelFitWarning']`** was raised, with a traceback. With `'ignore'`, nothing was raised. `suppress_warnings=True` silenced the in-fit warnings (0 against 3). | **Partly REFUTED**. Failed fits are dropped. Under the defaults they are not hidden: only warnings raised *inside* the fit are suppressed. The course's `error_action='ignore'` is what makes failures silent. Any other exception type aborts the whole search (an `IndexError` did, in p2). ADR §5 (`0002:229-232`) words this correctly. ADR `:268` ("drops failed fits, hides warnings") is loose. |
 | Stepwise visits a subset (ADR problem 3: 5 orders including (2,1,2), "with the course's arguments") | The course passes `start_p=1, start_q=1` (`sample.txt:210`). The defaults are 2 and 2 (`auto.py:333-335`). ADR `:45` says "everything else is the library default". | ADR's args on train: **5** orders, including (2,1,2). The course's real args on train: **4** orders, `[(0,1,0),(0,1,1),(1,1,0),(1,1,1)]`, with the same choice and forecast. | **"Subset" SURVIVES. "5 orders with the course's arguments" is REFUTED.** |
-| `test='adf'` is pmdarima's own ADF (with a trend term and a fixed lag ⌊(n−1)^{1/3}⌋ + 1) | `stationarity.py:327-332`: `k = trunc(...)`, then `k + 1` is the embed width. The regression takes `z[:,1:k]` (`:290-291`), which is k − 1 lagged differences. | pm statistic `-0.642439`, 15 regressors, which is 12 lagged differences. statsmodels `adfuller(ct)` gives **12 lags → -0.642439** and 13 lags → −0.719864. | **Own ADF with a trend: SURVIVES. "+1" lag: REFUTED.** The lag is ⌊(n−1)^{1/3}⌋. Fix `0002:126` and `00-background.md:615-616`. |
+| `test='adf'` is pmdarima's own ADF (with a trend term and a fixed lag ⌊(n−1)^{1/3}⌋ + 1) | `pmdarima/arima/stationarity.py:327-332`: `k = trunc(...)`, then `k + 1` is the embed width. The regression takes `z[:,1:k]` (`:289-290`), which is k − 1 lagged differences. | pm statistic `-0.642439`, 15 regressors, which is 12 lagged differences. statsmodels `adfuller(ct)` gives **12 lags → -0.642439** and 13 lags → −0.719864. | **Own ADF with a trend: SURVIVES. "+1" lag: REFUTED.** The lag is ⌊(n−1)^{1/3}⌋. Fix `0002:141` and `00-background.md:663`. |
 
 ## C5. yfinance 1.7.0 `download`, single ticker, faked HTTP
 
@@ -118,8 +118,8 @@ What this shows:
 ## C7. statsmodels tests
 
 - **`kpss` clipping.** Channel A: `_stattools.py:3211-3235`. Channel B: a random walk gives p 0.01 with "smaller". White noise gives p 0.1 with "greater". The falsifier AR(0.99) gives p 0.0354 with no warning. **SURVIVES.**
-- **`acorr_ljungbox` default `model_df=0`.** Channel A: `diagnostic.py:600`, `:750-753`. Channel B: p 0.7534 equals `chi2.sf(Q,10)`. **SURVIVES.**
-- **FutureWarning without `result_object`.** Channel A: `_stattools.py:465-475` and `:3250-3261`, removal "0.16.0 or after July 2027". Channel B: `adfuller()` and `kpss()` raise `FutureWarning`; `result_object=False` raises nothing. **SURVIVES. It is real in 0.15.0.** The list is incomplete: `het_arch` (`diagnostic.py:920-928`) also warns (measured), and so does `acf` when given exactly one of `qstat`/`alpha` (`:1037-1051`). Milestone 3 uses `het_arch`.
+- **`acorr_ljungbox` default `model_df=0`.** Channel A: `statsmodels/stats/diagnostic.py:600`, `:750-753`. Channel B: p 0.7534 equals `chi2.sf(Q,10)`. **SURVIVES.**
+- **FutureWarning without `result_object`.** Channel A: `_stattools.py:465-475` and `:3250-3261`, removal "0.16.0 or after July 2027". Channel B: `adfuller()` and `kpss()` raise `FutureWarning`; `result_object=False` raises nothing. **SURVIVES. It is real in 0.15.0.** The list is incomplete: `het_arch` (`statsmodels/stats/diagnostic.py:920-928`) also warns (measured), and so does `acf` when given exactly one of `qstat`/`alpha` (`_stattools.py:1037-1051`). Milestone 3 uses `het_arch`.
 
 ## C8. Maths in `00-background.md`
 
@@ -128,11 +128,11 @@ What this shows:
 | Lognormal median e^μ and mean e^{μ+σ²/2}; FPP3's approximation | 2e6 draws: median 1.22138 against 1.22140, mean 1.27190 against 1.27188. FPP3 §5.6 text was fetched and confirms both. | SURVIVES |
 | Random walk with drift: mean y_T + hμ̂, variance hσ² + h²σ²/(T−1), and FPP3's √(h(1+h/(T−1))) | Monte Carlo variance 2.4982e-2 against the formula's 2.5025e-2. FPP3 table fetched. | SURVIVES |
 | Intervals widen like √h | se(h)/se(1) at h = 1, 4, 16, 64, 256: d = 0 → 1.05 (flat); d = 1 → 2.61, 5.68, 11.57, 23.26 (≈ √h/(1−φ)); d = 2 → about h^{1.5} | SURVIVES. The text scopes √h to the random walk and to d = 1 "eventually", which is correct. It is not true for ARIMA in general. |
-| "Reverts … at the rate of the largest AR root" (`:461`) | The doc puts roots outside the unit circle. The root is 3.19, and the decay is 1/root = φ = 0.313. | **REFUTED (wording)**. Should read "the largest *inverse* AR root (the root nearest the unit circle)". |
+| "Reverts … at the rate of the largest AR root" (`00-background.md:491`) | The doc puts roots outside the unit circle. The root is 3.19, and the decay is 1/root = φ = 0.313. | **REFUTED (wording)**. Should read "the largest *inverse* AR root (the root nearest the unit circle)". |
 | ADF regression, null and critical values | `mackinnoncrit`: n −2.566/−1.941/−1.617; c −3.43/−2.862/−2.567; ct −3.959/−3.41/−3.127 | SURVIVES. Minor: γ = φ − 1 is the AR(1) case. In general γ = −φ(1). |
 | KPSS null and η | `_stattools.py:3213-3216` (η = ΣS²/T² ÷ long-run variance) | SURVIVES. The symbol r_t means both log return (Notation) and the KPSS random-walk part. |
 | Over-differencing: MA(1) with θ = −1 | acf lag-1 −0.493, variance ratio 1.980, MA fit −1.000 | SURVIVES |
-| Constant against drift in backshift form | FPP3 §9.5 fetched; `sarimax.py:234-235`; `model.py:104-121` | SURVIVES |
+| Constant against drift in backshift form | FPP3 §9.5 fetched; `sarimax.py:234-235`; `model.py:105-121` | SURVIVES |
 | AR(2) triangle; |θ| < 1 | standard; matches FPP3 | SURVIVES |
 | AIC, AICc, BIC; the AICc identity | `eval_measures.py:415, 445-448, 476`. The two AICc forms agree numerically (−9593.98663). | SURVIVES |
 | Ljung–Box Q* with m − p − q degrees of freedom | 400 AR(1) residual series: mean Q(10) 9.13. Rejection at 5% is 0.043 with 10 degrees of freedom and 0.065 with 9. | SURVIVES |
@@ -158,7 +158,7 @@ What this shows:
 - **Q1, Q2**: re-run, outputs identical. **SURVIVE.**
 - **Q5**: numbers and explanation **SURVIVE**.
 - **Q6**: the numbers survive. Two explanations do not:
-  - "−4.1e-9 … optimiser noise" (`00-scaffold.md:1038`) is **REFUTED**. At identical parameters the gap is −3.47e-9 and it scales with the approximate-diffuse variance, so the optimiser accounts for about 0.6e-9 of it.
+  - "−4.1e-9 … optimiser noise" (`00-scaffold.md:1295`) is **REFUTED**. At identical parameters the gap is −3.47e-9 and it scales with the approximate-diffuse variance, so the optimiser accounts for about 0.6e-9 of it.
   - "must never be compared" is refuted under C2.
 - **Q3, Q4, Q7, Q8**: not examined (out of scope).
 
@@ -181,10 +181,10 @@ What this shows:
    - Measured in p6 on a simulated 2,336-row trading-day frame with yfinance-shaped columns.
    - No milestone-0 document records this. Milestone 4 must forecast with numpy input or a supported index.
 2. **The course's MAPE line returns `nan` under yfinance 1.7.0.** `forecast_series - test_data_actual` subtracts a one-column DataFrame from a Series, and pandas aligns the Series index against the DataFrame's columns. The result is a 235×236 all-NaN frame (p6b). The positional MAPE would have been 14.06%.
-3. **pmdarima's root test ignores AR roots whenever q + Q > 0.** `_auto_solvers.py:37-40` overwrites the AR maximum with the MA one. A fake ARMA(1,1) with an AR inverse root of 0.999 kept IC 10.0; the AR(1) version got inf. So ADR `:226` ("an inverse AR or MA root … pmdarima's threshold") and `:257` overstate what pmdarima discards.
-4. **ADR §7's "0.48 gap … slightly different points" (`0002:261`; also `contract.md:264`).** pmdarima stopped at φ = 0.818, θ = −0.828. statsmodels stopped at φ = 0.004, θ = 0.004. These are opposite ends of a near-cancelling ridge, not nearby points.
-5. **Background footnote `[^probe-pm]` (`00-background.md:777`) does not reproduce from its stated recipe.** The footnote gives intercept 0.00193, 0.4822 and 0.4834. The recipe gives 0.00186, 0.4648 and 0.4661, so 37% rather than 38%. Three seed variants also failed. The `[^probe-drift]`, `[^probe-adf]` and `[^probe-acf]` footnotes do reproduce exactly.
-6. **`contract.md:321`, "about 0.01%" for the one-day mean/median gap.** It is 0.016% at σ = 0.018.
+3. **pmdarima's root test ignores AR roots whenever q + Q > 0.** `_auto_solvers.py:37-40` overwrites the AR maximum with the MA one. A fake ARMA(1,1) with an AR inverse root of 0.999 kept IC 10.0; the AR(1) version got inf. So ADR `docs/adr/0002-order-selection.md:264` ("an inverse AR or MA root … pmdarima's threshold") and `:276` overstate what pmdarima discards.
+4. **ADR §7's "0.48 gap … slightly different points" (`0002:316`; also the milestone-0 draft of `contract.md`, since reworded).** pmdarima stopped at φ = 0.818, θ = −0.828. statsmodels stopped at φ = 0.004, θ = 0.004. These are opposite ends of a near-cancelling ridge, not nearby points.
+5. **Background footnote `[^probe-pm]` (`00-background.md:843`) does not reproduce from its stated recipe.** The footnote gives intercept 0.00193, 0.4822 and 0.4834. The recipe gives 0.00186, 0.4648 and 0.4661, so 37% rather than 38%. Three seed variants also failed. The `[^probe-drift]`, `[^probe-adf]` and `[^probe-acf]` footnotes do reproduce exactly.
+6. **The milestone-0 draft of `contract.md`, "about 0.01%" for the one-day mean/median gap.** It is 0.016% at σ = 0.018.
 
 ## Summary
 

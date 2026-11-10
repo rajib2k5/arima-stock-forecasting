@@ -15,7 +15,7 @@ import { useEvaluationData, useForecastFile, type EvaluationState, type Load } f
 import { prefersReducedMotion } from '../lib/capabilities'
 import type { Envelope } from '../lib/contract'
 import { artifactName, LEVELS, type CoverageRow, type CoverageVerdict, type DmRow, type DmVerdict, type Evaluation, type Forecast, type ForecastRow, type ForecastWindow, type Kind, type Method, type ModelId, type WindowId } from '../lib/contract.forecast'
-import { pParts, sig } from '../lib/fitText'
+import { sig } from '../lib/fitText'
 import { fmt, pct } from '../lib/format'
 import {
   backTransformSentence,
@@ -35,8 +35,10 @@ import {
   WINDOW_LABELS,
 } from '../lib/forecastText'
 import { describeLoadError, type ArtifactLoadError } from '../lib/loadError'
-import { extent, formatLogTick, formatTick, linearScale, logTicks, niceStep, niceTicks } from '../lib/plot'
+import { extent, formatLogTick, formatTick, linearScale, logTicks, niceStep, niceTicks, thinTicks } from '../lib/plot'
 import { shortCommit } from '../lib/present'
+import { PValue } from '../lib/PValue'
+import { useDrawingWidth } from '../lib/useDrawingWidth'
 import { useReducedMotion } from './hooks'
 
 const MAX_ERRORS_SHOWN = 12
@@ -45,20 +47,9 @@ const MAX_ERRORS_SHOWN = 12
  * icon without its own width and height drew at 300 px in a browser (jsdom cannot see that).
  */
 const LEGEND_MARK = { width: 12, height: 12 } as const
-/** The drawing's own units: the SVG scales to its card through its viewBox. */
+/** The drawing's own units: the SVG scales to its card through its viewBox; a card narrower than this draws at its own width (useDrawingWidth). */
 const CHART = { width: 720, height: 300 } as const
 const PAD = { l: 58, r: 14, t: 26, b: 26 }
-
-/** A p-value as fitText.pParts sets it: a power of ten in a superscript, never a bare 0. */
-function PValue({ p }: { p: number | null }) {
-  const parts = pParts(p)
-  if ('text' in parts) return <>{parts.text}</>
-  return (
-    <>
-      {parts.mantissa} × 10<sup>{parts.exponent}</sup>
-    </>
-  )
-}
 
 export default function ForecastView() {
   return <ForecastPage state={useEvaluationData()} />
@@ -202,18 +193,20 @@ function bandOf(row: ForecastRow, t: boolean): Band {
 }
 
 /**
- * Pixel scales for a window's rows: the x axis is the row index, the y axis dollars over every value
- * drawn, spaced linearly or, with `log`, by the logarithm of the dollars. Log spacing is a drawing
- * transform (ADR-0001): it places the exported values and computes none of the study's numbers.
+ * Pixel scales for a window's rows, on a drawing `width` units wide: the x axis is the row index, the
+ * y axis dollars over every value drawn, spaced linearly or, with `log`, by the logarithm of the
+ * dollars. Log spacing is a drawing transform (ADR-0001): it places the exported values and computes
+ * none of the study's numbers.
  */
-function layout(rows: ForecastRow[], bands: Band[], extra: number[], log = false) {
+function layout(rows: ForecastRow[], bands: Band[], extra: number[], log: boolean, width: number) {
   const ext = extent([rows.map((r) => r.actual_usd), rows.map((r) => r.mean_usd), bands.map((b) => b.lower95), bands.map((b) => b.upper95), extra])
   const [lo, hi] = ext ?? [0, 1]
-  const sx = linearScale([0, Math.max(rows.length - 1, 1)], [PAD.l, CHART.width - PAD.r])
-  // Up to five dated ticks, evenly spaced over the rows (positions, not values of the study).
+  const sx = linearScale([0, Math.max(rows.length - 1, 1)], [PAD.l, width - PAD.r])
+  // Up to five dated ticks, evenly spaced over the rows (positions, not values of the study); fewer when the drawing is too narrow for five dates.
   const count = Math.min(5, rows.length)
   const idx = [...new Set(Array.from({ length: count }, (_, k) => (count === 1 ? 0 : Math.round((k * (rows.length - 1)) / (count - 1)))))]
-  const xTicks = idx.map((i) => ({ x: sx(i), label: rows[i].date }))
+  const dated = idx.map((i) => ({ x: sx(i), label: rows[i].date }))
+  const xTicks = thinTicks(dated, dated.map((t) => t.x))
   // Prices are positive; a value that is not would have no place on a log axis, so the axis stays linear.
   if (log && lo > 0) {
     const [a, b] = [Math.log(lo), Math.log(hi)]
@@ -221,14 +214,14 @@ function layout(rows: ForecastRow[], bands: Band[], extra: number[], log = false
     const toY = linearScale([a - pad, b + pad], [CHART.height - PAD.b, PAD.t])
     const sy = (v: number) => toY(Math.log(v))
     const yTicks = logTicks(Math.exp(a - pad), Math.exp(b + pad), 4).map((v) => ({ y: sy(v), label: formatLogTick(v) }))
-    return { sx, sy, yTicks, xTicks, yLabel: 'dollars (adjusted close), log scale' }
+    return { sx, sy, yTicks, xTicks, width, yLabel: 'dollars (adjusted close), log scale' }
   }
   const pad = (hi - lo) * 0.04 || Math.abs(lo) * 0.04 || 1
   const domain: [number, number] = [lo - pad, hi + pad]
   const sy = linearScale(domain, [CHART.height - PAD.b, PAD.t])
   const step = niceStep(domain[1] - domain[0], 4)
   const yTicks = niceTicks(domain[0], domain[1], 4).map((v) => ({ y: sy(v), label: formatTick(v, step) }))
-  return { sx, sy, yTicks, xTicks, yLabel: 'dollars (adjusted close)' }
+  return { sx, sy, yTicks, xTicks, width, yLabel: 'dollars (adjusted close)' }
 }
 
 function linePath(values: number[], sx: (i: number) => number, sy: (v: number) => number, from = 0): string {
@@ -243,12 +236,12 @@ function ribbon(lower: number[], upper: number[], sx: (i: number) => number, sy:
   return `${top.join(' ')} ${bottom.join(' ')} Z`
 }
 
-function Axes({ yTicks, xTicks, yLabel }: ReturnType<typeof layout>) {
+function Axes({ yTicks, xTicks, width, yLabel }: ReturnType<typeof layout>) {
   return (
     <>
       {yTicks.map((t) => (
         <g key={t.label} className="tick">
-          <line className="grid" x1={PAD.l} x2={CHART.width - PAD.r} y1={t.y} y2={t.y} />
+          <line className="grid" x1={PAD.l} x2={width - PAD.r} y1={t.y} y2={t.y} />
           <text x={PAD.l - 6} y={t.y + 3.5} textAnchor="end">
             {t.label}
           </text>
@@ -327,7 +320,8 @@ function FanChart({ win, shown, showMean, tBands, logAxis, dist }: { win: Foreca
   const rows = win.rows
   const bands = rows.map((r) => bandOf(r, tBands))
   const rw = shown.kind === 'multi_step' ? win.origin.close_usd : null
-  const geo = layout(rows, bands, rw === null ? [] : [rw], logAxis)
+  const [figureRef, width] = useDrawingWidth(CHART.width)
+  const geo = layout(rows, bands, rw === null ? [] : [rw], logAxis, width)
   const { sx, sy } = geo
   const title = `Forecast of ${shown.modelLabel}, ${shown.methodLabel}, ${WINDOW_LABELS[win.id].toLowerCase()} window ${win.start} to ${win.end}: actual and median price in dollars, with the 80% and 95% ${dist} intervals${logAxis ? ', on a log price axis' : ''}`
   const items: [MarkKind, string][] = [
@@ -339,8 +333,8 @@ function FanChart({ win, shown, showMean, tBands, logAxis, dist }: { win: Foreca
     ...(rw === null ? [] : ([['rw', `Random walk: the origin's price, ${usd(rw)} on ${win.origin.date}`]] as [MarkKind, string][])),
   ]
   return (
-    <figure className="plot fan">
-      <svg viewBox={`0 0 ${CHART.width} ${CHART.height}`} width={CHART.width} height={CHART.height} role="img" aria-label={title} data-testid="fan-chart">
+    <figure className="plot fan" ref={figureRef}>
+      <svg viewBox={`0 0 ${width} ${CHART.height}`} width={width} height={CHART.height} role="img" aria-label={title} data-testid="fan-chart">
         <Axes {...geo} />
         <path className="fan-band95" d={ribbon(bands.map((b) => b.lower95), bands.map((b) => b.upper95), sx, sy)} data-testid="band-95" />
         <path className="fan-band80" d={ribbon(bands.map((b) => b.lower80), bands.map((b) => b.upper80), sx, sy)} data-testid="band-80" />
@@ -378,7 +372,8 @@ function WalkForward({ win, shown, tBands, reduced }: { win: ForecastWindow; sho
   }, [running, n])
 
   const bands = rows.map((r) => bandOf(r, tBands))
-  const geo = layout(rows, bands, [])
+  const [figureRef, width] = useDrawingWidth(CHART.width)
+  const geo = layout(rows, bands, [], false, width)
   const { sx, sy } = geo
   const seen = rows.slice(0, cursor + 1)
   const now = rows[cursor]
@@ -422,8 +417,8 @@ function WalkForward({ win, shown, tBands, reduced }: { win: ForecastWindow; sho
           </button>
         </div>
         {reduced && <p className="sub note">Your system asks for reduced motion, so the walk does not play by itself; step through it with the buttons.</p>}
-        <figure className="plot fan">
-          <svg viewBox={`0 0 ${CHART.width} ${CHART.height}`} width={CHART.width} height={CHART.height} role="img" aria-label={title} data-testid="walk-chart">
+        <figure className="plot fan" ref={figureRef}>
+          <svg viewBox={`0 0 ${width} ${CHART.height}`} width={width} height={CHART.height} role="img" aria-label={title} data-testid="walk-chart">
             <Axes {...geo} />
             <g className="fan-trail" data-testid="walk-trail">
               <path className="fan-band95" d={ribbon(bands.slice(0, cursor).map((b) => b.lower95), bands.slice(0, cursor).map((b) => b.upper95), sx, sy)} />

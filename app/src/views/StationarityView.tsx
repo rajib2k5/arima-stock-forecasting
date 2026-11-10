@@ -12,7 +12,8 @@ import { correlogramBars } from '../lib/correlogram'
 import { CorrelogramPlot } from '../lib/CorrelogramPlot'
 import { describeLoadError } from '../lib/loadError'
 import { shortCommit } from '../lib/present'
-import { adfLag, decisionSentence, formatP, kpssP, ndiffsSentence, signedFixed, TRANSFORM_LABELS, VERDICT_LABELS, VERDICT_MEANINGS } from '../lib/stationarityText'
+import { PValue } from '../lib/PValue'
+import { adfLag, decisionSentence, kpssBound, ndiffsSentence, signedFixed, TRANSFORM_LABELS, VERDICT_LABELS, VERDICT_MEANINGS } from '../lib/stationarityText'
 
 const MAX_ERRORS_SHOWN = 12
 
@@ -92,10 +93,15 @@ function pairCells(pair: TestPair) {
   return (
     <>
       <td className="num">{signedFixed(pair.adf.statistic, 3)}</td>
-      <td className="num">{formatP(pair.adf.p_value)}</td>
+      <td className="num">
+        <PValue p={pair.adf.p_value} />
+      </td>
       <td className="num">{adfLag(pair.adf)}</td>
       <td className="num">{pair.kpss.statistic.toFixed(4)}</td>
-      <td className="num">{kpssP(pair.kpss)}</td>
+      <td className="num">
+        {kpssBound(pair.kpss)}
+        <PValue p={pair.kpss.p_value} />
+      </td>
       <td className="num">{pair.kpss.nlags}</td>
       <td>
         <span className={`verdict verdict-${pair.verdict}`}>{VERDICT_LABELS[pair.verdict]}</span>
@@ -150,7 +156,7 @@ function TestTable({ st }: { st: Stationarity }) {
         </table>
         <p className="sub note">
           Both tests with a constant (<code>regression=&apos;c&apos;</code>), the rule&apos;s setting. ADF chooses its lag by AIC; KPSS chooses its bandwidth
-          automatically. A KPSS p shown as ≤ 0.01 or ≥ 0.10 was clipped to the edge of statsmodels&apos; table. 5% critical values: ADF{' '}
+          automatically. A KPSS p shown as ≤ 0.010 or ≥ 0.100 was clipped to the edge of statsmodels&apos; table. 5% critical values: ADF{' '}
           {signedFixed(first.adf.critical_values['5%'], 3)}, KPSS {first.kpss.critical_values['5%'].toFixed(3)}. Rejection uses p &lt; {st.alpha}.
         </p>
       </div>

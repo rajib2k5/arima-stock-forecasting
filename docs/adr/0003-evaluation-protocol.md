@@ -113,9 +113,19 @@ the table".
   at 6 and 9 lags and a block bootstrap agree), and on squared loss only BIC's (p 0.048). Every
   squared-loss verdict is borderline: five days carry 60% to 74% of the squared deviations of the loss
   differential, and its verdict moves with the variance estimator.
+
+  **Update 2026-11-09.** After the pre-registered re-analysis (the EWC test, with Holm's correction
+  over all 28 comparisons; `docs/validation/m5-comparison-inference-v2.md`), only BIC's verdict (oos,
+  absolute loss, Holm p 0.0041) survives. The other three absolute-loss "worse" verdicts become "no
+  difference detected" after the correction, so "robustly" above does not hold. See
+  `docs/validation/m5-preregistration-addendum.md`.
 - The AIC model's static path beats the flat random walk (RMSE ratio 0.413 on test, 0.537 on oos),
   and a random walk with its drift scores RMSE $10.34 and $34.31 against its $10.63 and $34.26: the
   advantage is the drift.
+
+  **Update 2026-11-09.** These are one path each, not tests: they point to the drift in a rising
+  market rather than the ARMA terms, but do not show the two are equal. See
+  `docs/validation/m5-preregistration-addendum.md`, §3.
 - The normal one-step intervals are too wide in the test window (80%: 217 of 227 inside, for the AIC
   model), because 2023 was calm (errors 0.66 times the stated sd); in oos the 80% normal interval
   still covers 0.869 with the scale about right, and the variance-matched t covers 0.810.

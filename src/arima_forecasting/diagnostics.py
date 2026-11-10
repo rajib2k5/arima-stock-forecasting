@@ -54,6 +54,10 @@ Z = 1.959963984540054  # scipy's norm.ppf(0.975); the same literal as identifica
 NLAGS = 50  # the course's lags=50 for its correlograms (identification.py)
 LJUNG_BOX_LAGS = (5, 10, 20)
 ARCH_LM_LAGS = (5, 10)
+# What fit.diagnostic_settings says the tests ran on, and how Ljung-Box's model_df is set. Both readers
+# pin these texts (payloads.SERIES and LJUNG_BOX_MODEL_DF; contract.fit.ts), as they pin the lags.
+SERIES = "standardized_forecasts_error after the burn-in"
+LJUNG_BOX_MODEL_DF = "p + q"
 
 
 def burn_in(result: Any) -> int:
@@ -201,9 +205,9 @@ def residual_payloads(fit: dict[str, Any], results: dict[str, Any], dates: pd.Da
     primary = next(m for m in fit["models"] if m["id"] == fit["primary"])["diagnostics"]
     fit["diagnostic_settings"] = {
         "alpha": ALPHA,
-        "series": "standardized_forecasts_error after the burn-in",
+        "series": SERIES,
         "ljung_box_lags": list(LJUNG_BOX_LAGS),
-        "ljung_box_model_df": "p + q",
+        "ljung_box_model_df": LJUNG_BOX_MODEL_DF,
         "arch_lm_lags": list(ARCH_LM_LAGS),
         "arch_lm_ddof": 0,
         "nlags": NLAGS,

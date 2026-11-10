@@ -41,8 +41,8 @@ _MILESTONES = (
     (1, "data-eda", "Data and EDA", "done"),
     (2, "stationarity", "Stationarity and identification", "done"),
     (3, "fit-diagnostics", "Fit and diagnostics", "done"),
-    (4, "forecast-eval", "Forecast and evaluation", "current"),
-    (5, "where-it-goes-wrong", "Where the sample goes wrong, and polish", "planned"),
+    (4, "forecast-eval", "Forecast and evaluation", "done"),
+    (5, "where-it-goes-wrong", "Where the sample goes wrong, and polish", "current"),
 )
 
 # Every artifact one export writes, in the order the tool writes them. meta lists exactly these, so

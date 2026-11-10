@@ -24,7 +24,6 @@ import {
   modelName,
   NORMALITY_LABELS,
   NORMALITY_READINGS,
-  pParts,
   rows,
   sameOrderSentence,
   SERIAL_LABELS,
@@ -34,6 +33,7 @@ import {
 import { describeLoadError, type ArtifactLoadError } from '../lib/loadError'
 import { yearTicks } from '../lib/plot'
 import { shortCommit } from '../lib/present'
+import { PValue } from '../lib/PValue'
 import { SeriesPlot } from '../lib/SeriesPlot'
 
 const MAX_ERRORS_SHOWN = 12
@@ -44,17 +44,6 @@ const MAX_ERRORS_SHOWN = 12
  */
 const LEGEND_MARK = { width: 12, height: 12 } as const
 const QQ_PLOT = { maxWidth: 560 } as const
-
-/** A p-value as fitText.pParts sets it: a power of ten in a superscript, never a bare 0. */
-function PValue({ p }: { p: number | null }) {
-  const parts = pParts(p)
-  if ('text' in parts) return <>{parts.text}</>
-  return (
-    <>
-      {parts.mantissa} × 10<sup>{parts.exponent}</sup>
-    </>
-  )
-}
 
 export default function FitView() {
   return <FitPage state={useFitData()} />

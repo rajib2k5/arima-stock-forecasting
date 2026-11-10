@@ -159,6 +159,20 @@ def test_the_oos_rows_must_cover_the_window_as_the_producer_checks_it(payloads):
     assert validate_prices(_without_oos_rows(prices, range(50, 54))) == []  # Monday to Thursday out: Friday to Friday is 7 days
 
 
+def test_meta_names_only_the_artifacts_the_export_writes():
+    # The reader's own list is the producer's (contract.ts's is tied to the committed meta.json, which the
+    # export writes from export.ARTIFACTS: contract.realdata.test.ts). A name off it, or one listed twice, is
+    # one short problem each; a subset in any order is read.
+    assert payloads_module.ARTIFACTS == ARTIFACTS
+    assert validate_meta(meta_payload()) == []
+    listed = broken(meta_payload(), lambda d: d.update(artifacts=["meta", "x" * 100_000, "prices", "meta"], held_artifacts=["prices"]))
+    assert validate_meta(listed) == [
+        f"data.artifacts[1]: {'x' * 80!r}… (100000 characters) is not one of the 18 artifacts an export writes (export.ARTIFACTS)",
+        "data.artifacts[3]: 'meta' is listed more than once",
+    ]
+    assert validate_meta(broken(meta_payload(), lambda d: d.update(artifacts=list(reversed(ARTIFACTS))))) == []
+
+
 def test_meta_must_state_the_pinned_out_of_sample_window():
     for start, end in (("2024-01-02", "2026-10-01"), ("2024-01-01", "2026-09-30")):
         problems = validate_meta(broken(meta_payload(), lambda d: d["windows"].__setitem__("oos", {"start": start, "end_exclusive": end})))
@@ -212,7 +226,7 @@ def test_the_list_bounds_follow_the_producers_dimensions():
     assert payloads_module.MAX_FIT_PARAMS == 2 * payloads_module.MAX_PQ + 2
     calendar_days = (config.DOWNLOAD_WINDOW.end_exclusive - config.DOWNLOAD_WINDOW.start).days
     assert payloads_module.MAX_LIST >= max(calendar_days, eda.KDE_POINTS) and calendar_days == 4291
-    assert payloads_module.MAX_NAMES >= max(len(ARTIFACTS), len(export._MILESTONES), len(payloads_module.KDE_VARIABLES_REQUIRED))
+    assert payloads_module.MAX_NAMES >= max(len(export._MILESTONES), len(payloads_module.KDE_VARIABLES_REQUIRED))
 
 
 def test_a_cell_params_object_longer_than_any_cell_has_is_not_walked():
