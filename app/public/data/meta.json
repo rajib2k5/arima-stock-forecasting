@@ -50,13 +50,13 @@
       {
         "id": 4,
         "slug": "forecast-eval",
-        "status": "current",
+        "status": "done",
         "title": "Forecast and evaluation"
       },
       {
         "id": 5,
         "slug": "where-it-goes-wrong",
-        "status": "planned",
+        "status": "current",
         "title": "Where the sample goes wrong, and polish"
       }
     ],
@@ -74,7 +74,7 @@
       }
     }
   },
-  "generated_at": "2026-10-30T10:41:24Z",
+  "generated_at": "2026-11-10T14:33:38Z",
   "schema_version": "1.5.0",
-  "source_commit": "800a0a8801124c06bd278f2ffbd7b9d3b9235f1c"
+  "source_commit": "598b989249cc87196cbbcd0bbe250f61ebb1c810"
 }
