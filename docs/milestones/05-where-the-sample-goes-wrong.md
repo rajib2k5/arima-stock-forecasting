@@ -1,13 +1,25 @@
 # Milestone 5: where the sample goes wrong, and polish
 
-Status: built. Not yet reviewed: the coordinator's verifier re-measures the numbers in the README and
-the PR/FAQ, and a separate, pre-registered re-analysis of the forecast comparisons, corrected for all 28 tests, was
-run apart from this milestone ([plan v2](../validation/m5-preregistration-v2.md),
-[results](../validation/m5-comparison-inference-v2.md); plan v1, a block bootstrap, failed its own size
-check first; the [addendum](../validation/m5-preregistration-addendum.md) corrects both plans). It is not a
-fresh holdout, and its metric is a proxy: log loss on the adjusted close, not a P&L. The README's
-"Inference robustness" section summarises it. The library claims in this walkthrough and concept note 12
-were checked by two independent channels ([m5-egv-ledger](../validation/m5-egv-ledger.md)).
+`route: rows 2, 3, 5, 10 | primary: Tier-0 gates + hand mutants (row 2); dual-channel EGV Mode 1 on 32 library claims (row 3); pre-registered EWC + Holm over k=28 with null controls (row 5); verifier on README/PR-FAQ (row 10) | complement: Channel C independent EWC/Holm recompute (1.64e-14); orchestrator split probes C5b/C9b/C10; adversarial (Opus) on row-5 procedure claims; mechanical old-SHA check against the history-rewrite map | not-run: fresh one-shot holdout (no unscored data in the frozen snapshot); EGV on values; second adversarial pass | stop: met (12 static comparisons UNRESOLVED by construction)`
+
+Status: built, and validated by the kind of claim, as the route line above records (it follows the validation router). What ran:
+
+- **Row 2, the tests.** The gates, and a hand mutant for each new or changed test: [m5-mutant-ledger](../validation/m5-mutant-ledger.md)
+  and [m5-row5-mutants](../validation/m5-row5-mutants.md).
+- **Row 3, the library claims.** Two independent channels checked 32 claims about statsmodels, pmdarima, pandas and yfinance
+  that this walkthrough and concept note 12 make ([m5-egv-ledger](../validation/m5-egv-ledger.md)).
+- **Row 5, the forecast comparisons.** A pre-registered re-analysis, corrected for all 28 tests ([plan v2](../validation/m5-preregistration-v2.md),
+  [results](../validation/m5-comparison-inference-v2.md)). Plan v1, a block bootstrap, failed its own size check first. An
+  adversarial reviewer (Opus) attacked the procedure, not the values; the [addendum](../validation/m5-preregistration-addendum.md)
+  records its corrections to both plans. The re-analysis is not a fresh holdout, and its metric is a proxy: log loss on the
+  adjusted close, not a P&L. The README's "Inference robustness" section summarises it.
+- **Row 10, the numbers in the prose.** A verifier re-measured the numbers, paths and commands in the README and the PR/FAQ,
+  re-ran this walkthrough's probe, and recomputed EWC and Holm on its own (largest difference 1.64e-14). What it disagreed
+  with was fixed before the milestone-5 commit.
+
+Not run: an adversarial review of milestone 5's code as a whole (the router sends code with tests to row 2), a fresh one-shot
+holdout (the frozen snapshot holds no unscored day; the snapshot ends on 2026-09-30, so the next evidence is the trading days from 2026-10-01 on), and a second
+adversarial pass.
 
 This walkthrough closes the study. Part one takes each mistake of the sample course in turn: what the
 course does (in our words), why it is wrong, what it costs on AAPL, and where that cost is measured.

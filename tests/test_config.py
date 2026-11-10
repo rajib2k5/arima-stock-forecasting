@@ -221,6 +221,9 @@ def test_data_root_refuses_a_symlink_that_leads_into_the_repo(tmp_path):
 
 def test_this_repos_parent_is_refused_when_the_checkout_is_named_after_the_project():
     if REPO.name != config.PROJECT_SLUG:
-        pytest.skip(f"this checkout is named {REPO.name!r}, so its parent puts data elsewhere")
+        pytest.skip(
+            f"intentional: this check needs a checkout named {config.PROJECT_SLUG!r}; this one is named {REPO.name!r}, "
+            "so its parent folder puts the data outside it and there is nothing to refuse"
+        )
     with pytest.raises(ValueError, match="inside the repository"):
         config.raw_dir({"VOL_DATA_DIR": str(REPO.parent)})
