@@ -2,14 +2,14 @@
 > absolute home paths are redacted to `<repo>`, `<scratch>` or `~`. Its `file:line` references point at the
 > tree as reviewed, before the fix round; [`m2-summary.md`](m2-summary.md) says what changed.
 
-# Milestone 2 adversarial ledger (working tree on 16366d1), 2026-10-29
+# Milestone 2 adversarial ledger (working tree on 2ca67af), 2026-10-29
 
 Mode: single-context sequential fallback (EGV Mode 2). Channel A = source/doc reading (repo source, installed
 statsmodels 0.15.0 source). Channel B = runtime probes. "Dual-confirmed (fallback mode)" where both agree.
 Env pin: `env-pin.txt` (Python 3.12.13, statsmodels 0.15.0, numpy 2.5.4, node 22.23.1, vite 7.3.7, vitest 4.1.11).
 Real repo untouched: `git status --short` = 100 lines before and after, 0 staged.
 
-Scratch: `clone/` = 16366d1 + working tree overlaid (`git ls-files -co --exclude-standard`), no `data/`.
+Scratch: `clone/` = 2ca67af + working tree overlaid (`git ls-files -co --exclude-standard`), no `data/`.
 `full/arima-stock-forecasting/` = same, run with `VOL_DATA_DIR=<repo>/data`.
 
 | ID | Claim | A (source) | B (probe) | Gate |
@@ -19,7 +19,7 @@ Scratch: `clone/` = 16366d1 + working tree overlaid (`git ls-files -co --exclude
 | 1c | test fails on a file >10 MB under app/public/data | `oversized()` stats the working tree, `tests/test_repo_data.py:57-58` | 10,000,001-byte untracked file -> 1 failed. **Staged 10,000,001-byte blob (`git cat-file -s` = 10000001), working copy truncated -> 16 passed** | **REJECTED** (index not checked) |
 | 1d | DATA.md sentence + Yahoo terms line | `DATA.md:11,14` | grep -F both strings: found | ACCEPTED |
 | 1e | No doc says price files on hold / never committed | historical docs annotated (01-data-and-eda, 00-scaffold:1502-1506) | grep sweep: docs/*.md clean. Residual stale code text: `app/src/data/useOrderData.ts:4` ("hold no vendor values", contradicts DATA.md:15), `docs/architecture/contract.md:230` ("never the series (owner decision)"), `app/src/App.test.tsx:99` test name "in a fresh clone (held files absent)", dead-path UI copy `PriceExplorerView.tsx:60-67` | ACCEPTED for docs; minor stale strings |
-| 1f | held_artifacts stays, empty, right semver | removing a field = major; old parseMeta (16366d1 contract.ts:288-300) accepts `[]` | meta.json `held_artifacts: []`; both suites green | ACCEPTED |
+| 1f | held_artifacts stays, empty, right semver | removing a field = major; old parseMeta (2ca67af contract.ts:288-300) accepts `[]` | meta.json `held_artifacts: []`; both suites green | ACCEPTED |
 | 2a | 1.2.0 is the right bump | diff: only additive (3 new artifacts); existing validators unchanged; 1.1.0 parseMeta accepts any artifact names | old/new payload diff | ACCEPTED |
 | 2b | Both readers agree on 218 corpus cases | corpus has 218 (61 aic_grid, 47 stationarity, 24 acf_pacf ...) | fresh clone: pytest 1079 passed, vitest 860 passed (both include the corpus) | ACCEPTED |
 | 2c | Edge payloads as JSON text: zero disagreements, no exceptions | Python `json.loads` accepts NaN/Infinity tokens; JS `JSON.parse` does not | 76 edge cases (`probes/gen_cases.py`): 70 agree (incl. 6 constructed exact-tie cases, max-double AIC, 2**53+-1, 401-digit int, duplicate keys, -0, denormal). **6 diverge: every NaN/Infinity token -> TS SyntaxError. 2 are verdict disagreements: NaN under an unknown data key, -Infinity under an unknown cell key -> Python valid, app cannot parse** | **REJECTED** |
@@ -34,7 +34,7 @@ Scratch: `clone/` = 16366d1 + working tree overlaid (`git ls-files -co --exclude
 | 10 | No raw file tracked/staged; all app data < 10 MB | - | real repo: 0 staged, no committable path matches raw/cache/db/csv rules; largest committable file 4,049,379 B (graph.svg), largest data file eda.json 529,907 B; sampled raw Close values not found in any committable file | ACCEPTED |
 
 ## Unclaimed defects
-- All six committed JSON say `source_commit: 2a52d8d...-dirty`; no test refuses a `-dirty` stamp in committed files. Must re-export after the code commit.
+- All six committed JSON say `source_commit: 2a52d8d...-dirty` (the old SHA of `777b23c`; see `history-rewrite-2026-11-09.md`); no test refuses a `-dirty` stamp in committed files. Must re-export after the code commit.
 - `LICENSE` (MIT) has no data carve-out; only DATA.md/README say the data is excluded.
 - Both readers accept `acf_pacf.z = 1.96` (not tied to alpha 0.05).
 - A failed cell's cross sits at y = 0, the height of the best (lowest-AIC) cell; no real cell has failed, so it only appears in tests.

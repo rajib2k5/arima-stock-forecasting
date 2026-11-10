@@ -567,7 +567,7 @@ All six app mutants are killed.
 ### Gate results
 
 Both trees on 2026-10-29: the working tree (with the raw snapshot under `data/`), and a fresh
-`git clone` of `d0051d1` with the working tree copied over it minus every ignored file (so no
+`git clone` of `c902cc4` with the working tree copied over it minus every ignored file (so no
 `data/`), its own `uv sync --frozen` and `npm ci`. The machine was shared with other jobs, so the
 times are wall clock under load.
 
@@ -581,7 +581,7 @@ times are wall clock under load.
 | Export check | `VOL_DATA_DIR=$PWD/data uv run python tools/export_app_data.py --check` | `app data is current: meta, prices, eda, stationarity, acf_pacf, aic_grid, fit, residuals_aic, residuals_bic, residuals_course (schema_version, artifact and data compared; generated_at and source_commit are not)`, exit 0, 9 min 26.7 s | without a snapshot: exit 2, "no complete snapshot". With `VOL_DATA_DIR` pointed at the full tree's snapshot (outside the clone): the same "app data is current" line, exit 0, 11 min 15.6 s |
 | Full export | `time (OPENBLAS_NUM_THREADS=1 VOL_DATA_DIR=$PWD/data uv run python tools/export_app_data.py)` | 9 min 42.0 s; the six milestone-2 files changed only in their envelopes | not run |
 | Data rule | `uv run pytest -q tests/test_repo_data.py` | part of the 1380 | part of the 1379 |
-| Cite script | `check_cites.py` on every doc this milestone touched | `problems: 0` for this walkthrough, concept notes 07, 08 and 09, the milestone-2 walkthrough, README and LEARNING_LOG. `contract.md` reports 4 and ADR-0002 55, the same counts as at `d0051d1`: every one is a cite into an installed package (statsmodels, pmdarima, pandas, yfinance), which the script looks for in the repo; those were checked against the installed files | not run separately (same text) |
+| Cite script | `check_cites.py` on every doc this milestone touched | `problems: 0` for this walkthrough, concept notes 07, 08 and 09, the milestone-2 walkthrough, README and LEARNING_LOG. `contract.md` reports 4 and ADR-0002 55, the same counts as at `c902cc4`: every one is a cite into an installed package (statsmodels, pmdarima, pandas, yfinance), which the script looks for in the repo; those were checked against the installed files | not run separately (same text) |
 
 **The first full-tree run failed twice** (`2 failed, 1378 passed in 494.14s`). Two older tests
 named the milestone-2 artifact list or the old `build_payloads` signature:
@@ -768,7 +768,7 @@ all 77 killed.
 | T-p1 to T-p3, T-r1 | no superscript; an underflowed p printed "0"; the `sigma2` note dropped; the serial reading without "unadjusted" | the `FitView.test.tsx` and `fitText.test.ts` cases named for each |
 | T-h1 to T-h3 | `useFitData` without `.catch`; a failed residual file cached; the old failure shown while it is fetched again | the three new `useFitData.test.tsx` cases |
 
-**Fix-round gates**, on 2026-10-29, both trees as before (the clone is `d0051d1` with the working
+**Fix-round gates**, on 2026-10-29, both trees as before (the clone is `c902cc4` with the working
 tree copied over it, minus ignored files, so no `data/`; its own `uv sync --frozen` and `npm ci`).
 After the clone was made, one message string in `payloads.py` and the docs changed; those files were
 copied into the clone and its affected suites re-run (`718 passed`). The full-tree pytest ran twice,
@@ -991,7 +991,7 @@ hash checked; a control run with no mutant passes first): 28 Python mutants and 
 | G7a, G7b | the cross-file check always (the first round's code); only when the run writes a fit or residuals file | `test_only_meta_into_a_folder_without_fit_files_writes_meta_as_before` |
 | T-G9a to T-G9c | the legend icons without their inline size, or without `width` and `height`; the QQ container without its `max-width` | "sizes the legend icons and caps the QQ plot on the elements themselves, which no stylesheet rule outranks" |
 
-**Second-round gates**, on 2026-10-29, both trees as before (the clone is `d0051d1` with the working
+**Second-round gates**, on 2026-10-29, both trees as before (the clone is `c902cc4` with the working
 tree copied over it, minus ignored files, so no `data/`; its own `uv sync --frozen` and `npm ci`). The
 clone was made before this table was written, so its copy of this walkthrough lacks the table; no
 other file differs.

@@ -17,10 +17,10 @@ Every `file:line` reference is relative to the repository root. Every number in 
 was measured on 2026-10-28 with the commands shown in the Results section.
 
 **Line numbers belong to milestone 0.** The `file:line` references were written against the
-milestone-0 commit `720705f`. Later commits moved lines: the diagram-kit commit `bd2eab3` changed
+milestone-0 commit `2a29744`. Later commits moved lines: the diagram-kit commit `95ef804` changed
 `docs/architecture/README.md`, and milestone 1 rewrote `tools/export_app_data.py` and parts of
 `export.py` and moved lines in `config.py`, `contract.ts`, `build_notebooks.py`, the ADRs and the
-contract. To read a reference as written, use `git show 720705f:<path>`. The
+contract. To read a reference as written, use `git show 2a29744:<path>`. The
 [milestone 1 walkthrough](01-data-and-eda.md) cites the current lines.
 
 ---

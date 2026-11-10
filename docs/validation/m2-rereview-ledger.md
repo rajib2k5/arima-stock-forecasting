@@ -4,7 +4,7 @@
 
 # M2 fix-round re-review ledger (2026-10-29)
 
-Tree: <repo>, uncommitted working tree, HEAD 16366d1. No tracked or
+Tree: <repo>, uncommitted working tree, HEAD 2ca67af. No tracked or
 working-tree file was modified (`git status --short` showed 108 lines before and after; aic_grid.json mtime
 is 13:31 CDT, from before this review). Env for every Python run: OPENBLAS_NUM_THREADS=1, VOL_DATA_DIR=$PWD/data.
 Scratch: this directory.

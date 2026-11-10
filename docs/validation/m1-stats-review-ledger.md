@@ -3,7 +3,7 @@
 > Redacted for the public repo on 2026-10-29: absolute home paths, and the real prices the review quoted (marked `[price redacted]`), under the hub rule that no real vendor values go into a commit.
 
 - mode: single-context sequential fallback (Mode 2). Claims and probes were pre-registered in `claims-ledger.md`. Channel A (`channel-a.md`) was committed before any probe ran. The results are dual-confirmed in fallback mode only, not independently.
-- env: `env-pin.txt`: Python 3.12.13, numpy 2.5.4, pandas 3.1.0, scipy 1.18.1, statsmodels 0.15.0, yfinance 1.7.0, HEAD bd2eab3 plus the dirty tree.
+- env: `env-pin.txt`: Python 3.12.13, numpy 2.5.4, pandas 3.1.0, scipy 1.18.1, statsmodels 0.15.0, yfinance 1.7.0, HEAD 95ef804 plus the dirty tree.
 - Probes are in `probes/`. Run them from the repo root with `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -I <probe>`. The data probes also need `VOL_DATA_DIR=<repo>/data`.
 - Mutants ran on a scratch copy (`mutrepo/`, `mut1/`) with `PYTHONPATH=<copy>/src`. P12 failing the notebook test proves that the kernel picks up the mutant. The originals were restored and checksummed: eda.py `be55bd67…`, export.py `a3c96622…`.
 - The repo was not modified. `git status --porcelain | md5sum` gave `91cca533…` before and after.

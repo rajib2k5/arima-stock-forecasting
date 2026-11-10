@@ -3,13 +3,13 @@
 > Redacted for the public repo on 2026-10-29: absolute home paths and a snapshot hash prefix.
 
 - Mode: single-context sequential fallback (Mode 2); claims and probes pre-registered in `claims-ledger.md`. "Channel A" = reading repo source/docs; "Channel B" = execution. Not independently dual-confirmed.
-- Env: `env-pin.txt` (Python 3.12.13, numpy 2.5.4, pandas 3.1.0, yfinance 1.7.0; HEAD bd2eab3 + dirty tree).
-- S = this folder. `clone/` = bd2eab3 + every non-ignored working-tree file (87 status lines, same as the real repo), with no data/ and no prices.json/eda.json; fresh `uv sync --offline --frozen` and `npm ci --offline`.
+- Env: `env-pin.txt` (Python 3.12.13, numpy 2.5.4, pandas 3.1.0, yfinance 1.7.0; HEAD 95ef804 + dirty tree).
+- S = this folder. `clone/` = 95ef804 + every non-ignored working-tree file (87 status lines, same as the real repo), with no data/ and no prices.json/eda.json; fresh `uv sync --offline --frozen` and `npm ci --offline`.
 - Real repo was not modified, nothing was staged. `git status --porcelain --untracked-files=all | md5sum` was 734d6ecb… before and after my full-tree gates. Later it changed, because another process created the untracked file `tools/licensing/scan_real_rows.py` at 09:28:30 (I did not write it). The JSON md5s were unchanged (2661aea9 / 96281fc9 / 340b683f).
 
 | # | Verdict | Evidence (command → printed) | Where / minimal fix |
 |---|---|---|---|
-| 1a | SURVIVES | `git check-ignore -v` → `.gitignore:16`, `:17`. prices/eda: 0 in the `ls-tree bd2eab3`, 0 in `rev-list --all --`, 0 in the index | — |
+| 1a | SURVIVES | `git check-ignore -v` → `.gitignore:16`, `:17`. prices/eda: 0 in the `ls-tree 95ef804`, 0 in `rev-list --all --`, 0 in the index | — |
 | 1b | SURVIVES (minor stale text) | grep: README:63/92, prfaq:57/107/115, ADR:3/301, contract:140/176, milestone:39/64/92 all say "on hold". Stale: app/README.md:95 "`public/data/` (the exported JSON) are committed like any other source"; ADR-0001:153 "files present must equal meta.data.artifacts" (no "less held") | Reword both |
 | 1c | **REFUTED** (Python half) | `xlang/run_py.py` via `read_artifact(dir,"meta")`: held_artifacts `5`, `["nope"]`, `[1]` → **accept**; TS parseEnvelope+parseMeta → reject. Both accept `["prices","prices"]` and `["meta"]`. `--check` catches a bad value only as a data diff (`data.held_artifacts[0]: "nope" != "prices"`). The semver part holds (an optional key, read as [] when absent in TS) | payloads.py:375-378 has no `meta` validator. Add `validate_meta` (strings, unique, subset of artifacts, "meta" not held), register it, add meta cases to the shared corpus |
 | 2a | SURVIVES | clone, VOL_DATA_DIR unset, empty HOME: `786 passed, 9 skipped`; the 3 skip reasons name the file and both commands | — |

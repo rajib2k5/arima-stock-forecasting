@@ -58,5 +58,5 @@ now an optional tool.
 
 ## History
 
-Milestone 1 (commit `2a52d8d`) held `prices.json` and `eda.json` out of the repository while the
+Milestone 1 (commit `777b23c`) held `prices.json` and `eda.json` out of the repository while the
 owner decided. Milestone 2 commits them. The public history stays as it is.

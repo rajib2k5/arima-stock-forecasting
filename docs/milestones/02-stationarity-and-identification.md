@@ -548,7 +548,7 @@ bypasses are proved separately, in a scratch clone (Gate results).
 ### Gate results
 
 Both trees on 2026-10-29, at the end of the second fix round: the working tree (with the raw snapshot under
-`data/`), and a fresh `git clone` of `16366d1` with the working tree copied over it minus every
+`data/`), and a fresh `git clone` of `2ca67af` with the working tree copied over it minus every
 ignored file (so no `data/`, `VOL_DATA_DIR` unset). `prices.json` and `eda.json` are in the clone, so
 no test skips for them.
 

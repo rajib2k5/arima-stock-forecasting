@@ -232,7 +232,7 @@ staged, deleted or new untracked files), the SHA alone cannot reproduce the file
 changes its output. Not every tool agrees: `git describe --always --dirty` ignored an untracked
 file that `source_commit` flagged (measured). And if there is no commit at all, as in a brand-new
 repository, there is no SHA to give, so the value is `uncommitted` rather than a fake. This repo
-was in that state until its first commit, `720705f`, on 2026-10-28; its first `meta.json` said
+was in that state until its first commit, `2a29744`, on 2026-10-28; its first `meta.json` said
 `uncommitted`.
 
 **What "dirty" leaves out, and why.** The exporter writes into the repository, into
